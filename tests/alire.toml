@@ -1,7 +1,8 @@
 name = "tests"
 description = "AUnit tests for giflib"
 version = "0.1.0-dev"
-executables = ["giflib_tests", "giflib_generate_samples", "giflib_generate_fixtures", "giflib_external_checks", "giflib_benchmark", "giflib_fuzz", "giflib_check"]
+executables = ["giflib_tests"]
+project-files = ["unit_tests.gpr"]
 
 authors = ["Bent Bracke"]
 maintainers = ["Bent Bracke <bent@bracke.dk>"]
@@ -9,8 +10,13 @@ maintainers-logins = ["bracke"]
 licenses = "MIT"
 tags = ["gif", "tests", "aunit"]
 
-[[depends-on]]
-giflib = "*"
+#  Changing this value invalidates legacy Alire setup hashes when the generated
+#  configuration layout changes.
+[gpr-externals]
+TESTS_CONFIG_EPOCH = ["1", "legacy"]
+
+[gpr-set-externals]
+TESTS_CONFIG_EPOCH = "1"
 
 [[depends-on]]
 aunit = "^26.0.0"
@@ -18,8 +24,8 @@ aunit = "^26.0.0"
 [[depends-on]]
 project_tools = "*"
 
-[[pins]]
-giflib = { path = ".." }
+[[depends-on]]
+gnat_native = "^15"
 
 [[pins]]
 project_tools = { path = "../../project_tools" }

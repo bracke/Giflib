@@ -1,0 +1,11 @@
+abstract project Giflib_Build is
+   Release_Switches :=
+     ("-O3", "-gnatn", "-gnat2022", "-gnatyM120", "-gnatX",
+      "-gnata", "-gnato", "-gnatVa", "-gnatwa");
+   Validation_Switches :=
+     ("-O2", "-g", "-gnat2022", "-gnatyM120", "-gnatX",
+      "-gnata", "-gnato", "-gnatVa", "-gnatwa");
+   Development_Switches :=
+     ("-Og", "-g", "-gnat2022", "-gnatyM120", "-gnatX",
+      "-gnata", "-gnato", "-gnatVa", "-gnatwa");
+end Giflib_Build;

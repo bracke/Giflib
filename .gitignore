@@ -2,7 +2,16 @@ obj/
 lib/
 tests/obj/
 tests/bin/
+examples/bin/
 tests/artifacts/
+config/
+tests/config/
+alire/alr_test*.log
+alire/alr_test*.xml
+tests/alire/alr_test*.log
+tests/alire/alr_test*.xml
+alire/settings.toml
+tests/alire/settings.toml
 tests/alire/build_hash_inputs
 tests/alire/flags/
 alire/build_hash_inputs
