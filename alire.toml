@@ -1,0 +1,21 @@
+name = "giflib"
+description = "Native Ada GIF87a and GIF89a codec"
+version = "0.1.0-dev"
+
+authors = ["Bent Bracke"]
+maintainers = ["Bent Bracke <bent@bracke.dk>"]
+maintainers-logins = ["bracke"]
+licenses = "MIT"
+website = ""
+long-description = "giflib is a native Ada 2022 GIF87a/GIF89a decoder and encoder with bounded resource use and forward-only streaming interfaces."
+tags = ["gif", "codec", "image", "animation"]
+
+[[depends-on]]
+gnat_native = "^15"
+
+[build-profiles]
+"*" = "development"
+
+[[actions]]
+type = "test"
+command = ["alr", "--chdir", "tests", "exec", "--", "./bin/giflib_tests"]

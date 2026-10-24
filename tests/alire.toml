@@ -1,0 +1,28 @@
+name = "tests"
+description = "AUnit tests for giflib"
+version = "0.1.0-dev"
+executables = ["giflib_tests", "giflib_generate_samples", "giflib_generate_fixtures", "giflib_external_checks", "giflib_benchmark", "giflib_fuzz", "giflib_check"]
+
+authors = ["Bent Bracke"]
+maintainers = ["Bent Bracke <bent@bracke.dk>"]
+maintainers-logins = ["bracke"]
+licenses = "MIT"
+tags = ["gif", "tests", "aunit"]
+
+[[depends-on]]
+giflib = "*"
+
+[[depends-on]]
+aunit = "^26.0.0"
+
+[[depends-on]]
+project_tools = "*"
+
+[[pins]]
+giflib = { path = ".." }
+
+[[pins]]
+project_tools = { path = "../../project_tools" }
+
+[build-profiles]
+"*" = "development"

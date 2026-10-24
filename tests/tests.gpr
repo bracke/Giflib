@@ -1,0 +1,18 @@
+with "../giflib.gpr";
+with "aunit";
+with "project_tools";
+
+project Tests is
+   for Source_Dirs use ("src", "src/mains");
+   for Main use
+     ("giflib_tests.adb", "giflib_generate_samples.adb", "giflib_generate_fixtures.adb",
+      "giflib_external_checks.adb", "giflib_benchmark.adb", "giflib_fuzz.adb", "giflib_check.adb");
+   for Object_Dir use "obj/tests";
+   for Exec_Dir use "bin";
+   for Create_Missing_Dirs use "True";
+
+   package Compiler is
+      for Default_Switches ("Ada") use
+        ("-gnat2022", "-gnatyM120", "-gnatX", "-gnata", "-gnato", "-gnatVa", "-gnatwa");
+   end Compiler;
+end Tests;
