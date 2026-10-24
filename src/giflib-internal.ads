@@ -1,3 +1,3 @@
-package Giflib.Internal is
+private package Giflib.Internal is
    pragma Pure;
 end Giflib.Internal;

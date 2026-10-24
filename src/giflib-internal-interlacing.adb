@@ -1,5 +1,14 @@
 package body Giflib.Internal.Interlacing with SPARK_Mode is
-   function Rows_In_Pass (Height, Start, Step : Natural) return Natural is
+   function Rows_In_Pass (Height, Start, Step : Natural) return Natural
+     with Pre => Height <= 65_535 and then Start <= 4 and then Step in 2 .. 8,
+          Post =>
+            (if Height <= Start then
+                Rows_In_Pass'Result = 0
+             else
+                Rows_In_Pass'Result > 0
+                and then Rows_In_Pass'Result <= Height
+                and then Start + (Rows_In_Pass'Result - 1) * Step < Height)
+   is
    begin
       if Height <= Start then
          return 0;
@@ -17,8 +26,11 @@ package body Giflib.Internal.Interlacing with SPARK_Mode is
          return Height;
       end if;
       for Pass in Starts'Range loop
+         pragma Loop_Invariant (Remaining < Height);
          Count := Rows_In_Pass (Height, Starts (Pass), Steps (Pass));
          if Remaining < Count then
+            pragma Assert
+              (Starts (Pass) + Remaining * Steps (Pass) < Height);
             return Starts (Pass) + Remaining * Steps (Pass);
          end if;
          Remaining := Remaining - Count;

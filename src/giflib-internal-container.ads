@@ -1,3 +1,4 @@
+with Giflib.Animations;
 with Giflib.Limits;
 with Giflib.Palettes;
 with Giflib.Results;
@@ -6,17 +7,7 @@ with Giflib.Streams;
 package Giflib.Internal.Container is
    pragma Preelaborate;
 
-   type Header_Info is record
-      Version : GIF_Version := GIF89a;
-      Width : Image_Width := Image_Width'First;
-      Height : Image_Height := Image_Height'First;
-      Has_Global_Palette : Boolean := False;
-      Global_Palette : Palettes.Palette;
-      Color_Resolution : Positive range 1 .. 8 := 1;
-      Global_Palette_Sorted : Boolean := False;
-      Background_Index : Palette_Index := 0;
-      Pixel_Aspect_Ratio : Byte := 0;
-   end record;
+   subtype Header_Info is Animations.Screen_Info;
 
    type Image_Descriptor is record
       Left : Coordinate := 0;
@@ -27,6 +18,9 @@ package Giflib.Internal.Container is
       Local_Palette : Palettes.Palette;
       Interlaced : Boolean := False;
       Local_Palette_Sorted : Boolean := False;
+      Reserved_Bits : Byte := 0;
+      Has_Packed_Field_Offset : Boolean := False;
+      Packed_Field_Offset : Source_Offset := 0;
    end record;
 
    function Read_Header
@@ -42,5 +36,6 @@ package Giflib.Internal.Container is
       Constraints : Limits.Limit_Set;
       Descriptor : out Image_Descriptor;
       Effective_Palette : out Palettes.Palette;
+      Strictness : Strictness_Mode := Strict;
       Separator_Already_Read : Boolean := False) return Results.Result;
 end Giflib.Internal.Container;

@@ -1,4 +1,4 @@
-package Giflib.Palettes is
+package Giflib.Palettes with SPARK_Mode is
    pragma Pure;
 
    type RGB_Color is record

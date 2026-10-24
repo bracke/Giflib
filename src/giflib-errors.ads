@@ -1,9 +1,5 @@
-with Ada.Strings.Bounded;
-
 package Giflib.Errors is
    pragma Preelaborate;
-
-   package Identifiers is new Ada.Strings.Bounded.Generic_Bounded_Length (Max => 96);
 
    type Error_Code is
      (No_Error,
@@ -46,10 +42,13 @@ package Giflib.Errors is
    type Warning_Severity is (Informational, Compatibility, Recovery, Data_Loss);
 
    type Diagnostic_Context is record
+      Has_Source : Boolean := False;
       Source : Source_Offset := 0;
+      Has_Destination : Boolean := False;
       Destination : Destination_Offset := 0;
       Block : Block_Kind := No_Block;
       Extension_Label : Byte := 0;
+      Has_Frame : Boolean := False;
       Frame : Frame_Ordinal := 0;
       LZW_Code_Value : LZW_Code := 0;
       LZW_Width : LZW_Code_Width := LZW_Code_Width'First;
@@ -64,20 +63,25 @@ package Giflib.Errors is
 
    type Error is record
       Code : Error_Code := No_Error;
-      Identifier : Identifiers.Bounded_String := Identifiers.To_Bounded_String ("gif.ok");
       Context : Diagnostic_Context;
    end record;
 
    type Warning is record
       Code : Warning_Code := Generic_Warning;
-      Identifier : Identifiers.Bounded_String := Identifiers.To_Bounded_String ("gif.warning");
       Severity : Warning_Severity := Informational;
       Context : Diagnostic_Context;
    end record;
 
    function Identifier_For (Code : Error_Code) return String;
    function Identifier_For (Code : Warning_Code) return String;
-   function Make (Code : Error_Code; Context : Diagnostic_Context := (others => <>)) return Error;
+   function Identifier (Item : Error) return String is
+     (Identifier_For (Item.Code));
+   function Identifier (Item : Warning) return String is
+     (Identifier_For (Item.Code));
+   function Make
+     (Code : Error_Code;
+      Context : Diagnostic_Context := (others => <>)) return Error
+     with Post => Make'Result.Code = Code;
    function Make_Warning
      (Code : Warning_Code;
       Severity : Warning_Severity;

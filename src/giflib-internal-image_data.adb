@@ -1,13 +1,14 @@
 with Giflib.Errors;
 with Giflib.Internal.Blocks;
 with Giflib.Internal.Bytes;
-with Giflib.Internal.LZW;
+with Giflib.Internal.Geometry_Arithmetic;
 
 package body Giflib.Internal.Image_Data is
    use type Errors.Error_Code;
 
    function Decode_Indices
-     (Object : in out Streams.Source'Class;
+     (Context : in out LZW.Workspace_Handle;
+      Object : in out Streams.Source'Class;
       Descriptor : Container.Image_Descriptor;
       Palette : Palettes.Palette;
       Constraints : Limits.Limit_Set;
@@ -17,7 +18,7 @@ package body Giflib.Internal.Image_Data is
       Frame : Frame_Ordinal := 0) return Results.Result
    is
       Expected_Pixels : constant Byte_Count :=
-        Byte_Count (Descriptor.Width) * Byte_Count (Descriptor.Height);
+        Geometry_Arithmetic.Area (Descriptor.Width, Descriptor.Height);
       Minimum_Code_Size : Byte;
       Reader : Blocks.Sub_Block_Reader;
       Decoded : Byte_Count;
@@ -27,21 +28,32 @@ package body Giflib.Internal.Image_Data is
          return Results.Failure
            (Errors.Make
               (Errors.Missing_Color_Table,
-               (Source => Object.Offset, Block => Image_Data_Block, Frame => Frame, others => <>)));
+               (Has_Source => Streams.Position (Object).Available,
+                Source => Streams.Position (Object).Value,
+                Block => Image_Data_Block,
+                Has_Frame => True,
+                Frame => Frame,
+                others => <>)));
       elsif Byte_Count (Total_Decoded_Pixels) > Byte_Count (Constraints.Max_Total_Decoded_Frame_Pixels)
         or else Total_Compressed_Bytes > Constraints.Max_Compressed_Bytes
       then
          return Results.Failure
            (Errors.Make
               (Errors.Internal_Invariant_Failed,
-               (Source => Object.Offset, Block => Image_Data_Block, Frame => Frame, others => <>)));
+               (Has_Source => Streams.Position (Object).Available,
+                Source => Streams.Position (Object).Value,
+                Block => Image_Data_Block,
+                Has_Frame => True,
+                Frame => Frame,
+                others => <>)));
       elsif Byte_Count (Output'Length) /= Expected_Pixels then
          return Results.Failure
            (Errors.Make
               (Errors.LZW_Output_Size_Mismatch,
-               (Source => Object.Offset,
+               (Has_Source => Streams.Position (Object).Available,
+                Source => Streams.Position (Object).Value,
                 Block => Image_Data_Block,
-                Frame => Frame,
+                Has_Frame => True, Frame => Frame,
                 Expected => Expected_Pixels,
                 Actual => Byte_Count (Output'Length),
                 others => <>)));
@@ -51,9 +63,10 @@ package body Giflib.Internal.Image_Data is
          return Results.Failure
            (Errors.Make
               (Errors.Limit_Exceeded,
-               (Source => Object.Offset,
+               (Has_Source => Streams.Position (Object).Available,
+                Source => Streams.Position (Object).Value,
                 Block => Image_Data_Block,
-                Frame => Frame,
+                Has_Frame => True, Frame => Frame,
                 Expected => Byte_Count (Constraints.Max_Total_Decoded_Frame_Pixels),
                 Actual => Byte_Count (Total_Decoded_Pixels) + Expected_Pixels,
                 Limit => Total_Decoded_Pixel_Limit,
@@ -66,7 +79,12 @@ package body Giflib.Internal.Image_Data is
             return Results.Failure
               (Errors.Make
                  (Errors.Truncated_Block,
-                  (Source => Object.Offset, Block => Image_Data_Block, Frame => Frame, others => <>)));
+                  (Has_Source => Streams.Position (Object).Available,
+                   Source => Streams.Position (Object).Value,
+                   Block => Image_Data_Block,
+                   Has_Frame => True,
+                   Frame => Frame,
+                   others => <>)));
          end if;
          return Outcome;
       end if;
@@ -77,33 +95,21 @@ package body Giflib.Internal.Image_Data is
          Compressed_Byte_Limit,
          Image_Data_Block);
       Outcome := LZW.Decode
-        (Object,
+        (Context,
+         Object,
          Reader,
          Minimum_Code_Size,
          Output,
          Decoded,
          Constraints.Max_LZW_Work,
          Frame,
+         Maximum_Index => Byte (Palette.Length - 1),
          Interlace_Width => (if Descriptor.Interlaced then Natural (Descriptor.Width) else 0),
          Interlace_Height => (if Descriptor.Interlaced then Natural (Descriptor.Height) else 0));
       Total_Compressed_Bytes := Total_Compressed_Bytes + Blocks.Total_Bytes (Reader);
       if not Results.Succeeded (Outcome) then
          return Outcome;
       end if;
-
-      for I in Output'Range loop
-         if not Palettes.Contains (Palette, Palette_Index (Output (I))) then
-            return Results.Failure
-              (Errors.Make
-                 (Errors.Palette_Index_Out_Of_Range,
-                  (Source => Object.Offset,
-                   Block => Image_Data_Block,
-                   Frame => Frame,
-                   Expected => Byte_Count (Palette.Length - 1),
-                   Actual => Byte_Count (Output (I)),
-                   others => <>)));
-         end if;
-      end loop;
 
       Total_Decoded_Pixels := Total_Decoded_Pixels + Pixel_Count (Decoded);
       return Results.Success;

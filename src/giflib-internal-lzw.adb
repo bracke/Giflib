@@ -1,27 +1,42 @@
 with Interfaces;
 with Giflib.Errors;
+with Giflib.Internal.Budget_Arithmetic;
 with Giflib.Internal.Interlacing;
+with Giflib.Internal.LZW_Bit_Arithmetic;
 
 package body Giflib.Internal.LZW is
-   use type Interfaces.Unsigned_32;
+   function Ensure
+     (Object : in out Workspace_Handle;
+      Budget : aliased in out Ownership.Byte_Budget;
+      Fault : in out Ownership.Fault_State;
+      Maximum : Byte_Count) return Ownership.Allocation_Outcome
+   is
+     (Workspace_Ownership.Ensure (Object.Owner, Budget, Fault, Maximum));
+
+   function Release
+     (Object : in out Workspace_Handle;
+      Budget : aliased in out Ownership.Byte_Budget) return Boolean
+   is
+   begin
+      return Workspace_Ownership.Release (Object.Owner, Budget);
+   end Release;
+
+   function Is_Allocated (Object : Workspace_Handle) return Boolean is
+     (Workspace_Ownership.Is_Allocated (Object.Owner));
 
    function Decode
-     (Object : in out Streams.Source'Class;
+     (Context : in out Workspace;
+      Object : in out Streams.Source'Class;
       Blocks_Reader : in out Blocks.Sub_Block_Reader;
       Minimum_Code_Size : Byte;
       Output : out Streams.Byte_Array;
       Decoded_Count : out Byte_Count;
       Max_Work : Byte_Count;
       Frame : Frame_Ordinal := 0;
+      Maximum_Index : Byte := 255;
       Interlace_Width : Natural := 0;
       Interlace_Height : Natural := 0) return Results.Result
    is
-      type Prefix_Table is array (Natural range 0 .. 4_095) of Natural range 0 .. 4_095;
-      type Suffix_Table is array (Natural range 0 .. 4_095) of Byte;
-      Prefix : Prefix_Table := [others => 0];
-      Suffix : Suffix_Table := [others => 0];
-      Stack : Suffix_Table := [others => 0];
-
       Minimum : Natural;
       Clear_Code : Natural;
       End_Code : Natural;
@@ -29,21 +44,26 @@ package body Giflib.Internal.LZW is
       Next_Free_Code : Natural;
       Code_Width : Natural;
       Old_Code : Integer := -1;
+      Initial_Clear_Seen : Boolean := False;
       First_Character : Byte := 0;
       Output_Position : Natural := 0;
       Work : Byte_Count := 0;
       Code_Ordinal : Byte_Count := 0;
       Bit_Buffer : Interfaces.Unsigned_32 := 0;
       Bit_Count : Natural := 0;
+      Compressed_Buffer : Streams.Byte_Array (1 .. 255);
+      Compressed_Count : Natural := 0;
+      Compressed_Position : Natural := 0;
 
       function Failure (Code : Errors.Error_Code; Value : Natural := 0) return Results.Result is
       begin
          return Results.Failure
            (Errors.Make
               (Code,
-               (Source => Object.Offset,
+               (Has_Source => Streams.Position (Object).Available,
+                Source => Streams.Position (Object).Value,
                 Block => Image_Data_Block,
-                Frame => Frame,
+                Has_Frame => True, Frame => Frame,
                 LZW_Code_Value => LZW_Code (Natural'Min (Value, 4_095)),
                 LZW_Width => LZW_Code_Width (Code_Width),
                 LZW_Code_Ordinal => Code_Ordinal,
@@ -54,50 +74,66 @@ package body Giflib.Internal.LZW is
       end Failure;
 
       function Charge (Amount : Byte_Count) return Results.Result is
+         Budget : constant Budget_Arithmetic.Charge_Result :=
+           Budget_Arithmetic.Charge (Work, Max_Work, Amount);
       begin
-         if Amount > Max_Work - Work then
+         if not Budget.Accepted then
             return Results.Failure
               (Errors.Make
                  (Errors.Limit_Exceeded,
-                  (Source => Object.Offset,
+                  (Has_Source => Streams.Position (Object).Available,
+                   Source => Streams.Position (Object).Value,
                    Block => Image_Data_Block,
-                   Frame => Frame,
+                   Has_Frame => True, Frame => Frame,
                    Expected => Max_Work,
-                   Actual => Work + Amount,
+                   Actual => Budget.Attempted,
                    Limit => LZW_Work_Limit,
                    others => <>)));
          end if;
-         Work := Work + Amount;
+         Work := Budget.Total;
          return Results.Success;
       end Charge;
 
       function Next_Code (Value : out Natural) return Results.Result is
-         One : Streams.Byte_Array (1 .. 1);
          Count : Byte_Count;
          At_End : Boolean;
          Outcome : Results.Result;
-         Mask : Interfaces.Unsigned_32;
+         State : LZW_Bit_Arithmetic.Bit_State;
+         Extracted : LZW_Bit_Arithmetic.Extracted_Code;
       begin
          Value := 0;
          while Bit_Count < Code_Width loop
-            Outcome := Blocks.Read_Data (Blocks_Reader, Object, One, Count, At_End);
-            if not Results.Succeeded (Outcome) then
-               return Outcome;
-            elsif Count = 0 and then At_End then
-               return Failure (Errors.LZW_Missing_End_Code);
+            if Compressed_Position = Compressed_Count then
+               Outcome := Blocks.Read_Data
+                 (Blocks_Reader, Object, Compressed_Buffer, Count, At_End);
+               if not Results.Succeeded (Outcome) then
+                  return Outcome;
+               elsif Count = 0 and then At_End then
+                  return Failure (Errors.LZW_Missing_End_Code);
+               end if;
+               Compressed_Count := Natural (Count);
+               Compressed_Position := 0;
             end if;
             Outcome := Charge (1);
             if not Results.Succeeded (Outcome) then
                return Outcome;
             end if;
-            Bit_Buffer := Bit_Buffer or
-              Interfaces.Shift_Left (Interfaces.Unsigned_32 (One (1)), Bit_Count);
-            Bit_Count := Bit_Count + 8;
+            State := LZW_Bit_Arithmetic.Append_Byte
+              (Bit_Buffer,
+               LZW_Bit_Arithmetic.Decoder_Append_Count (Bit_Count),
+               Compressed_Buffer
+                 (Compressed_Buffer'First + Compressed_Position));
+            Compressed_Position := Compressed_Position + 1;
+            Bit_Buffer := State.Bits;
+            Bit_Count := State.Count;
          end loop;
-         Mask := Interfaces.Shift_Left (Interfaces.Unsigned_32 (1), Code_Width) - 1;
-         Value := Natural (Bit_Buffer and Mask);
-         Bit_Buffer := Interfaces.Shift_Right (Bit_Buffer, Code_Width);
-         Bit_Count := Bit_Count - Code_Width;
+         Extracted := LZW_Bit_Arithmetic.Extract
+           (Bit_Buffer,
+            LZW_Bit_Arithmetic.Bit_Count (Bit_Count),
+            LZW_Bit_Arithmetic.Code_Width (Code_Width));
+         Value := Natural (Extracted.Code);
+         Bit_Buffer := Extracted.State.Bits;
+         Bit_Count := Extracted.State.Count;
          Code_Ordinal := Code_Ordinal + 1;
          return Charge (1);
       end Next_Code;
@@ -106,7 +142,18 @@ package body Giflib.Internal.LZW is
          Outcome : Results.Result;
          Target_Position : Natural := Output_Position;
       begin
-         if Output_Position = Output'Length then
+         if Value > Maximum_Index then
+            return Results.Failure
+              (Errors.Make
+                 (Errors.Palette_Index_Out_Of_Range,
+                  (Has_Source => Streams.Position (Object).Available,
+                   Source => Streams.Position (Object).Value,
+                   Block => Image_Data_Block,
+                   Has_Frame => True, Frame => Frame,
+                   Expected => Byte_Count (Maximum_Index),
+                   Actual => Byte_Count (Value),
+                   others => <>)));
+         elsif Output_Position = Output'Length then
             return Failure (Errors.LZW_Output_Size_Mismatch);
          end if;
          if Interlace_Width > 0 then
@@ -120,9 +167,10 @@ package body Giflib.Internal.LZW is
                   return Results.Failure
                     (Errors.Make
                        (Errors.Internal_Invariant_Failed,
-                        (Source => Object.Offset,
+                        (Has_Source => Streams.Position (Object).Available,
+                         Source => Streams.Position (Object).Value,
                          Block => Image_Data_Block,
-                         Frame => Frame,
+                         Has_Frame => True, Frame => Frame,
                          others => <>)));
                end if;
                Target_Position := Image_Row * Interlace_Width + Column;
@@ -140,7 +188,7 @@ package body Giflib.Internal.LZW is
       Code : Natural;
       Incoming_Code : Natural;
       Current : Natural;
-      Stack_Count : Natural;
+      Stack_Count : LZW_Arithmetic.Stack_Count;
       Outcome : Results.Result;
    begin
       Decoded_Count := 0;
@@ -157,15 +205,25 @@ package body Giflib.Internal.LZW is
          return Results.Failure
            (Errors.Make
               (Errors.Internal_Invariant_Failed,
-               (Source => Object.Offset, Block => Image_Data_Block, Frame => Frame, others => <>)));
+               (Has_Source => Streams.Position (Object).Available,
+                Source => Streams.Position (Object).Value,
+                Block => Image_Data_Block,
+                Has_Frame => True,
+                Frame => Frame,
+                others => <>)));
       end if;
 
       Minimum := Natural (Minimum_Code_Size);
-      Clear_Code := 2 ** Minimum;
-      End_Code := Clear_Code + 1;
-      First_New_Code := Clear_Code + 2;
-      Next_Free_Code := First_New_Code;
-      Code_Width := Minimum + 1;
+      declare
+         Initial : constant LZW_Arithmetic.Initial_Code_State :=
+           LZW_Arithmetic.Initialize (LZW_Arithmetic.Minimum_Code_Size (Minimum));
+      begin
+         Clear_Code := Initial.Clear_Code;
+         End_Code := Initial.End_Code;
+         First_New_Code := Initial.First_Free_Code;
+         Next_Free_Code := Initial.First_Free_Code;
+         Code_Width := Initial.Width;
+      end;
 
       loop
          Outcome := Next_Code (Code);
@@ -174,7 +232,24 @@ package body Giflib.Internal.LZW is
             return Outcome;
          end if;
 
-         if Code = Clear_Code then
+         if not Initial_Clear_Seen and then Code /= Clear_Code then
+            Decoded_Count := Byte_Count (Output_Position);
+            return Results.Failure
+              (Errors.Make
+                 (Errors.LZW_Invalid_Code,
+                  (Has_Source => Streams.Position (Object).Available,
+                   Source => Streams.Position (Object).Value,
+                   Block => Image_Data_Block,
+                   Has_Frame => True, Frame => Frame,
+                   LZW_Code_Value => LZW_Code (Code),
+                   LZW_Width => LZW_Code_Width (Code_Width),
+                   LZW_Code_Ordinal => Code_Ordinal,
+                   Has_LZW_Context => True,
+                   Expected => Byte_Count (Clear_Code),
+                   Actual => Byte_Count (Code),
+                   others => <>)));
+         elsif Code = Clear_Code then
+            Initial_Clear_Seen := True;
             Next_Free_Code := First_New_Code;
             Code_Width := Minimum + 1;
             Old_Code := -1;
@@ -203,8 +278,12 @@ package body Giflib.Internal.LZW is
             Stack_Count := 0;
 
             if Code = Next_Free_Code then
-               Stack (Stack_Count) := First_Character;
-               Stack_Count := Stack_Count + 1;
+               if not LZW_Arithmetic.Can_Push (Stack_Count) then
+                  Decoded_Count := Byte_Count (Output_Position);
+                  return Failure (Errors.LZW_Invalid_Code, Incoming_Code);
+               end if;
+               Context.Stack (Stack_Count) := First_Character;
+               Stack_Count := LZW_Arithmetic.Push_Count (Stack_Count);
                Current := Natural (Old_Code);
             elsif Code < Next_Free_Code then
                Current := Code;
@@ -214,13 +293,18 @@ package body Giflib.Internal.LZW is
             end if;
 
             while Current >= First_New_Code loop
-               if Current >= Next_Free_Code or else Stack_Count = Stack'Length then
+               if not LZW_Arithmetic.Can_Follow
+                 (LZW_Arithmetic.Code_Value (Current),
+                  LZW_Arithmetic.Next_Code_Value (First_New_Code),
+                  LZW_Arithmetic.Next_Code_Value (Next_Free_Code),
+                  Stack_Count)
+               then
                   Decoded_Count := Byte_Count (Output_Position);
                   return Failure (Errors.LZW_Invalid_Code, Incoming_Code);
                end if;
-               Stack (Stack_Count) := Suffix (Current);
-               Stack_Count := Stack_Count + 1;
-               Current := Prefix (Current);
+               Context.Stack (Stack_Count) := Context.Suffix (Current);
+               Stack_Count := LZW_Arithmetic.Push_Count (Stack_Count);
+               Current := Context.Prefix (Current);
                Outcome := Charge (1);
                if not Results.Succeeded (Outcome) then
                   Decoded_Count := Byte_Count (Output_Position);
@@ -228,32 +312,67 @@ package body Giflib.Internal.LZW is
                end if;
             end loop;
 
-            if Current >= Clear_Code or else Stack_Count = Stack'Length then
+            if Current >= Clear_Code
+              or else not LZW_Arithmetic.Can_Push (Stack_Count)
+            then
                Decoded_Count := Byte_Count (Output_Position);
                return Failure (Errors.LZW_Invalid_Code, Incoming_Code);
             end if;
             First_Character := Byte (Current);
-            Stack (Stack_Count) := First_Character;
-            Stack_Count := Stack_Count + 1;
+            Context.Stack (Stack_Count) := First_Character;
+            Stack_Count := LZW_Arithmetic.Push_Count (Stack_Count);
 
             for I in reverse 0 .. Stack_Count - 1 loop
-               Outcome := Emit (Stack (I));
+               Outcome := Emit (Context.Stack (I));
                if not Results.Succeeded (Outcome) then
                   Decoded_Count := Byte_Count (Output_Position);
                   return Outcome;
                end if;
             end loop;
 
-            if Next_Free_Code < 4_096 then
-               Prefix (Next_Free_Code) := Natural (Old_Code);
-               Suffix (Next_Free_Code) := First_Character;
-               Next_Free_Code := Next_Free_Code + 1;
-               if Next_Free_Code = 2 ** Code_Width and then Code_Width < 12 then
-                  Code_Width := Code_Width + 1;
-               end if;
+            if LZW_Arithmetic.Can_Insert
+              (LZW_Arithmetic.Next_Code_Value (Next_Free_Code))
+            then
+               Context.Prefix (Next_Free_Code) := Natural (Old_Code);
+               Context.Suffix (Next_Free_Code) := First_Character;
+               Next_Free_Code := Natural
+                 (LZW_Arithmetic.After_Insert
+                    (LZW_Arithmetic.Next_Code_Value (Next_Free_Code)));
+               Code_Width := Natural
+                 (LZW_Arithmetic.Decoder_Width_After_Insert
+                    (LZW_Arithmetic.Next_Code_Value (Next_Free_Code),
+                     LZW_Arithmetic.Active_Code_Width (Code_Width)));
             end if;
             Old_Code := Incoming_Code;
          end if;
       end loop;
+   end Decode;
+
+   function Decode
+     (Context : in out Workspace_Handle;
+      Object : in out Streams.Source'Class;
+      Blocks_Reader : in out Blocks.Sub_Block_Reader;
+      Minimum_Code_Size : Byte;
+      Output : out Streams.Byte_Array;
+      Decoded_Count : out Byte_Count;
+      Max_Work : Byte_Count;
+      Frame : Frame_Ordinal := 0;
+      Maximum_Index : Byte := 255;
+      Interlace_Width : Natural := 0;
+      Interlace_Height : Natural := 0) return Results.Result
+   is
+   begin
+      return Decode
+        (Workspace_Ownership.Value (Context.Owner).all,
+         Object,
+         Blocks_Reader,
+         Minimum_Code_Size,
+         Output,
+         Decoded_Count,
+         Max_Work,
+         Frame,
+         Maximum_Index,
+         Interlace_Width,
+         Interlace_Height);
    end Decode;
 end Giflib.Internal.LZW;

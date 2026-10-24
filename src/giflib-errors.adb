@@ -49,7 +49,6 @@ package body Giflib.Errors is
    begin
       return
         (Code => Code,
-         Identifier => Identifiers.To_Bounded_String (Identifier_For (Code)),
          Context => Context);
    end Make;
 
@@ -61,7 +60,6 @@ package body Giflib.Errors is
    begin
       return
         (Code => Code,
-         Identifier => Identifiers.To_Bounded_String (Identifier_For (Code)),
          Severity => Severity,
          Context => Context);
    end Make_Warning;

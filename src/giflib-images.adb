@@ -1,7 +1,8 @@
 with Giflib.Errors;
+with Giflib.Internal.Image_Arithmetic;
 
 package body Giflib.Images is
-   use type Streams.Const_Byte_Array_Access;
+   use type Internal.Image_Arithmetic.Extent_Status;
 
    function Bytes_Per_Pixel (Format : Pixel_Format) return Positive is
      (case Format is
@@ -11,25 +12,25 @@ package body Giflib.Images is
 
    function Required_Bytes (View : Image_View; Value : out Byte_Count) return Results.Result is
       Pixel_Bytes : constant Byte_Count := Byte_Count (Bytes_Per_Pixel (View.Format));
-      Row_Bytes : constant Byte_Count := Byte_Count (View.Width) * Pixel_Bytes;
-      Prior_Rows : Byte_Count;
+      Extent : constant Internal.Image_Arithmetic.Extent_Result :=
+        Internal.Image_Arithmetic.Required_Extent
+          (View.Width,
+           View.Height,
+           View.Stride,
+           Internal.Image_Arithmetic.Pixel_Byte_Count (Pixel_Bytes));
    begin
       Value := 0;
-      if Byte_Count (View.Stride) < Row_Bytes then
+      if Extent.Status = Internal.Image_Arithmetic.Stride_Too_Short then
          return Results.Failure
            (Errors.Make
               (Errors.Invalid_Dimensions,
-               (Expected => Row_Bytes, Actual => Byte_Count (View.Stride), others => <>)));
-      elsif Byte_Count (View.Height - 1) > 0
-        and then Byte_Count (View.Stride) > Byte_Count'Last / Byte_Count (View.Height - 1)
-      then
+               (Expected => Extent.Row_Bytes,
+                Actual => Byte_Count (View.Stride),
+                others => <>)));
+      elsif Extent.Status = Internal.Image_Arithmetic.Extent_Overflow then
          return Results.Failure (Errors.Make (Errors.Integer_Overflow));
       end if;
-      Prior_Rows := Byte_Count (View.Height - 1) * Byte_Count (View.Stride);
-      if Row_Bytes > Byte_Count'Last - Prior_Rows then
-         return Results.Failure (Errors.Make (Errors.Integer_Overflow));
-      end if;
-      Value := Prior_Rows + Row_Bytes;
+      Value := Extent.Required_Bytes;
       return Results.Success;
    end Required_Bytes;
 
@@ -39,8 +40,6 @@ package body Giflib.Images is
    begin
       if not Results.Succeeded (Outcome) then
          return Outcome;
-      elsif View.Data = null then
-         return Results.Failure (Errors.Make (Errors.Invalid_Dimensions));
       elsif View.Accessible_Bytes > Byte_Count (View.Data'Length) then
          return Results.Failure
            (Errors.Make

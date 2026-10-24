@@ -1,4 +1,6 @@
 with Giflib.Errors;
+with Giflib.Internal.Block_Arithmetic;
+with Giflib.Internal.Budget_Arithmetic;
 with Giflib.Internal.Bytes;
 
 package body Giflib.Internal.Blocks is
@@ -29,7 +31,8 @@ package body Giflib.Internal.Blocks is
          return Results.Failure
            (Errors.Make
               (Errors.Truncated_Block,
-               (Source => Object.Offset,
+               (Has_Source => Streams.Position (Object).Available,
+                Source => Streams.Position (Object).Value,
                 Block => Reader.Owner_Block,
                 Expected => Outcome.First_Error.Context.Expected,
                 Actual => Outcome.First_Error.Context.Actual,
@@ -48,6 +51,8 @@ package body Giflib.Internal.Blocks is
       Outcome : Results.Result;
       Length_Byte : Byte;
       To_Read : Natural;
+      Transfer : Block_Arithmetic.Reader_Transfer;
+      Budget : Budget_Arithmetic.Charge_Result;
    begin
       Count := 0;
       End_Of_Data := Reader.At_End;
@@ -66,25 +71,29 @@ package body Giflib.Internal.Blocks is
             return Results.Success;
          end if;
          Reader.Remaining := Natural (Length_Byte);
-         if Byte_Count (Reader.Remaining) > Reader.Maximum - Reader.Total then
+         Budget := Budget_Arithmetic.Charge
+           (Reader.Total, Reader.Maximum, Byte_Count (Reader.Remaining));
+         if not Budget.Accepted then
             return Results.Failure
               (Errors.Make
                  (Errors.Limit_Exceeded,
-                  (Source => Object.Offset,
+                  (Has_Source => Streams.Position (Object).Available,
+                   Source => Streams.Position (Object).Value,
                    Block => Reader.Owner_Block,
                    Expected => Reader.Maximum,
-                   Actual => Reader.Total + Byte_Count (Reader.Remaining),
+                   Actual => Budget.Attempted,
                    Limit => Reader.Applied_Limit,
                    others => <>)));
          end if;
       end if;
 
-      To_Read := Natural'Min (Buffer'Length, Reader.Remaining);
+      Transfer := Block_Arithmetic.Plan_Read (Reader.Remaining, Buffer'Length);
+      To_Read := Transfer.Count;
       Outcome := Streams.Read_Exact (Object, Buffer (Buffer'First .. Buffer'First + To_Read - 1));
       if not Results.Succeeded (Outcome) then
          return As_Block_Error (Outcome, Reader, Object);
       end if;
-      Reader.Remaining := Reader.Remaining - To_Read;
+      Reader.Remaining := Transfer.Remaining;
       Reader.Total := Reader.Total + Byte_Count (To_Read);
       Count := Byte_Count (To_Read);
       return Results.Success;
@@ -125,18 +134,19 @@ package body Giflib.Internal.Blocks is
       Length_Data : constant Streams.Byte_Array := [1 => Byte (Writer.Used)];
       Outcome : Results.Result;
       Required : constant Byte_Count := Byte_Count (Writer.Used) + 1;
+      Budget : constant Budget_Arithmetic.Charge_Result :=
+        Budget_Arithmetic.Charge (Writer.Wire_Total, Writer.Maximum_Wire, Required);
    begin
       if Writer.Used = 0 then
          return Results.Success;
-      elsif Writer.Wire_Total > Writer.Maximum_Wire
-        or else Required > Writer.Maximum_Wire - Writer.Wire_Total
-      then
+      elsif not Budget.Accepted then
          return Results.Failure
            (Errors.Make
               (Errors.Limit_Exceeded,
-               (Destination => Object.Offset,
+               (Has_Destination => Streams.Position (Object).Available,
+                Destination => Streams.Position (Object).Value,
                 Expected => Writer.Maximum_Wire,
-                Actual => Writer.Wire_Total + Required,
+                Actual => Budget.Attempted,
                 Limit => Output_Byte_Limit,
                 others => <>)));
       end if;
@@ -145,7 +155,7 @@ package body Giflib.Internal.Blocks is
          Outcome := Streams.Write_All (Object, Writer.Buffer (1 .. Writer.Used));
       end if;
       if Results.Succeeded (Outcome) then
-         Writer.Wire_Total := Writer.Wire_Total + Required;
+         Writer.Wire_Total := Budget.Total;
          Writer.Used := 0;
       end if;
       return Outcome;
@@ -172,30 +182,35 @@ package body Giflib.Internal.Blocks is
    is
       Position : Natural := 0;
       To_Copy : Natural;
+      Transfer : Block_Arithmetic.Writer_Transfer;
       Outcome : Results.Result;
+      Budget : constant Budget_Arithmetic.Charge_Result :=
+        Budget_Arithmetic.Charge
+          (Writer.Payload_Total, Writer.Maximum_Payload, Byte_Count (Data'Length));
    begin
       if Writer.Is_Finished then
          return Results.Failure (Errors.Make (Errors.Invalid_State));
-      elsif Writer.Payload_Total > Writer.Maximum_Payload
-        or else Byte_Count (Data'Length) > Writer.Maximum_Payload - Writer.Payload_Total
-      then
+      elsif not Budget.Accepted then
          return Results.Failure
            (Errors.Make
               (Errors.Limit_Exceeded,
-               (Destination => Object.Offset,
+               (Has_Destination => Streams.Position (Object).Available,
+                Destination => Streams.Position (Object).Value,
                 Expected => Writer.Maximum_Payload,
-                Actual => Writer.Payload_Total + Byte_Count (Data'Length),
+                Actual => Budget.Attempted,
                 Limit => Compressed_Byte_Limit,
                 others => <>)));
       end if;
       while Position < Data'Length loop
-         To_Copy := Natural'Min (255 - Writer.Used, Data'Length - Position);
+         Transfer := Block_Arithmetic.Plan_Write
+           (Writer.Used, Position, Data'Length);
+         To_Copy := Transfer.Count;
          for I in 0 .. To_Copy - 1 loop
             Writer.Buffer (Writer.Used + I + 1) := Data (Data'First + Position + I);
          end loop;
-         Writer.Used := Writer.Used + To_Copy;
+         Writer.Used := Transfer.Used;
          Writer.Payload_Total := Writer.Payload_Total + Byte_Count (To_Copy);
-         Position := Position + To_Copy;
+         Position := Transfer.Position;
          if Writer.Used = 255 then
             Outcome := Flush_Block (Writer, Object);
             if not Results.Succeeded (Outcome) then
@@ -212,6 +227,7 @@ package body Giflib.Internal.Blocks is
    is
       Terminator : constant Streams.Byte_Array := [1 => 0];
       Outcome : Results.Result;
+      Budget : Budget_Arithmetic.Charge_Result;
    begin
       if Writer.Is_Finished then
          return Results.Success;
@@ -219,19 +235,23 @@ package body Giflib.Internal.Blocks is
       Outcome := Flush_Block (Writer, Object);
       if not Results.Succeeded (Outcome) then
          return Outcome;
-      elsif Writer.Wire_Total >= Writer.Maximum_Wire then
+      end if;
+      Budget := Budget_Arithmetic.Charge
+        (Writer.Wire_Total, Writer.Maximum_Wire, 1);
+      if not Budget.Accepted then
          return Results.Failure
            (Errors.Make
               (Errors.Limit_Exceeded,
-               (Destination => Object.Offset,
+               (Has_Destination => Streams.Position (Object).Available,
+                Destination => Streams.Position (Object).Value,
                 Expected => Writer.Maximum_Wire,
-                Actual => Writer.Wire_Total + 1,
+                Actual => Budget.Attempted,
                 Limit => Output_Byte_Limit,
                 others => <>)));
       end if;
       Outcome := Streams.Write_All (Object, Terminator);
       if Results.Succeeded (Outcome) then
-         Writer.Wire_Total := Writer.Wire_Total + 1;
+         Writer.Wire_Total := Budget.Total;
          Writer.Is_Finished := True;
       end if;
       return Outcome;

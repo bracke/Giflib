@@ -1,4 +1,5 @@
 with Giflib.Internal.Container;
+with Giflib.Internal.LZW;
 with Giflib.Limits;
 with Giflib.Palettes;
 with Giflib.Results;
@@ -8,7 +9,8 @@ package Giflib.Internal.Image_Data is
    pragma Preelaborate;
 
    function Decode_Indices
-     (Object : in out Streams.Source'Class;
+     (Context : in out LZW.Workspace_Handle;
+      Object : in out Streams.Source'Class;
       Descriptor : Container.Image_Descriptor;
       Palette : Palettes.Palette;
       Constraints : Limits.Limit_Set;
