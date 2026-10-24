@@ -1,4 +1,8 @@
 with Giflib.Errors;
+with Giflib.Internal.Budget_Arithmetic;
+with Giflib.Internal.Geometry_Arithmetic;
+with Giflib.Internal.Optimization_Arithmetic;
+with Giflib.Internal.Pixel_Arithmetic;
 
 package body Giflib.Optimization is
    function Analyze_Indexed
@@ -13,20 +17,18 @@ package body Giflib.Optimization is
       Options : Optimization_Options := Default_Options;
       Constraints : Limits.Limit_Set := Limits.Default_Limits) return Results.Result
    is
-      Required : constant Byte_Count := Byte_Count (Width) * Byte_Count (Height);
+      Required : constant Byte_Count := Internal.Geometry_Arithmetic.Area (Width, Height);
       Work : Byte_Count := 0;
-      First_Change : Boolean := True;
-      Min_X, Max_X, Min_Y, Max_Y : Natural := 0;
-      Position_Previous : Natural := Previous'First;
-      Position_Current : Natural := Current'First;
+      Budget : Internal.Budget_Arithmetic.Charge_Result;
+      Bounds : Internal.Optimization_Arithmetic.Change_Bounds;
+      Has_Unchanged_Interior : Boolean := False;
+      Has_Transparent_Index_Conflict : Boolean := False;
+      Pixel_Position : Natural;
+      Position_Previous : Natural := 0;
+      Position_Current : Natural := 0;
       Safe : constant Boolean :=
-        Palettes_Are_Equivalent
-        and then Previous_Control.Disposal in 0 | 1
-        and then Current_Control.Disposal in 0 | 1
-        and then not Previous_Control.User_Input
-        and then not Current_Control.User_Input
-        and then not Previous_Control.Has_Transparency
-        and then not Current_Control.Has_Transparency;
+        Internal.Optimization_Arithmetic.Is_Safe
+          (Previous_Control, Current_Control, Palettes_Are_Equivalent);
    begin
       Item := (others => <>);
       if Byte_Count (Previous'Length) /= Required
@@ -41,39 +43,37 @@ package body Giflib.Optimization is
       end if;
       for Y in 0 .. Natural (Height) - 1 loop
          for X in 0 .. Natural (Width) - 1 loop
-            if Work >= Constraints.Max_Optimization_Work then
+            Budget := Internal.Budget_Arithmetic.Charge
+              (Work, Constraints.Max_Optimization_Work, 1);
+            if not Budget.Accepted then
                return Results.Failure
                  (Errors.Make
                     (Errors.Limit_Exceeded,
-                     (Expected => Constraints.Max_Optimization_Work, Actual => Work + 1,
+                     (Expected => Constraints.Max_Optimization_Work,
+                      Actual => Budget.Attempted,
                       Limit => Optimization_Work_Limit, others => <>)));
             end if;
-            Work := Work + 1;
-            if Previous (Position_Previous) /= Current (Position_Current) then
-               if First_Change then
-                  Min_X := X;
-                  Max_X := X;
-                  Min_Y := Y;
-                  Max_Y := Y;
-                  First_Change := False;
-               else
-                  Min_X := Natural'Min (Min_X, X);
-                  Max_X := Natural'Max (Max_X, X);
-                  Min_Y := Natural'Min (Min_Y, Y);
-                  Max_Y := Natural'Max (Max_Y, Y);
-               end if;
+            Work := Budget.Total;
+            if Previous (Previous'First + Position_Previous)
+              /= Current (Current'First + Position_Current)
+            then
+               Bounds := Internal.Optimization_Arithmetic.Include
+                 (Bounds,
+                  Internal.Optimization_Arithmetic.Pixel_Coordinate (X),
+                  Internal.Optimization_Arithmetic.Pixel_Coordinate (Y));
             end if;
             Position_Previous := Position_Previous + 1;
             Position_Current := Position_Current + 1;
          end loop;
       end loop;
-      if First_Change then
+      if Bounds.Empty then
          if Safe
-           and then Natural (Previous_Control.Delay_CS) + Natural (Current_Control.Delay_CS) <= 65_535
+           and then Internal.Optimization_Arithmetic.Can_Merge_Delay
+             (Previous_Control.Delay_CS, Current_Control.Delay_CS)
          then
             Item.Action := Merge_With_Previous;
-            Item.Merged_Delay := Delay_Centiseconds
-              (Natural (Previous_Control.Delay_CS) + Natural (Current_Control.Delay_CS));
+            Item.Merged_Delay := Internal.Optimization_Arithmetic.Merge_Delay
+              (Previous_Control.Delay_CS, Current_Control.Delay_CS);
          else
             Item.Action := Keep_Full_Frame;
             Item.Width := Natural (Width);
@@ -81,22 +81,40 @@ package body Giflib.Optimization is
          end if;
       elsif Safe and then Options.Trim_Unchanged_Border then
          Item.Action := Trim_To_Rectangle;
-         Item.Left := Coordinate (Min_X);
-         Item.Top := Coordinate (Min_Y);
-         Item.Width := Max_X - Min_X + 1;
-         Item.Height := Max_Y - Min_Y + 1;
+         Item.Left := Coordinate (Bounds.Min_X);
+         Item.Top := Coordinate (Bounds.Min_Y);
+         Item.Width := Natural (Internal.Optimization_Arithmetic.Width (Bounds));
+         Item.Height := Natural (Internal.Optimization_Arithmetic.Height (Bounds));
          if Options.Make_Interior_Unchanged_Transparent then
-            for Y in Min_Y .. Max_Y loop
-               for X in Min_X .. Max_X loop
-                  if Previous (Previous'First + Y * Natural (Width) + X)
-                    = Current (Current'First + Y * Natural (Width) + X)
+            for Y in Natural (Bounds.Min_Y) .. Natural (Bounds.Max_Y) loop
+               for X in Natural (Bounds.Min_X) .. Natural (Bounds.Max_X) loop
+                  Budget := Internal.Budget_Arithmetic.Charge
+                    (Work, Constraints.Max_Optimization_Work, 1);
+                  if not Budget.Accepted then
+                     return Results.Failure
+                       (Errors.Make
+                          (Errors.Limit_Exceeded,
+                           (Expected => Constraints.Max_Optimization_Work,
+                            Actual => Budget.Attempted,
+                            Limit => Optimization_Work_Limit,
+                            others => <>)));
+                  end if;
+                  Work := Budget.Total;
+                  Pixel_Position := Natural
+                    (Internal.Pixel_Arithmetic.Pixel_Index (X, Y, Width));
+                  if Previous (Previous'First + Pixel_Position)
+                    = Current (Current'First + Pixel_Position)
                   then
-                     Item.Requires_Transparency := True;
-                     exit;
+                     Has_Unchanged_Interior := True;
+                  elsif Current (Current'First + Pixel_Position)
+                    = Byte (Options.Transparent_Index)
+                  then
+                     Has_Transparent_Index_Conflict := True;
                   end if;
                end loop;
-               exit when Item.Requires_Transparency;
             end loop;
+            Item.Requires_Transparency :=
+              Has_Unchanged_Interior and then not Has_Transparent_Index_Conflict;
          end if;
       else
          Item.Action := Keep_Full_Frame;
@@ -113,12 +131,18 @@ package body Giflib.Optimization is
       Canvas_Height : Image_Height;
       Item : Frame_Analysis;
       Output : out Streams.Byte_Array;
-      Options : Optimization_Options := Default_Options) return Results.Result
+      Options : Optimization_Options := Default_Options;
+      Constraints : Limits.Limit_Set := Limits.Default_Limits) return Results.Result
    is
-      Canvas_Pixels : constant Byte_Count := Byte_Count (Canvas_Width) * Byte_Count (Canvas_Height);
+      Canvas_Pixels : constant Byte_Count :=
+        Internal.Geometry_Arithmetic.Area (Canvas_Width, Canvas_Height);
       Rectangle_Pixels : constant Byte_Count := Byte_Count (Item.Width) * Byte_Count (Item.Height);
-      Output_Position : Natural := Output'First;
+      Output_Position : Natural := 0;
       Source_Position : Natural;
+      Work : Byte_Count := 0;
+      Budget : Internal.Budget_Arithmetic.Charge_Result;
+      Use_Transparency : Boolean :=
+        Item.Requires_Transparency and then Options.Make_Interior_Unchanged_Transparent;
    begin
       if Item.Action /= Trim_To_Rectangle
         or else Item.Width = 0 or else Item.Height = 0
@@ -135,17 +159,65 @@ package body Giflib.Optimization is
               (Errors.Invalid_Dimensions,
                (Expected => Rectangle_Pixels, Actual => Byte_Count (Output'Length), others => <>)));
       end if;
+
+      --  Item is caller-visible and Options is supplied independently from the
+      --  analysis call. Recheck the selected index so either can safely differ
+      --  from the values originally analyzed.
+      if Use_Transparency then
+         for Y in Natural (Item.Top) .. Natural (Item.Top) + Item.Height - 1 loop
+            for X in Natural (Item.Left) .. Natural (Item.Left) + Item.Width - 1 loop
+               Budget := Internal.Budget_Arithmetic.Charge
+                 (Work, Constraints.Max_Optimization_Work, 1);
+               if not Budget.Accepted then
+                  return Results.Failure
+                    (Errors.Make
+                       (Errors.Limit_Exceeded,
+                        (Expected => Constraints.Max_Optimization_Work,
+                         Actual => Budget.Attempted,
+                         Limit => Optimization_Work_Limit,
+                         others => <>)));
+               end if;
+               Work := Budget.Total;
+               Source_Position := Natural
+                 (Internal.Pixel_Arithmetic.Pixel_Index (X, Y, Canvas_Width));
+               if Previous (Previous'First + Source_Position)
+                 /= Current (Current'First + Source_Position)
+                 and then Current (Current'First + Source_Position)
+                   = Byte (Options.Transparent_Index)
+               then
+                  Use_Transparency := False;
+                  exit;
+               end if;
+            end loop;
+            exit when not Use_Transparency;
+         end loop;
+      end if;
+
       for Y in Natural (Item.Top) .. Natural (Item.Top) + Item.Height - 1 loop
          for X in Natural (Item.Left) .. Natural (Item.Left) + Item.Width - 1 loop
-            Source_Position := Y * Natural (Canvas_Width) + X;
-            if Item.Requires_Transparency
-              and then Options.Make_Interior_Unchanged_Transparent
+            Budget := Internal.Budget_Arithmetic.Charge
+              (Work, Constraints.Max_Optimization_Work, 1);
+            if not Budget.Accepted then
+               return Results.Failure
+                 (Errors.Make
+                    (Errors.Limit_Exceeded,
+                     (Expected => Constraints.Max_Optimization_Work,
+                      Actual => Budget.Attempted,
+                      Limit => Optimization_Work_Limit,
+                      others => <>)));
+            end if;
+            Work := Budget.Total;
+            Source_Position := Natural
+              (Internal.Pixel_Arithmetic.Pixel_Index (X, Y, Canvas_Width));
+            if Use_Transparency
               and then Previous (Previous'First + Source_Position)
                 = Current (Current'First + Source_Position)
             then
-               Output (Output_Position) := Byte (Options.Transparent_Index);
+               Output (Output'First + Output_Position) :=
+                 Byte (Options.Transparent_Index);
             else
-               Output (Output_Position) := Current (Current'First + Source_Position);
+               Output (Output'First + Output_Position) :=
+                 Current (Current'First + Source_Position);
             end if;
             Output_Position := Output_Position + 1;
          end loop;

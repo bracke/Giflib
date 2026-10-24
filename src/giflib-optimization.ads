@@ -44,6 +44,9 @@ package Giflib.Optimization is
 
    --  Produces the tight row-major rectangle described by Item. When requested,
    --  pixels equal to Previous inside the rectangle become Transparent_Index.
+   --  Analysis suppresses transparency when that index is also needed by a
+   --  changed pixel. Extraction repeats that safety check for its supplied
+   --  options, preserving rendered equivalence even when callers change them.
    function Extract_Indexed_Rectangle
      (Previous : Streams.Byte_Array;
       Current : Streams.Byte_Array;
@@ -51,5 +54,6 @@ package Giflib.Optimization is
       Canvas_Height : Image_Height;
       Item : Frame_Analysis;
       Output : out Streams.Byte_Array;
-      Options : Optimization_Options := Default_Options) return Results.Result;
+      Options : Optimization_Options := Default_Options;
+      Constraints : Limits.Limit_Set := Limits.Default_Limits) return Results.Result;
 end Giflib.Optimization;

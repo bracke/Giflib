@@ -7,6 +7,10 @@ with Giflib.Palettes;
 with Giflib.Results;
 with Giflib.Streams;
 with Giflib.Quantization;
+private with Giflib.Internal.LZW_Encoding;
+private with Giflib.Internal.Ownership;
+private with Giflib.Internal.Owned_Buffers;
+private with Ada.Finalization;
 
 package Giflib.Encoding is
    pragma Preelaborate;
@@ -51,12 +55,12 @@ package Giflib.Encoding is
 
    type Palette_Selection is (Use_Global_Palette, Use_Local_Palette);
    type Chunk_Length_Array is array (Positive range <>) of Natural range 1 .. 255;
-   type Destination_Access is access all Streams.Destination'Class;
-   type Encoder is limited private;
+   type Encoder
+     (Output : not null access Streams.Destination'Class)
+      is limited private;
 
    function Initialize
      (Object : in out Encoder;
-      Output : not null Destination_Access;
       Options : Encode_Options := Default_Options;
       Constraints : Limits.Limit_Set := Limits.Default_Limits) return Results.Result;
    function Define_Screen (Object : in out Encoder; Screen : Screen_Info) return Results.Result;
@@ -93,9 +97,19 @@ package Giflib.Encoding is
    procedure Finalize (Object : in out Encoder);
 
 private
-   type Encoder is limited record
+   type Encoder_Resources is new Ada.Finalization.Limited_Controlled with record
+      Truecolor_Pixels : Internal.Owned_Buffers.Handle;
+      Allocation_Budget : aliased Internal.Ownership.Byte_Budget;
+      Quantizer : Quantization.Workspace;
+      LZW_Workspace : Internal.LZW_Encoding.Workspace_Handle;
+      Cleanup_Failed : Boolean := False;
+   end record;
+   overriding procedure Finalize (Resources : in out Encoder_Resources);
+
+   type Encoder
+     (Output : not null access Streams.Destination'Class)
+      is limited record
       Current_State : Encoder_State := Uninitialized;
-      Output : Destination_Access := null;
       Options : Encode_Options := Default_Options;
       Constraints : Limits.Limit_Set := Limits.Default_Limits;
       Screen : Screen_Info;
@@ -109,6 +123,22 @@ private
       Start_Offset : Destination_Offset := 0;
       Bytes_Written : Byte_Count := 0;
       Compressed_Bytes_Written : Byte_Count := 0;
+      Resources : Encoder_Resources;
       Diagnostic : Errors.Error := Errors.Make (Errors.No_Error);
+      Allocation_Fault : aliased Internal.Ownership.Fault_State;
    end record;
+
+   function Fail
+     (Object : in out Encoder;
+      Item : Errors.Error) return Results.Result;
+   function Invalid_Transition (Object : Encoder) return Results.Result;
+   function Has_Extension_Capacity
+     (Object : Encoder;
+      Additional : Natural) return Boolean;
+   function Write_Raw
+     (Object : in out Encoder;
+      Data : Streams.Byte_Array) return Results.Result;
+   function Write_Header (Object : in out Encoder) return Results.Result;
+   function Output_Position
+     (Object : Encoder) return Streams.Destination_Position_Result;
 end Giflib.Encoding;
