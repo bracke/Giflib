@@ -1,13 +1,13 @@
 with AUnit;
 with AUnit.Reporter.Text;
 with AUnit.Run;
-with Giflib_Testing.Suite;
+with Giflib.Testing.Suite;
 with Project_Tools.Release_Checks;
 
 procedure Giflib_Tests is
    use type AUnit.Status;
 
-   function Run is new AUnit.Run.Test_Runner_With_Status (Giflib_Testing.Suite.All_Tests);
+   function Run is new AUnit.Run.Test_Runner_With_Status (Giflib.Testing.Suite.All_Tests);
    Reporter : AUnit.Reporter.Text.Text_Reporter;
    Status : AUnit.Status;
 begin

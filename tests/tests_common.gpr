@@ -1,0 +1,24 @@
+with "config/tests_config.gpr";
+with "giflib_whitebox.gpr";
+with "../giflib_build.gpr";
+
+abstract project Tests_Common is
+   Selected_Build_Profile : Tests_Config.Build_Profile_Kind :=
+     External ("GIFLIB_BUILD_PROFILE_OVERRIDE", Tests_Config.Build_Profile);
+   for Source_Dirs use ("src", "src/subunits", "src/mains");
+   for Create_Missing_Dirs use "True";
+
+   package Compiler is
+      case Selected_Build_Profile is
+         when "release" =>
+            for Default_Switches ("Ada") use
+              Giflib_Build.Release_Switches;
+         when "validation" =>
+            for Default_Switches ("Ada") use
+              Giflib_Build.Validation_Switches;
+         when "development" =>
+            for Default_Switches ("Ada") use
+              Giflib_Build.Development_Switches;
+      end case;
+   end Compiler;
+end Tests_Common;

@@ -1,0 +1,8 @@
+with "../giflib.gpr";
+
+project Private_API_Rejection is
+   for Source_Dirs use ("private_api");
+   for Object_Dir use "obj/private-api-rejection";
+   for Main use ("giflib_internal_import_must_fail.adb");
+   for Create_Missing_Dirs use "True";
+end Private_API_Rejection;

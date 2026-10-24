@@ -51,12 +51,12 @@ procedure Giflib_Generate_Samples is
 
    procedure Generate_Still is
       Storage : aliased Giflib.Streams.Byte_Array := [for I in 1 .. 4_096 => 0];
-      Destination : aliased Giflib.Streams.Fixed_Buffer_Destination;
-      Encoder : Giflib.Encoding.Encoder;
+      Destination : aliased Giflib.Streams.Fixed_Buffer_Destination (Storage'Access);
+      Encoder : Giflib.Encoding.Encoder (Destination'Access);
       Outcome : Giflib.Results.Result;
    begin
-      Giflib.Streams.Open (Destination, Storage'Unchecked_Access, Max_Transfer => 5);
-      Outcome := Giflib.Encoding.Initialize (Encoder, Destination'Unchecked_Access);
+      Giflib.Streams.Open (Destination, Max_Transfer => 5);
+      Outcome := Giflib.Encoding.Initialize (Encoder);
       Require (Outcome, "initialize still");
       Outcome := Giflib.Encoding.Define_Screen (Encoder, (Width => 3, Height => 2, others => <>));
       Require (Outcome, "define still screen");
@@ -76,8 +76,8 @@ procedure Giflib_Generate_Samples is
 
    procedure Generate_Animation is
       Storage : aliased Giflib.Streams.Byte_Array := [for I in 1 .. 8_192 => 0];
-      Destination : aliased Giflib.Streams.Fixed_Buffer_Destination;
-      Encoder : Giflib.Encoding.Encoder;
+      Destination : aliased Giflib.Streams.Fixed_Buffer_Destination (Storage'Access);
+      Encoder : Giflib.Encoding.Encoder (Destination'Access);
       First : Giflib.Encoding.Frame_Info :=
         (Left => 0, Top => 0, Width => 2, Height => 1, others => <>);
       Second : Giflib.Encoding.Frame_Info :=
@@ -86,8 +86,8 @@ procedure Giflib_Generate_Samples is
    begin
       First.Control := (Disposal => 1, Delay_CS => 3, others => <>);
       Second.Control := (Disposal => 2, Delay_CS => 0, others => <>);
-      Giflib.Streams.Open (Destination, Storage'Unchecked_Access, Max_Transfer => 7);
-      Outcome := Giflib.Encoding.Initialize (Encoder, Destination'Unchecked_Access);
+      Giflib.Streams.Open (Destination, Max_Transfer => 7);
+      Outcome := Giflib.Encoding.Initialize (Encoder);
       Require (Outcome, "initialize animation");
       Outcome := Giflib.Encoding.Define_Screen (Encoder, (Width => 2, Height => 1, others => <>));
       Require (Outcome, "define animation screen");
@@ -109,9 +109,12 @@ procedure Giflib_Generate_Samples is
    procedure Generate_Truecolor is
       RGB : aliased Giflib.Streams.Byte_Array := [for I in 1 .. 17 * 17 * 3 => 0];
       Storage : aliased Giflib.Streams.Byte_Array := [for I in 1 .. 16_384 => 0];
-      View : Giflib.Images.Image_View;
-      Destination : aliased Giflib.Streams.Fixed_Buffer_Destination;
-      Encoder : Giflib.Encoding.Encoder;
+      View : constant Giflib.Images.Image_View :=
+        (Data => RGB'Access,
+         Format => Giflib.RGB_24, Width => 17, Height => 17, Stride => 51,
+         Accessible_Bytes => RGB'Length);
+      Destination : aliased Giflib.Streams.Fixed_Buffer_Destination (Storage'Access);
+      Encoder : Giflib.Encoding.Encoder (Destination'Access);
       Options : Giflib.Quantization.Quantize_Options := Giflib.Quantization.Default_Options;
       Outcome : Giflib.Results.Result;
       Position : Natural := RGB'First;
@@ -124,13 +127,10 @@ procedure Giflib_Generate_Samples is
             Position := Position + 3;
          end loop;
       end loop;
-      View :=
-        (Format => Giflib.RGB_24, Width => 17, Height => 17, Stride => 51,
-         Accessible_Bytes => RGB'Length, Data => RGB'Unchecked_Access);
       Options.Maximum_Colors := 16;
       Options.Dither := Giflib.Quantization.Floyd_Steinberg;
-      Giflib.Streams.Open (Destination, Storage'Unchecked_Access, Max_Transfer => 11);
-      Outcome := Giflib.Encoding.Initialize (Encoder, Destination'Unchecked_Access);
+      Giflib.Streams.Open (Destination, Max_Transfer => 11);
+      Outcome := Giflib.Encoding.Initialize (Encoder);
       Require (Outcome, "initialize truecolor");
       Outcome := Giflib.Encoding.Define_Screen
         (Encoder, (Width => 17, Height => 17, others => <>));

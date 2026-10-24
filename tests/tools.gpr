@@ -1,0 +1,18 @@
+project Tools extends "tests_common.gpr" is
+   for Source_Dirs use ("src", "src/subunits", "src/mains");
+   for Main use
+     ("giflib_generate_samples.adb", "giflib_generate_fixtures.adb",
+      "giflib_external_checks.adb", "giflib_benchmark.adb",
+      "giflib_fuzz.adb", "giflib_check.adb");
+   case Tests_Common.Selected_Build_Profile is
+      when "release" =>
+         for Object_Dir use "obj/tools-release";
+         for Exec_Dir use "bin/release";
+      when "validation" =>
+         for Object_Dir use "obj/tools-validation";
+         for Exec_Dir use "bin/validation";
+      when "development" =>
+         for Object_Dir use "obj/tools";
+         for Exec_Dir use "bin";
+   end case;
+end Tools;

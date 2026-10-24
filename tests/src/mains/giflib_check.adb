@@ -3,6 +3,7 @@ with Ada.Directories;
 with Ada.Text_IO;
 
 with Project_Tools.Alire_Manifests;
+with Project_Tools.AUnit_Checks;
 with Project_Tools.Files;
 with Project_Tools.Processes;
 with Project_Tools.Release_Checks;
@@ -14,42 +15,88 @@ procedure Giflib_Check is
    Root : constant String :=
      Files.Find_Root_Upward (Ada.Directories.Current_Directory, "giflib.gpr");
    Tests_Bin : constant String := Files.Join (Root, "tests/bin");
+   Release_Tests_Bin : constant String := Files.Join (Tests_Bin, "release");
    Command : constant String :=
      (if Ada.Command_Line.Argument_Count = 0 then "all"
       else Ada.Command_Line.Argument (1));
    Alr : constant String := Processes.Locate_Command ("alr");
+   Gprbuild : constant String := Processes.Locate_Command ("gprbuild");
    Checks : constant Project_Tools.Release_Checks.Checker :=
      Project_Tools.Release_Checks.Create (Root);
 
    procedure Validate_Tooling is
    begin
+      Project_Tools.Release_Checks.Require_Text
+        (Checks, "alire.toml", "gnat_native = ""^15""", Quiet => False);
+      Project_Tools.Release_Checks.Require_Text
+        (Checks, "tests/alire.toml", "gnat_native = ""^15""", Quiet => False);
+      Project_Tools.Release_Checks.Require_Text
+        (Checks, "giflib.gpr", "with ""giflib_build.gpr"";", Quiet => False);
+      Project_Tools.Release_Checks.Require_Text
+        (Checks,
+         "tests/giflib_whitebox.gpr",
+         "with ""../giflib_build.gpr"";",
+         Quiet => False);
+      Project_Tools.Release_Checks.Require_Text
+        (Checks,
+         "tests/public_api.gpr",
+         "with ""../giflib.gpr"";",
+         Quiet => False);
+      Project_Tools.Release_Checks.Require_Text
+        (Checks,
+         "tests/check_private_api.sh",
+         "private child unit",
+         Quiet => False);
+      Project_Tools.Release_Checks.Require_Text
+        (Checks,
+         "tests/alire.toml",
+         "executables = [""giflib_tests""]",
+         Quiet => False);
+      Project_Tools.Release_Checks.Require_Text
+        (Checks,
+         "tests/alire.toml",
+         "project-files = [""unit_tests.gpr""]",
+         Quiet => False);
       Project_Tools.Alire_Manifests.Require_Workspace_Pin
         (Files.Join (Root, "tests/alire.toml"),
          "project_tools",
          "../../project_tools",
-         Quiet => True);
+         Quiet => False);
       Project_Tools.Release_Checks.Require_GPR_Main_Inventory
-        (Project_File       => Files.Join (Root, "tests/tests.gpr"),
+        (Project_File       => Files.Join (Root, "tests/unit_tests.gpr"),
          Documentation_File => Files.Join (Root, "docs/IMPLEMENTATION_PLAN.md"),
          Source_Directory   => Files.Join (Root, "tests/src/mains"),
-         Quiet              => True);
+         Quiet              => False);
+      Project_Tools.Release_Checks.Require_GPR_Main_Inventory
+        (Project_File       => Files.Join (Root, "tests/tools.gpr"),
+         Documentation_File => Files.Join (Root, "docs/IMPLEMENTATION_PLAN.md"),
+         Source_Directory   => Files.Join (Root, "tests/src/mains"),
+         Quiet              => False);
+      Project_Tools.AUnit_Checks.Require_Registered_Test_Packages
+        (Test_Dir             => Files.Join (Root, "tests/src"),
+         Spec_Pattern         => "giflib-testing-test_*.ads",
+         Suite_Path           => Files.Join (Root, "tests/src/giflib-testing-suite.adb"),
+         Suite_Add_Prefix     => "new ",
+         Suite_Add_Suffix     => ".Test",
+         Required_Stem_Suffix => "",
+         Quiet                => False);
       Project_Tools.Release_Checks.Require_Text
-        (Checks, "tests/src/mains/giflib_tests.adb", "with Project_Tools.", Quiet => True);
+        (Checks, "tests/src/mains/giflib_tests.adb", "with Project_Tools.", Quiet => False);
       Project_Tools.Release_Checks.Require_Text
-        (Checks, "tests/src/mains/giflib_check.adb", "with Project_Tools.", Quiet => True);
+        (Checks, "tests/src/mains/giflib_check.adb", "with Project_Tools.", Quiet => False);
       Project_Tools.Release_Checks.Require_Text
         (Checks, "tests/src/mains/giflib_generate_samples.adb", "with Project_Tools.",
-         Quiet => True);
+         Quiet => False);
       Project_Tools.Release_Checks.Require_Text
         (Checks, "tests/src/mains/giflib_generate_fixtures.adb", "with Project_Tools.",
-         Quiet => True);
+         Quiet => False);
       Project_Tools.Release_Checks.Require_Text
         (Checks, "tests/src/mains/giflib_external_checks.adb", "with Project_Tools.",
-         Quiet => True);
+         Quiet => False);
       Project_Tools.Release_Checks.Require_Text
-        (Checks, "tests/src/mains/giflib_benchmark.adb", "with Project_Tools.", Quiet => True);
+        (Checks, "tests/src/mains/giflib_benchmark.adb", "with Project_Tools.", Quiet => False);
       Project_Tools.Release_Checks.Require_Text
-        (Checks, "tests/src/mains/giflib_fuzz.adb", "with Project_Tools.", Quiet => True);
+        (Checks, "tests/src/mains/giflib_fuzz.adb", "with Project_Tools.", Quiet => False);
    exception
       when Program_Error =>
          Project_Tools.Release_Checks.Fail
@@ -59,13 +106,14 @@ procedure Giflib_Check is
    procedure Run_Tool
      (Name  : String;
       Args  : Processes.Argument_Vectors.Vector;
-      Label : String)
+      Label : String;
+      Bin_Directory : String := Tests_Bin)
    is
    begin
       Processes.Run
         (Label,
          Root,
-         Files.Join (Tests_Bin, Name),
+         Files.Join (Bin_Directory, Name),
          Args);
    end Run_Tool;
 
@@ -77,48 +125,114 @@ procedure Giflib_Check is
       Processes.Run (Label, Root, Alr, Args);
    end Run_Alire;
 
-   procedure External is
+   procedure Run_Benchmarks
+     (Enforce : Boolean := False;
+      Bin_Directory : String := Tests_Bin)
+   is
+      procedure Run_Case (Relative_Path : String; Label : String) is
+      begin
+         if Enforce then
+            Run_Tool
+              ("giflib_benchmark",
+               Processes.Arguments
+                 ([Processes.Argument ("--enforce"),
+                   Processes.Argument (Files.Join (Root, Relative_Path))]),
+               Label,
+               Bin_Directory);
+         else
+            Run_Tool
+              ("giflib_benchmark",
+               Processes.Arguments
+                 ([Processes.Argument (Files.Join (Root, Relative_Path))]),
+               Label,
+               Bin_Directory);
+         end if;
+      end Run_Case;
+   begin
+      Run_Case ("tests/fixtures/external/docbook-tip.gif", "benchmark docbook tip");
+      Run_Case
+        ("tests/fixtures/external/docbook-warning.gif", "benchmark docbook warning");
+      Run_Case
+        ("tests/fixtures/generated/imagemagick-indexed.gif", "benchmark indexed fixture");
+      Run_Case
+        ("tests/fixtures/generated/imagemagick-animation.gif", "benchmark animation fixture");
+      Run_Case
+        ("tests/fixtures/generated/imagemagick-interlaced.gif", "benchmark interlaced fixture");
+      Run_Case
+        ("tests/fixtures/generated/imagemagick-benchmark-512.gif", "benchmark GIF fixture");
+      if Enforce then
+         Run_Tool
+           ("giflib_benchmark",
+            Processes.Arguments
+              ([Processes.Argument ("--enforce"),
+                Processes.Argument ("--synthetic-truecolor")]),
+            "benchmark raw truecolor quantization",
+            Bin_Directory);
+      else
+         Run_Tool
+           ("giflib_benchmark",
+            Processes.Arguments
+              ([Processes.Argument ("--synthetic-truecolor")]),
+            "benchmark raw truecolor quantization",
+            Bin_Directory);
+      end if;
+   end Run_Benchmarks;
+
+   procedure External
+     (Include_Benchmarks : Boolean := True;
+      Bin_Directory      : String := Tests_Bin;
+      Label_Prefix       : String := "")
+   is
    begin
       Run_Tool
         ("giflib_generate_samples",
          Processes.Arguments
            ([Processes.Argument (Files.Join (Root, "tests/artifacts"))]),
-         "giflib sample generation");
+         Label_Prefix & "giflib sample generation",
+         Bin_Directory);
       Run_Tool
         ("giflib_generate_fixtures",
          Processes.Arguments
            ([Processes.Argument (Files.Join (Root, "tests/fixtures/generated"))]),
-         "independent fixture generation");
+         Label_Prefix & "independent fixture generation",
+         Bin_Directory);
       Run_Tool
         ("giflib_external_checks",
          Processes.Arguments
            ([Processes.Argument (Files.Join (Root, "tests/artifacts"))]),
-         "external oracle checks");
-      Run_Tool
-        ("giflib_benchmark",
-         Processes.Arguments
-           ([Processes.Argument
-               (Files.Join (Root, "tests/fixtures/external/docbook-tip.gif")),
-             Processes.Argument
-               (Files.Join (Root, "tests/fixtures/external/docbook-warning.gif")),
-             Processes.Argument
-               (Files.Join (Root, "tests/fixtures/generated/imagemagick-indexed.gif")),
-             Processes.Argument
-               (Files.Join (Root, "tests/fixtures/generated/imagemagick-animation.gif")),
-             Processes.Argument
-               (Files.Join (Root, "tests/fixtures/generated/imagemagick-interlaced.gif"))]),
-         "independent corpus decode/encode benchmark");
+         Label_Prefix & "external oracle checks",
+         Bin_Directory);
+      if Include_Benchmarks then
+         Run_Benchmarks (Bin_Directory => Bin_Directory);
+      end if;
    end External;
 
-   procedure All_Checks is
+   procedure Run_Correctness_Checks
+     (Bin_Directory : String := Tests_Bin;
+      Label_Prefix  : String := "")
+   is
    begin
-      Run_Tool ("giflib_tests", Processes.No_Arguments, "AUnit suite");
+      Run_Tool
+        ("giflib_tests",
+         Processes.No_Arguments,
+         Label_Prefix & "AUnit suite",
+         Bin_Directory);
       Run_Tool
         ("giflib_fuzz",
          Processes.Arguments
            ([Processes.Argument ("10000"), Processes.Argument ("3235823838")]),
-         "deterministic fuzz harness");
-      External;
+         Label_Prefix & "deterministic fuzz harness",
+         Bin_Directory);
+      External
+        (Include_Benchmarks => False,
+         Bin_Directory      => Bin_Directory,
+         Label_Prefix       => Label_Prefix);
+   end Run_Correctness_Checks;
+
+   procedure All_Checks is
+   begin
+      Run_Correctness_Checks;
+      Run_Benchmarks;
    end All_Checks;
 begin
    if Root = "" then
@@ -155,16 +269,42 @@ begin
              Processes.Argument ("examples/examples.gpr"), Processes.Argument ("-p"),
              Processes.Argument ("-j0")]),
          "example build");
-      All_Checks;
+      Run_Correctness_Checks;
+      Processes.Run
+        ("release-profile unit-test build",
+         Root,
+         Gprbuild,
+         Processes.Arguments
+           ([Processes.Argument ("-P"),
+             Processes.Argument (Files.Join (Root, "tests/unit_tests.gpr")),
+             Processes.Argument ("-p"), Processes.Argument ("-j0"),
+             Processes.Argument
+               ("-XGIFLIB_BUILD_PROFILE_OVERRIDE=release")]));
+      Processes.Run
+        ("release-profile tools build",
+         Root,
+         Gprbuild,
+         Processes.Arguments
+           ([Processes.Argument ("-P"),
+             Processes.Argument (Files.Join (Root, "tests/tools.gpr")),
+             Processes.Argument ("-p"), Processes.Argument ("-j0"),
+             Processes.Argument
+               ("-XGIFLIB_BUILD_PROFILE_OVERRIDE=release")]));
+      Run_Correctness_Checks
+        (Bin_Directory => Release_Tests_Bin,
+         Label_Prefix  => "release-profile ");
+      Run_Benchmarks
+        (Enforce => True,
+         Bin_Directory => Release_Tests_Bin);
       Run_Alire
         (Processes.Arguments
            ([Processes.Argument ("exec"), Processes.Argument ("--"),
              Processes.Argument ("gnatprove"), Processes.Argument ("-P"),
-             Processes.Argument ("giflib.gpr"), Processes.Argument ("-u"),
-             Processes.Argument ("giflib-internal-interlacing.adb"),
-             Processes.Argument ("--mode=flow"), Processes.Argument ("--report=all"),
+             Processes.Argument ("giflib.gpr"), Processes.Argument ("--level=2"),
+             Processes.Argument ("--prover=cvc5"),
+             Processes.Argument ("--report=all"),
              Processes.Argument ("-j1")]),
-         "SPARK flow analysis");
+         "SPARK proof");
       Run_Alire
         (Processes.Arguments
            ([Processes.Argument ("show"), Processes.Argument ("--solve")]),

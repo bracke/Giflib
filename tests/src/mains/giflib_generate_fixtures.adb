@@ -68,6 +68,7 @@ procedure Giflib_Generate_Fixtures is
    Frame_1 : constant String := Files.Join (Output_Directory, "frame-1.ppm");
    Frame_2 : constant String := Files.Join (Output_Directory, "frame-2.ppm");
    Interlace_PPM : constant String := Files.Join (Output_Directory, "interlaced.ppm");
+   Benchmark_PPM : constant String := Files.Join (Output_Directory, "benchmark-512.ppm");
 begin
    if Root = "" then
       Project_Tools.Release_Checks.Fail
@@ -85,6 +86,7 @@ begin
    Write_PPM (Frame_1, 3, 1, 3);
    Write_PPM (Frame_2, 3, 1, 4);
    Write_PPM (Interlace_PPM, 9, 9, 5);
+   Write_PPM (Benchmark_PPM, 512, 512, 5);
 
    Processes.Run
      ("independent indexed fixture generation",
@@ -118,12 +120,22 @@ begin
           Processes.Argument ("16"), Processes.Argument ("-interlace"),
           Processes.Argument ("GIF"),
           Processes.Argument (Files.Join (Output_Directory, "imagemagick-interlaced.gif"))]));
+   Processes.Run
+     ("independent benchmark fixture generation",
+      Root,
+      Convert,
+      Processes.Arguments
+        ([Processes.Argument (Benchmark_PPM), Processes.Argument ("-colors"),
+          Processes.Argument ("256"),
+          Processes.Argument
+            (Files.Join (Output_Directory, "imagemagick-benchmark-512.gif"))]));
 
    Files.Delete_File_If_Present (Still_PPM);
    Files.Delete_File_If_Present (Frame_0);
    Files.Delete_File_If_Present (Frame_1);
    Files.Delete_File_If_Present (Frame_2);
    Files.Delete_File_If_Present (Interlace_PPM);
+   Files.Delete_File_If_Present (Benchmark_PPM);
    Ada.Text_IO.Put_Line ("Ada fixture generator completed: " & Output_Directory);
 exception
    when others =>
@@ -132,5 +144,6 @@ exception
       Files.Delete_File_If_Present (Frame_1);
       Files.Delete_File_If_Present (Frame_2);
       Files.Delete_File_If_Present (Interlace_PPM);
+      Files.Delete_File_If_Present (Benchmark_PPM);
       raise;
 end Giflib_Generate_Fixtures;

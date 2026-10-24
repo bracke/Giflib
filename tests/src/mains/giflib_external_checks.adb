@@ -157,6 +157,11 @@ begin
              Processes.Argument (Still), Processes.Argument (Animation),
              Processes.Argument (Truecolor)]),
          "ImageMagick metadata check");
+      ImageMagick_Animation_Details : constant String := Capture
+        (Identify,
+         Processes.Arguments
+           ([Processes.Argument ("-verbose"), Processes.Argument (Animation)]),
+         "ImageMagick animation detail check");
       FFprobe_Metadata : constant String := Capture
         (FFprobe,
          Processes.Arguments
@@ -170,21 +175,23 @@ begin
          "FFprobe metadata check");
    begin
       Require
-        (Project_Tools.Text.Contains (ImageMagick_Metadata, "GIF 3x2 1"),
-         "ImageMagick rejected still geometry");
+        (ImageMagick_Metadata =
+           "GIF 3x2 1 0|GIF 2x1 2 3|GIF 1x1 2 0|GIF 17x17 1 0|",
+         "ImageMagick reported incorrect generated metadata");
       Require
-        (Project_Tools.Text.Contains (ImageMagick_Metadata, "GIF 2x1 2"),
-         "ImageMagick rejected animation geometry");
+        (Project_Tools.Text.Line_Value
+           (ImageMagick_Animation_Details, "  Iterations", ":") = "0",
+         "ImageMagick reported an incorrect animation loop count");
       Require
-        (Project_Tools.Text.Contains (ImageMagick_Metadata, "GIF 17x17 1"),
-         "ImageMagick rejected truecolor geometry");
-      Require
-        (Project_Tools.Text.Contains (FFprobe_Metadata, "codec_name=gif"),
+        (Project_Tools.Text.Line_Value
+           (FFprobe_Metadata, "codec_name", "=") = "gif",
          "FFprobe did not select the GIF codec");
       Require
-        (Project_Tools.Text.Contains (FFprobe_Metadata, "width=2")
-         and then Project_Tools.Text.Contains (FFprobe_Metadata, "height=1")
-         and then Project_Tools.Text.Contains (FFprobe_Metadata, "nb_read_frames=2"),
+        (Project_Tools.Text.Line_Value (FFprobe_Metadata, "width", "=") = "2"
+         and then Project_Tools.Text.Line_Value
+           (FFprobe_Metadata, "height", "=") = "1"
+         and then Project_Tools.Text.Line_Value
+           (FFprobe_Metadata, "nb_read_frames", "=") = "2",
          "FFprobe rejected animation dimensions/frame count");
    end;
 
@@ -243,22 +250,13 @@ begin
          "independent animation frame check");
    begin
       Require
-        (Project_Tools.Text.Contains (Independent_Metadata, "GIF 25x24 1"),
-         "DocBook tip fixture changed");
+        (Independent_Metadata =
+           "GIF 25x24 1|GIF 24x24 1|GIF 5x3 1|"
+           & "GIF 3x1 3|GIF 3x1 3|GIF 3x1 3|GIF 9x9 1|",
+         "independent fixture metadata changed");
       Require
-        (Project_Tools.Text.Contains (Independent_Metadata, "GIF 24x24 1"),
-         "DocBook warning fixture changed");
-      Require
-        (Project_Tools.Text.Contains (Independent_Metadata, "GIF 5x3 1"),
-         "independent indexed fixture changed");
-      Require
-        (Project_Tools.Text.Contains (Independent_Metadata, "GIF 3x1 3"),
-         "independent animation fixture changed");
-      Require
-        (Project_Tools.Text.Contains (Independent_Metadata, "GIF 9x9 1"),
-         "independent interlace fixture changed");
-      Require
-        (Project_Tools.Text.Contains (Independent_Frames, "nb_read_frames=3"),
+        (Project_Tools.Text.Line_Value
+           (Independent_Frames, "nb_read_frames", "=") = "3",
          "independent animation frame count changed");
    end;
 

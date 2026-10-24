@@ -1,0 +1,37 @@
+with "../giflib.gpr";
+with "../giflib_build.gpr";
+with "config/tests_config.gpr";
+
+project Public_API is
+   Selected_Build_Profile : Tests_Config.Build_Profile_Kind :=
+     External ("GIFLIB_BUILD_PROFILE_OVERRIDE", Tests_Config.Build_Profile);
+   for Source_Dirs use ("public_api");
+   for Main use ("giflib_public_api_check.adb");
+   for Create_Missing_Dirs use "True";
+
+   case Selected_Build_Profile is
+      when "release" =>
+         for Object_Dir use "obj/public-api-release";
+         for Exec_Dir use "bin/release";
+      when "validation" =>
+         for Object_Dir use "obj/public-api-validation";
+         for Exec_Dir use "bin/validation";
+      when "development" =>
+         for Object_Dir use "obj/public-api";
+         for Exec_Dir use "bin";
+   end case;
+
+   package Compiler is
+      case Selected_Build_Profile is
+         when "release" =>
+            for Default_Switches ("Ada") use
+              Giflib_Build.Release_Switches;
+         when "validation" =>
+            for Default_Switches ("Ada") use
+              Giflib_Build.Validation_Switches;
+         when "development" =>
+            for Default_Switches ("Ada") use
+              Giflib_Build.Development_Switches;
+      end case;
+   end Compiler;
+end Public_API;
