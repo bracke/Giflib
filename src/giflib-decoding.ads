@@ -6,6 +6,12 @@ with Giflib.Metadata;
 with Giflib.Results;
 with Giflib.Streams;
 
+private with Giflib.Internal.Metadata_Store;
+private with Giflib.Internal.LZW;
+private with Giflib.Internal.Ownership;
+private with Giflib.Internal.Owned_Buffers;
+private with Ada.Finalization;
+
 package Giflib.Decoding is
    pragma Preelaborate;
 
@@ -42,18 +48,17 @@ package Giflib.Decoding is
       Extension : Metadata.Extension_Info;
    end record;
 
-   type Source_Access is access all Streams.Source'Class;
-   type Decoder is limited private;
+   type Decoder
+     (Input : not null access Streams.Source'Class)
+      is limited private;
 
    function Initialize
      (Object : in out Decoder;
-      Input : not null Source_Access;
       Options : Decode_Options := Default_Options;
       Constraints : Limits.Limit_Set := Limits.Default_Limits) return Results.Result;
 
    function Reset
      (Object : in out Decoder;
-      Input : not null Source_Access;
       Options : Decode_Options := Default_Options;
       Constraints : Limits.Limit_Set := Limits.Default_Limits) return Results.Result;
 
@@ -116,26 +121,21 @@ package Giflib.Decoding is
 
 private
    type Warning_Array is array (Positive range 1 .. 256) of Errors.Warning;
-   type Payload_Chunk;
-   type Payload_Chunk_Access is access Payload_Chunk;
-   type Payload_Chunk is record
-      Length : Natural range 1 .. 255 := 1;
-      Data : Streams.Byte_Array (1 .. 255) := [others => 0];
-      Next : Payload_Chunk_Access := null;
+   type Decoder_Resources is new Ada.Finalization.Limited_Controlled with record
+      Metadata_Storage : Internal.Metadata_Store.Store;
+      Allocation_Budget : aliased Internal.Ownership.Byte_Budget;
+      Canvas : Internal.Owned_Buffers.Handle;
+      Snapshot : Internal.Owned_Buffers.Handle;
+      Frame_Scratch : Internal.Owned_Buffers.Handle;
+      LZW_Workspace : Internal.LZW.Workspace_Handle;
+      Cleanup_Failed : Boolean := False;
    end record;
+   overriding procedure Finalize (Object : in out Decoder_Resources);
 
-   type Extension_Node;
-   type Extension_Node_Access is access Extension_Node;
-   type Extension_Node is record
-      Info : Metadata.Extension_Info;
-      First_Chunk : Payload_Chunk_Access := null;
-      Last_Chunk : Payload_Chunk_Access := null;
-      Next : Extension_Node_Access := null;
-   end record;
-
-   type Decoder is limited record
+   type Decoder
+     (Input : not null access Streams.Source'Class)
+      is limited record
       Current_State : Decoder_State := Uninitialized;
-      Input : Source_Access := null;
       Options : Decode_Options := Default_Options;
       Constraints : Limits.Limit_Set := Limits.Default_Limits;
       Header_Data : Header_Info;
@@ -143,16 +143,10 @@ private
       Total_Decoded_Pixels : Pixel_Count := 0;
       Total_Compressed_Bytes : Byte_Count := 0;
       Extensions_Seen : Natural := 0;
-      Retained_First : Extension_Node_Access := null;
-      Retained_Last : Extension_Node_Access := null;
-      Retained_Count : Natural := 0;
-      Retained_Bytes : Byte_Count := 0;
-      Owned_Allocation_Bytes : Byte_Count := 0;
+      Resources : Decoder_Resources;
       Pending_Control : Frames.Graphic_Control := Frames.Default_Control;
       Has_Pending_Control : Boolean := False;
       Loop_Data : Animations.Loop_Info := Animations.No_Loop;
-      Canvas : Streams.Byte_Array_Access := null;
-      Snapshot : Streams.Byte_Array_Access := null;
       Snapshot_Rectangle : Frames.Rectangle;
       Previous_Rectangle : Frames.Rectangle;
       Previous_Control : Frames.Graphic_Control := Frames.Default_Control;
@@ -160,5 +154,14 @@ private
       Warnings : Warning_Array;
       Stored_Warnings : Natural range 0 .. 256 := 0;
       Diagnostic : Errors.Error := Errors.Make (Errors.No_Error);
+      Allocation_Fault : Internal.Ownership.Fault_State;
    end record;
+
+   procedure Add_Warning
+     (Object : in out Decoder;
+      Code : Errors.Warning_Code;
+      Severity : Errors.Warning_Severity;
+      Context : Errors.Diagnostic_Context := (others => <>));
+   function Input_Position
+     (Object : Decoder) return Streams.Source_Position_Result;
 end Giflib.Decoding;
