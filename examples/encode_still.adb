@@ -8,8 +8,8 @@ with Giflib.Streams;
 
 procedure Encode_Still is
    Storage : aliased Giflib.Streams.Byte_Array := [for I in 1 .. 1_024 => 0];
-   Destination : aliased Giflib.Streams.Fixed_Buffer_Destination;
-   Encoder : Giflib.Encoding.Encoder;
+   Destination : aliased Giflib.Streams.Fixed_Buffer_Destination (Storage'Access);
+   Encoder : Giflib.Encoding.Encoder (Destination'Access);
    Palette : Giflib.Palettes.Palette;
    Outcome : Giflib.Results.Result;
 
@@ -24,8 +24,8 @@ begin
    Palette.Colors (0) := (0, 0, 0);
    Palette.Colors (1) := (255, 255, 255);
 
-   Giflib.Streams.Open (Destination, Storage'Unchecked_Access);
-   Outcome := Giflib.Encoding.Initialize (Encoder, Destination'Unchecked_Access);
+   Giflib.Streams.Open (Destination);
+   Outcome := Giflib.Encoding.Initialize (Encoder);
    Require_Success;
    Outcome := Giflib.Encoding.Define_Screen
      (Encoder, (Width => 2, Height => 2, others => <>));

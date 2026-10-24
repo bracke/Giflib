@@ -32,13 +32,16 @@ All commands use Alire so the declared GNAT 15 toolchain is selected:
 alr build
 alr --chdir tests build
 alr --chdir tests exec -- ./bin/giflib_tests
+alr --chdir tests exec -- gprbuild -P tools.gpr -p -j0
 ```
 
 All repository-owned tooling is Ada and uses the shared `project_tools` crate
 for process, filesystem, temporary-fixture, deterministic-seed, and release
-checks. After building the test crate, `giflib_check` runs the suite,
+checks. After building `tools.gpr`, `giflib_check` runs the suite,
 deterministic mutations, independent fixtures, external decoder oracles, and
-benchmarks:
+benchmarks. The `release` command repeats the correctness, fuzz, and external
+oracle checks with separately built optimized release binaries before enforcing
+the release benchmark limits:
 
 ```sh
 alr --chdir tests exec -- ./bin/giflib_check all

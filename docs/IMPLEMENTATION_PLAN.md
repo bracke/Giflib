@@ -23,7 +23,7 @@
 library/test crates, public foundation API, diagnostics, limits, stream
 adapters, compile consumer, and AUnit runner are implemented and verified.
 
-1. Create Alire library crate `giflib`, GNAT 15 pin, MIT license, `src/`, separate Alire binary `tests/` crate dependent on `giflib`, `aunit`, `project_tools`; pin root package using `{ path = ".." }`.
+1. Create Alire library crate `giflib`, GNAT 15 pin, MIT license, `src/`, and a separate Alire binary `tests/` crate dependent on `aunit` and `project_tools`; compile workspace sources for internal tests through `giflib_whitebox.gpr` while keeping the production library interface restricted.
 2. Establish public root `Giflib` scalar types, version, capabilities, and naming guidelines. Add a compile-only consumer test.
 3. Implement `Errors`, `Results`, `Limits` and explicit diagnostics (stream offsets, block types, frame ordinal, LZW code context). Test each status and limit.
 4. Implement `Streams.Source` / `Streams.Destination` interfaces, memory source and fixed-buffer destination. Test partial reads/writes, EOF, zero progress, offsets and failure propagation.
@@ -95,8 +95,12 @@ global palette in an explicit analysis pass. The opt-in conservative optimizer
 trims retained opaque canvases, makes unchanged rectangle interiors transparent,
 and merges safe redundant delays while refusing unsafe disposal/control cases.
 Independent ImageMagick/FFmpeg checks include lossy true-color output. The
-native benchmark harness reports per-file decode/encode time and process peak
-RSS for generated and caller-supplied real-world corpora.
+native benchmark harness reports five-sample median per-file decode/encode time
+and process peak RSS for generated and caller-supplied real-world corpora. The
+release gate uses optimized builds, encodes every animation frame, runs cases
+in separate processes, enforces conservative timing/RSS ceilings, and includes
+a deterministic raw 512×512 input with more than 256 colors so median-cut is
+measured directly.
 
 25. Implement color quantization with deterministic median-cut baseline, optional dithering, indexed transparency mapping and palette-size selection. Validate error metrics and adversarial pixel inputs.
 26. Add configurable global vs. local palette strategies and palette reuse decisions.
@@ -112,15 +116,23 @@ externally sourced DocBook images and independently generated ImageMagick
 goldens, and giflib encoder artifacts. It covers both versions, palette and
 interlace variants, three-frame timing/disposal/looping, LZW code sizes 2–8,
 dictionary transitions/full state, metadata, and malformed inputs. A
-deterministic 10,000-case bounded mutation harness passes; every declared
+deterministic 10,000-case bounded multi-seed mutation harness, including LZW
+dictionary-growth, high-expansion, and composited frame decoding, passes; every declared
 resource limit has an execution-path test; both external decoder oracles pass;
 independent decoder objects interleave safely; and the example, benchmark,
-conformance/security/API documentation, Alire metadata check, and SPARK flow
-analysis are reproducible through the Ada `giflib_check release` command. The
-restricted sandbox prevents the optional SMT prover from opening its local Why3 socket, so
-that command and all excluded SPARK regions are recorded in
-`docs/VERIFICATION.md`. No release tag was created; tagging remains a
-post-verification release action.
+conformance/security/API documentation, Alire metadata check, and full SPARK
+proof of checked and budget arithmetic, encoder palette/code sizing, image
+geometry and extents, descriptor packed fields, GIF extension control/U16
+fields, LZW code/width/hash arithmetic, palette helpers, optimizer
+decision/bounds arithmetic, pixel/component offsets, quantization color/index
+and error-buffer arithmetic, sub-block state, LZW bit-buffer and dictionary
+guards, metadata retention/count state, session lifecycle/allocation accounting,
+object-local allocation-failure state, interlacing, and stream transfer/progress accounting are
+reproducible through the Ada
+`giflib_check release` command.
+All excluded SPARK
+regions are recorded in `docs/VERIFICATION.md`. No release tag was created;
+tagging remains a post-verification release action.
 
 29. Curate independently sourced and independently generated golden files: GIF87a/GIF89a, interlace, palettes, transparency, looping, disposal, unknown extensions, all LZW width transitions and malformed cases.
 30. Build deterministic fuzz harness and mutation corpus. Verify no hangs, out-of-bounds access, arithmetic overflow or unbounded allocation on corrupt sources.
@@ -136,8 +148,18 @@ post-verification release action.
 The AUnit entry point is `giflib_tests`; the other repository-owned workflow
 programs are `giflib_check`, `giflib_generate_samples`,
 `giflib_generate_fixtures`, `giflib_external_checks`, `giflib_benchmark`, and
-`giflib_fuzz`. Every entry point uses `project_tools`; the release gate validates
-both the workspace pin and this GPR/source inventory.
+`giflib_fuzz`. `unit_tests.gpr` builds only the AUnit runner for the normal test
+action; `tools.gpr` builds the remaining workflow programs for release and
+tooling gates. Every entry point uses `project_tools`; the release gate validates
+both the workspace pin and both GPR/source inventories.
+Internal tests import the dedicated `giflib_whitebox.gpr`; production consumers
+remain limited to the units exported by `giflib.gpr`.
+The white-box suite uses the `Giflib.Testing` descendant hierarchy so Ada's
+private-child rules remain intact. A production-project consumer compile and an
+expected-failure private-child import guard that boundary. The root and tests
+crates both pin GNAT 15, and all GPR variants share compiler-switch policy from
+`giflib_build.gpr`. Separate test procedure bodies live under `tests/src/subunits`, keeping package
+inventory checks focused on actual AUnit package bodies.
 
 ## Cross-cutting acceptance checklist
 
