@@ -7,6 +7,8 @@ with Giflib.Internal.Interlacing;
 with Giflib.Internal.LZW_Bit_Arithmetic;
 
 package body Giflib.Internal.LZW is
+   package Workspace_Results is new Workspace_Ownership.Result_Operations
+     (Results.Result);
    function Ensure
      (Object : in out Workspace_Handle;
       Budget : aliased in out Ownership.Byte_Budget;
@@ -95,7 +97,12 @@ package body Giflib.Internal.LZW is
          return Results.Success;
       end Charge;
 
-      function Next_Code (Value : out Natural) return Results.Result is
+      package Code_Reader is
+         function Next (Value : out Natural) return Results.Result;
+      end Code_Reader;
+
+      package body Code_Reader is
+      function Next (Value : out Natural) return Results.Result is
          Count : Byte_Count;
          At_End : Boolean;
          Outcome : Results.Result;
@@ -137,8 +144,14 @@ package body Giflib.Internal.LZW is
          Bit_Count := Extracted.State.Count;
          Code_Ordinal := Code_Ordinal + 1;
          return Charge (1);
-      end Next_Code;
+      end Next;
+      end Code_Reader;
 
+      package Output_Sink is
+         function Emit (Value : Byte) return Results.Result;
+      end Output_Sink;
+
+      package body Output_Sink is
       function Emit (Value : Byte) return Results.Result is
          Outcome : Results.Result;
          Target_Position : Natural := Output_Position;
@@ -185,6 +198,7 @@ package body Giflib.Internal.LZW is
          Output_Position := Output_Position + 1;
          return Results.Success;
       end Emit;
+      end Output_Sink;
 
       Code : Natural;
       Incoming_Code : Natural;
@@ -226,7 +240,7 @@ package body Giflib.Internal.LZW is
       end;
 
       loop
-         Outcome := Next_Code (Code);
+         Outcome := Code_Reader.Next (Code);
          if not Results.Succeeded (Outcome) then
             Decoded_Count := Byte_Count (Output_Position);
             return Outcome;
@@ -267,7 +281,7 @@ package body Giflib.Internal.LZW is
                return Failure (Errors.LZW_Invalid_Code, Code);
             end if;
             First_Character := Byte (Code);
-            Outcome := Emit (First_Character);
+            Outcome := Output_Sink.Emit (First_Character);
             if not Results.Succeeded (Outcome) then
                Decoded_Count := Byte_Count (Output_Position);
                return Outcome;
@@ -323,7 +337,7 @@ package body Giflib.Internal.LZW is
             Stack_Count := LZW_Arithmetic.Push_Count (Stack_Count);
 
             for I in reverse 0 .. Stack_Count - 1 loop
-               Outcome := Emit (Context.Stack (I));
+               Outcome := Output_Sink.Emit (Context.Stack (I));
                if not Results.Succeeded (Outcome) then
                   Decoded_Count := Byte_Count (Output_Position);
                   return Outcome;
@@ -361,10 +375,9 @@ package body Giflib.Internal.LZW is
       Interlace_Width : Natural := 0;
       Interlace_Height : Natural := 0) return Results.Result
    is
-      Outcome : Results.Result;
-      procedure Run (Value : in out Workspace) is
+      function Run (Value : in out Workspace) return Results.Result is
       begin
-         Outcome := Decode
+         return Decode
            (Value,
             Object,
             Blocks_Reader,
@@ -378,7 +391,6 @@ package body Giflib.Internal.LZW is
             Interlace_Height);
       end Run;
    begin
-      Workspace_Ownership.Update (Context.Owner, Run'Access);
-      return Outcome;
+      return Workspace_Results.Update (Context.Owner, Run'Access);
    end Decode;
 end Giflib.Internal.LZW;
