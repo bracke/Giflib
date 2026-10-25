@@ -1,7 +1,6 @@
 with Giflib.Internal.Resource_Cleanup;
 
 package body Giflib.Internal.Quantization_Storage is
-   use type Cleanup.Cleanup_Status;
    function Ensure_Histogram
      (Object : in out Resources;
       Fault : in out Ownership.Fault_State;
@@ -40,12 +39,11 @@ package body Giflib.Internal.Quantization_Storage is
      (Object.Cleanup_State = Cleanup.Cleanup_Complete
       and then Is_Released (Object)
       and then Allocated_Bytes (Object) = 0);
-   function Last_Cleanup (Object : Resources) return Cleanup.Cleanup_Outcome is
-     (Status => Object.Cleanup_State);
 
-   procedure Release (Object : in out Resources) is
-      Status : Resource_Cleanup.Guard
-        (Object.Allocation_Budget'Access, Object.Cleanup_State'Access);
+   function Release
+     (Object : in out Resources) return Cleanup.Cleanup_Outcome
+   is
+      Outcome : Cleanup.Cleanup_Outcome;
       function Release_Histogram return Cleanup.Cleanup_Outcome is
       begin
          return Histogram_Ownership.Release
@@ -68,13 +66,22 @@ package body Giflib.Internal.Quantization_Storage is
       procedure Try_Error_Buffer is new Resource_Cleanup.Attempt
         (Release_Error_Buffer);
    begin
-      Try_Histogram (Status);
-      Try_Nearest_Cache (Status);
-      Try_Error_Buffer (Status);
+      declare
+         Status : Resource_Cleanup.Guard
+           (Object.Allocation_Budget'Access, Object.Cleanup_State'Access);
+      begin
+         Try_Histogram (Status);
+         Try_Nearest_Cache (Status);
+         Try_Error_Buffer (Status);
+         Outcome := Resource_Cleanup.Current_Outcome (Status);
+      end;
+      return Outcome;
    end Release;
 
    overriding procedure Finalize (Object : in out Resources) is
+      Outcome : constant Cleanup.Cleanup_Outcome := Release (Object);
+      pragma Unreferenced (Outcome);
    begin
-      Release (Object);
+      null;
    end Finalize;
 end Giflib.Internal.Quantization_Storage;

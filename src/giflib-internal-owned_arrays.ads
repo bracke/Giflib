@@ -9,6 +9,7 @@ generic
    Default_Element : Element_Type;
 package Giflib.Internal.Owned_Arrays is
    pragma Preelaborate;
+   pragma Unevaluated_Use_Of_Old (Allow);
    pragma Compile_Time_Error
      (Index_Type'Pos (Index_Type'First) < Integer'Pos (Integer'First)
       or else Index_Type'Pos (Index_Type'Last) > Integer'Pos (Integer'Last),
@@ -41,17 +42,24 @@ package Giflib.Internal.Owned_Arrays is
    --  elements. Every other capacity slot is initialized to Default_Element.
    --  Allocation and budget failure leave Object unchanged.
 
+   function Is_Allocated (Object : Handle) return Boolean;
+   function Is_Borrowed (Object : Handle) return Boolean;
    function Release
      (Object : in out Handle;
       Budget : aliased in out Ownership.Byte_Budget)
-      return Cleanup.Cleanup_Outcome;
+      return Cleanup.Cleanup_Outcome
+     with Post =>
+       (if Release'Result.Status = Cleanup.Cleanup_Complete
+          or else Release'Result.Status = Cleanup.Cleanup_Accounting_Failed
+        then not Is_Allocated (Object)
+        elsif Release'Result.Status = Cleanup.Cleanup_Borrow_Conflict
+          or else Release'Result.Status = Cleanup.Cleanup_Owner_Mismatch
+        then Is_Allocated (Object) = Is_Allocated (Object)'Old);
    --  A foreign Budget reports Cleanup_Owner_Mismatch without changing Object,
    --  and an active borrow reports Cleanup_Borrow_Conflict. A same-ledger
    --  bookkeeping failure still frees and clears Object and is recorded by the
    --  ledger.
 
-   function Is_Allocated (Object : Handle) return Boolean;
-   function Is_Borrowed (Object : Handle) return Boolean;
    function Matches
      (Object : Handle;
       Budget : aliased Ownership.Byte_Budget) return Boolean;

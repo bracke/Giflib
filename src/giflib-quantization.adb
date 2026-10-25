@@ -21,23 +21,10 @@ package body Giflib.Quantization is
      (Storage.Cleanup_Succeeded (Context.Resources));
 
    function Release (Context : in out Workspace) return Cleanup_Status is
-      Outcome : Internal.Cleanup.Cleanup_Outcome;
+      Outcome : constant Internal.Cleanup.Cleanup_Outcome :=
+        Storage.Release (Context.Resources);
    begin
-      Storage.Release (Context.Resources);
-      Outcome := Storage.Last_Cleanup (Context.Resources);
-      return
-        (case Outcome.Status is
-            when Internal.Cleanup.Cleanup_Complete => Cleanup_Complete,
-            when Internal.Cleanup.Cleanup_Borrow_Conflict =>
-              Cleanup_Borrow_Conflict,
-            when Internal.Cleanup.Cleanup_Owner_Mismatch =>
-              Cleanup_Owner_Mismatch,
-            when Internal.Cleanup.Cleanup_Preflight_Refused =>
-              Cleanup_Preflight_Refused,
-            when Internal.Cleanup.Cleanup_Callback_Failed =>
-              Cleanup_Callback_Failed,
-            when Internal.Cleanup.Cleanup_Accounting_Failed =>
-              Cleanup_Accounting_Failed);
+      return Outcome.Status;
    end Release;
 
    procedure Finalize (Context : in out Workspace) is

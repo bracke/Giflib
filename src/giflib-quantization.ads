@@ -56,13 +56,18 @@ package Giflib.Quantization is
    end record;
 
    type Workspace is limited private;
-   type Cleanup_Status is
-     (Cleanup_Complete,
-      Cleanup_Borrow_Conflict,
-      Cleanup_Owner_Mismatch,
-      Cleanup_Preflight_Refused,
-      Cleanup_Callback_Failed,
-      Cleanup_Accounting_Failed);
+   subtype Cleanup_Status is Giflib.Cleanup_Status;
+   Cleanup_Complete : constant Cleanup_Status := Giflib.Cleanup_Complete;
+   Cleanup_Borrow_Conflict : constant Cleanup_Status :=
+     Giflib.Cleanup_Borrow_Conflict;
+   Cleanup_Owner_Mismatch : constant Cleanup_Status :=
+     Giflib.Cleanup_Owner_Mismatch;
+   Cleanup_Preflight_Refused : constant Cleanup_Status :=
+     Giflib.Cleanup_Preflight_Refused;
+   Cleanup_Callback_Failed : constant Cleanup_Status :=
+     Giflib.Cleanup_Callback_Failed;
+   Cleanup_Accounting_Failed : constant Cleanup_Status :=
+     Giflib.Cleanup_Accounting_Failed;
 
    --  Source and Indexed_Pixels remain caller-owned. Indexed_Pixels must contain
    --  exactly Width * Height bytes. Alpha <= Alpha_Threshold becomes transparent
@@ -85,7 +90,10 @@ package Giflib.Quantization is
 
    function Allocated_Bytes (Context : Workspace) return Byte_Count;
    function Cleanup_Succeeded (Context : Workspace) return Boolean;
-   function Release (Context : in out Workspace) return Cleanup_Status;
+   function Release (Context : in out Workspace) return Cleanup_Status
+     with Post =>
+       (if Release'Result = Cleanup_Complete
+        then Allocated_Bytes (Context) = 0);
    procedure Finalize (Context : in out Workspace);
 
 private

@@ -22,7 +22,6 @@ package body Giflib.Testing.Test_Ownership_Failures is
    use type Giflib.Errors.Error_Code;
    use type Giflib.Internal.Ownership_Arithmetic.Injection_State;
    use type Giflib.Internal.Ownership.Allocation_Status;
-   use type Giflib.Internal.Cleanup.Cleanup_Status;
 
    type Test_Array is array (Natural range <>) of Integer;
    package Test_Array_Ownership is new Giflib.Internal.Owned_Arrays

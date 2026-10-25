@@ -6,6 +6,7 @@ generic
    type Element_Type is limited private;
 package Giflib.Internal.Owned_Objects is
    pragma Preelaborate;
+   pragma Unevaluated_Use_Of_Old (Allow);
 
    type Handle is limited private;
    --  A successful Ensure binds the handle to Budget until Release.  The
@@ -17,17 +18,24 @@ package Giflib.Internal.Owned_Objects is
       Fault : in out Ownership.Fault_State;
       Maximum : Byte_Count) return Ownership.Allocation_Outcome;
 
+   function Is_Allocated (Object : Handle) return Boolean;
+   function Is_Borrowed (Object : Handle) return Boolean;
    function Release
      (Object : in out Handle;
       Budget : aliased in out Ownership.Byte_Budget)
-      return Cleanup.Cleanup_Outcome;
+      return Cleanup.Cleanup_Outcome
+     with Post =>
+       (if Release'Result.Status = Cleanup.Cleanup_Complete
+          or else Release'Result.Status = Cleanup.Cleanup_Accounting_Failed
+        then not Is_Allocated (Object)
+        elsif Release'Result.Status = Cleanup.Cleanup_Borrow_Conflict
+          or else Release'Result.Status = Cleanup.Cleanup_Owner_Mismatch
+        then Is_Allocated (Object) = Is_Allocated (Object)'Old);
    --  A foreign Budget reports Cleanup_Owner_Mismatch without changing Object,
    --  and an active borrow reports Cleanup_Borrow_Conflict. A same-ledger
    --  bookkeeping failure still frees and clears Object and is recorded by the
    --  ledger.
 
-   function Is_Allocated (Object : Handle) return Boolean;
-   function Is_Borrowed (Object : Handle) return Boolean;
    function Allocation_Bytes return Byte_Count;
    procedure Query
      (Object : in out Handle;

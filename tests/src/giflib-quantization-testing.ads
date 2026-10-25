@@ -6,4 +6,5 @@ package Giflib.Quantization.Testing is
    procedure Disable_Failure_Injection (Context : in out Workspace);
 
    procedure Corrupt_Allocation_Budget (Context : in out Workspace);
+   procedure Repair_Allocation_Budget (Context : in out Workspace);
 end Giflib.Quantization.Testing;

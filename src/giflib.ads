@@ -26,6 +26,14 @@ package Giflib is
    type GIF_Version is (GIF87a, GIF89a);
    type Pixel_Format is (Indexed_8, RGB_24, BGR_24, RGBA_32, BGRA_32);
 
+   type Cleanup_Status is
+     (Cleanup_Complete,
+      Cleanup_Borrow_Conflict,
+      Cleanup_Owner_Mismatch,
+      Cleanup_Preflight_Refused,
+      Cleanup_Callback_Failed,
+      Cleanup_Accounting_Failed);
+
    type Block_Kind is
      (No_Block,
       Header_Block,

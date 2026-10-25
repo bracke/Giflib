@@ -1,7 +1,6 @@
 with Giflib.Internal.Resource_Cleanup;
 
 package body Giflib.Internal.Encoder_Storage is
-   use type Cleanup.Cleanup_Status;
    function Ensure_Truecolor_Pixels
      (Object : in out Resources;
       Fault : in out Ownership.Fault_State;
@@ -52,21 +51,7 @@ package body Giflib.Internal.Encoder_Storage is
          Status : constant Quantization.Cleanup_Status :=
            Quantization.Release (Object.Quantizer_Data);
       begin
-         return
-           (Status =>
-              (case Status is
-                  when Quantization.Cleanup_Complete =>
-                    Cleanup.Cleanup_Complete,
-                  when Quantization.Cleanup_Borrow_Conflict =>
-                    Cleanup.Cleanup_Borrow_Conflict,
-                  when Quantization.Cleanup_Owner_Mismatch =>
-                    Cleanup.Cleanup_Owner_Mismatch,
-                  when Quantization.Cleanup_Preflight_Refused =>
-                    Cleanup.Cleanup_Preflight_Refused,
-                  when Quantization.Cleanup_Callback_Failed =>
-                    Cleanup.Cleanup_Callback_Failed,
-                  when Quantization.Cleanup_Accounting_Failed =>
-                    Cleanup.Cleanup_Accounting_Failed));
+         return (Status => Status);
       end Release_Quantizer;
       procedure Try_Buffer is new Resource_Cleanup.Attempt (Release_Buffer);
       procedure Try_LZW is new Resource_Cleanup.Attempt (Release_LZW);

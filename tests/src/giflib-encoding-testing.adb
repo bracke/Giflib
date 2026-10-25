@@ -1,5 +1,4 @@
 with Giflib.Internal.Ownership.Testing;
-with Giflib.Internal.Cleanup;
 with Giflib.Internal.Encoder_Storage.Testing;
 with Giflib.Internal.Budget_Arithmetic;
 
@@ -79,23 +78,5 @@ package body Giflib.Encoding.Testing is
 
    function Last_Cleanup
      (Object : Encoder) return Quantization.Cleanup_Status
-   is
-      Status : constant Internal.Cleanup.Cleanup_Status :=
-        Internal.Encoder_Storage.Testing.Last_Cleanup (Object.Resources);
-   begin
-      return
-        (case Status is
-            when Internal.Cleanup.Cleanup_Complete =>
-              Quantization.Cleanup_Complete,
-            when Internal.Cleanup.Cleanup_Borrow_Conflict =>
-              Quantization.Cleanup_Borrow_Conflict,
-            when Internal.Cleanup.Cleanup_Owner_Mismatch =>
-              Quantization.Cleanup_Owner_Mismatch,
-            when Internal.Cleanup.Cleanup_Preflight_Refused =>
-              Quantization.Cleanup_Preflight_Refused,
-            when Internal.Cleanup.Cleanup_Callback_Failed =>
-              Quantization.Cleanup_Callback_Failed,
-            when Internal.Cleanup.Cleanup_Accounting_Failed =>
-              Quantization.Cleanup_Accounting_Failed);
-   end Last_Cleanup;
+   is (Internal.Encoder_Storage.Testing.Last_Cleanup (Object.Resources));
 end Giflib.Encoding.Testing;

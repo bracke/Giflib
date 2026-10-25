@@ -12,7 +12,6 @@ package body Giflib.Testing.Test_Encoder_Allocation is
    use AUnit.Assertions;
    use type Giflib.Encoding.Encoder_State;
    use type Giflib.Errors.Error_Code;
-   use type Giflib.Quantization.Cleanup_Status;
 
    procedure Require_Allocation_Failure
      (Outcome : Giflib.Results.Result;

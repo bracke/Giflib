@@ -14,6 +14,8 @@ package Giflib.Internal.Resource_Cleanup is
       with function Release_Operation return Cleanup.Cleanup_Outcome;
    procedure Attempt (Object : in out Guard);
 
+   function Current_Outcome (Object : Guard) return Cleanup.Cleanup_Outcome;
+
    overriding procedure Finalize (Object : in out Guard);
 
 private

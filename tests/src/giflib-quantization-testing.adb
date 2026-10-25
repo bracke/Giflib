@@ -21,4 +21,10 @@ package body Giflib.Quantization.Testing is
       Internal.Quantization_Storage.Testing.Corrupt_Budget
         (Context.Resources);
    end Corrupt_Allocation_Budget;
+
+   procedure Repair_Allocation_Budget (Context : in out Workspace) is
+   begin
+      Internal.Quantization_Storage.Testing.Repair_Budget
+        (Context.Resources);
+   end Repair_Allocation_Budget;
 end Giflib.Quantization.Testing;

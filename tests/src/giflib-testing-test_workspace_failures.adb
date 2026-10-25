@@ -1,5 +1,6 @@
 with AUnit.Assertions;
 with Giflib.Errors;
+with Giflib.Internal.Cleanup;
 with Giflib.Internal.Ownership;
 with Giflib.Internal.Quantization_Storage;
 with Giflib.Internal.Quantization_Storage.Cache_Operations;

@@ -231,15 +231,19 @@ A palette is a bounded count and array of at most 256 RGB entries; tables writte
   cleanup protocol is used end-to-end by resource aggregators and distinguishes
   borrow conflicts, owner mismatch, preflight refusal, callback failure, and
   accounting failure instead of reducing nested failures to Boolean values.
-  Reusable quantization workspaces expose that structured release outcome while
-  retaining a Boolean aggregate-success observer for convenience.
+  Reusable quantization workspaces expose the current call's structured release
+  outcome while retaining the first cleanup failure in a Boolean
+  aggregate-success observer for later diagnostics. Cleanup status is one
+  shared public type; package-specific APIs may expose compatibility subtypes
+  but do not define or translate competing status enumerations.
   The shared owned-array layer
   provides preserve-on-growth storage for these indexes and default-initializes every newly allocated capacity slot;
   callers never observe an uninitialized scalar or access value. Each retained
   node tracks its stored payload length itself;
   `Finish` reconciles observational metadata to that owned length, and copy
   operations validate against the owned length rather than trusting a caller
-  supplied value.
+  supplied value. Every observer rejects a completed node whose advertised
+  payload length or sub-block count differs from its owned span.
 - Owned collection wrappers preserve both backing storage and logical contents
   when an operation is attempted through a foreign allocation ledger. Resource
   containers keep handles, payloads, and their ledgers paired behind cohesive

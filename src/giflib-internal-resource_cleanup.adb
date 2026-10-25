@@ -1,5 +1,4 @@
 package body Giflib.Internal.Resource_Cleanup is
-   use type Cleanup.Cleanup_Status;
 
    procedure Attempt (Object : in out Guard) is
       Outcome : Cleanup.Cleanup_Outcome;
@@ -17,16 +16,25 @@ package body Giflib.Internal.Resource_Cleanup is
          end if;
    end Attempt;
 
+   function Current_Outcome (Object : Guard) return Cleanup.Cleanup_Outcome is
+     (if Object.Status /= Cleanup.Cleanup_Complete
+      then (Status => Object.Status)
+      elsif not Ownership.Healthy (Object.Budget.all)
+        or else Ownership.Used (Object.Budget.all) /= 0
+      then (Status => Cleanup.Cleanup_Accounting_Failed)
+      else Cleanup.Success);
+
    overriding procedure Finalize (Object : in out Guard) is
    begin
       if Object.Sticky_Status.all = Cleanup.Cleanup_Complete then
-         if Object.Status /= Cleanup.Cleanup_Complete then
-            Object.Sticky_Status.all := Object.Status;
-         elsif not Ownership.Healthy (Object.Budget.all)
-           or else Ownership.Used (Object.Budget.all) /= 0
-         then
-            Object.Sticky_Status.all := Cleanup.Cleanup_Accounting_Failed;
-         end if;
+         declare
+            Outcome : constant Cleanup.Cleanup_Outcome :=
+              Current_Outcome (Object);
+         begin
+            if not Cleanup.Succeeded (Outcome) then
+               Object.Sticky_Status.all := Outcome.Status;
+            end if;
+         end;
       end if;
    end Finalize;
 end Giflib.Internal.Resource_Cleanup;

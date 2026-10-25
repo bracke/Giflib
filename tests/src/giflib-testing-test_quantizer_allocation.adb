@@ -9,7 +9,6 @@ with Giflib.Streams;
 package body Giflib.Testing.Test_Quantizer_Allocation is
    use AUnit.Assertions;
    use type Giflib.Errors.Error_Code;
-   use type Giflib.Quantization.Cleanup_Status;
 
    procedure Require_Allocation_Failure
      (Outcome : Giflib.Results.Result;

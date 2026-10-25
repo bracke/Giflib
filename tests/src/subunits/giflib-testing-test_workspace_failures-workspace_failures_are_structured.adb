@@ -11,6 +11,7 @@ is
    Object : Storage.Resources;
    Fault : Giflib.Internal.Ownership.Fault_State;
    Outcome : Giflib.Internal.Ownership.Allocation_Outcome;
+   Cleanup_Outcome : Giflib.Internal.Cleanup.Cleanup_Outcome;
    Missing_Work : Giflib.Internal.Work_Budgets.Meter (100_000);
    Probe_Work : Giflib.Internal.Work_Budgets.Meter (0);
    Cache_Work : Giflib.Internal.Work_Budgets.Meter (0);
@@ -99,9 +100,10 @@ begin
      (Budgeted = Outcomes.Budgeted_Work_Limit
       and then Giflib.Internal.Work_Budgets.Failed (Dither_Work),
       "dither work exhaustion was not recorded structurally");
-   Storage.Release (Object);
+   Cleanup_Outcome := Storage.Release (Object);
    Assert
-     (Storage.Is_Released (Object)
+     (Giflib.Internal.Cleanup.Succeeded (Cleanup_Outcome)
+      and then Storage.Is_Released (Object)
       and then Storage.Cleanup_Succeeded (Object),
       "workspace status test cleanup failed");
 end Workspace_Failures_Are_Structured;

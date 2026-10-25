@@ -12,6 +12,7 @@ generic
    Initial_Capacity : Positive := 16;
 package Giflib.Internal.Owned_Vectors is
    pragma Preelaborate;
+   pragma Unevaluated_Use_Of_Old (Allow);
 
    type Handle is limited private;
 
@@ -47,7 +48,15 @@ package Giflib.Internal.Owned_Vectors is
    function Release
      (Object : in out Handle;
       Budget : aliased in out Ownership.Byte_Budget)
-      return Cleanup.Cleanup_Outcome;
+      return Cleanup.Cleanup_Outcome
+     with Post =>
+       (if Release'Result.Status = Cleanup.Cleanup_Complete
+          or else Release'Result.Status = Cleanup.Cleanup_Accounting_Failed
+        then not Is_Allocated (Object) and then Length (Object) = 0
+        elsif Release'Result.Status = Cleanup.Cleanup_Borrow_Conflict
+          or else Release'Result.Status = Cleanup.Cleanup_Owner_Mismatch
+        then Is_Allocated (Object) = Is_Allocated (Object)'Old
+          and then Length (Object) = Length (Object)'Old);
 
    function Element
      (Object : Handle;
