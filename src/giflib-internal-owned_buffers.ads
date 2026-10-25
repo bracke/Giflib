@@ -27,16 +27,27 @@ package Giflib.Internal.Owned_Buffers is
    --  retried with the owning ledger.
 
    function Is_Allocated (Buffer : Handle) return Boolean;
+   function Is_Borrowed (Buffer : Handle) return Boolean;
    function Length (Buffer : Handle) return Byte_Count;
    procedure Query
-     (Buffer : Handle;
+     (Buffer : in out Handle;
       Process : not null access procedure (Value : Streams.Byte_Array))
-     with Pre => Is_Allocated (Buffer);
+     with Pre => Is_Allocated (Buffer) and then not Is_Borrowed (Buffer);
    procedure Update
      (Buffer : in out Handle;
       Process : not null access procedure
         (Value : in out Streams.Byte_Array))
-     with Pre => Is_Allocated (Buffer);
+     with Pre => Is_Allocated (Buffer) and then not Is_Borrowed (Buffer);
+   procedure Query_Update
+     (Source : in out Handle;
+      Target : in out Handle;
+      Process : not null access procedure
+        (Source_Value : Streams.Byte_Array;
+         Target_Value : in out Streams.Byte_Array))
+     with Pre => Is_Allocated (Source)
+                 and then Is_Allocated (Target)
+                 and then not Is_Borrowed (Source)
+                 and then not Is_Borrowed (Target);
 
 private
    type Handle is limited record

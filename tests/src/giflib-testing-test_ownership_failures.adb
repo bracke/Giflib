@@ -12,6 +12,7 @@ with Giflib.Internal.Owned_Arrays;
 with Giflib.Internal.Owned_Buffers;
 with Giflib.Internal.Owned_Objects;
 with Giflib.Internal.Owned_Vectors;
+with Giflib.Streams;
 
 package body Giflib.Testing.Test_Ownership_Failures is
    use AUnit.Assertions;
@@ -42,6 +43,8 @@ package body Giflib.Testing.Test_Ownership_Failures is
      (T : in out AUnit.Test_Cases.Test_Case'Class);
    procedure Owned_Vector_Ownership_Is_Exact
      (T : in out AUnit.Test_Cases.Test_Case'Class);
+   procedure Scoped_Borrows_Block_Reentrant_Mutation
+     (T : in out AUnit.Test_Cases.Test_Case'Class);
 
    overriding function Name (T : Test) return AUnit.Message_String is
       pragma Unreferenced (T);
@@ -70,6 +73,9 @@ package body Giflib.Testing.Test_Ownership_Failures is
       Register_Routine
         (T, Owned_Vector_Ownership_Is_Exact'Access,
          "allocation_failures.vector_ownership");
+      Register_Routine
+        (T, Scoped_Borrows_Block_Reentrant_Mutation'Access,
+         "allocation_failures.scoped_borrow");
    end Register_Tests;
 
    procedure Ownership_Transitions_Are_Exact
@@ -85,6 +91,10 @@ package body Giflib.Testing.Test_Ownership_Failures is
    is separate;
 
    procedure Owned_Vector_Ownership_Is_Exact
+     (T : in out AUnit.Test_Cases.Test_Case'Class)
+   is separate;
+
+   procedure Scoped_Borrows_Block_Reentrant_Mutation
      (T : in out AUnit.Test_Cases.Test_Case'Class)
    is separate;
 

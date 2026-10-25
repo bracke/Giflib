@@ -18,7 +18,11 @@ package body Giflib.Internal.Owned_Objects is
       Outcome : Ownership.Allocation_Outcome;
 
    begin
-      if not Ownership.Matches (Object.Owner, Budget) then
+      if Object.Borrowed then
+         return
+           (Status => Ownership.Allocation_Borrow_Error,
+            Attempted => Ownership.Used (Budget));
+      elsif not Ownership.Matches (Object.Owner, Budget) then
          return
            (Status => Ownership.Allocation_Owner_Error,
             Attempted => Ownership.Used (Budget));
@@ -49,7 +53,9 @@ package body Giflib.Internal.Owned_Objects is
    is
       Released : Boolean;
    begin
-      if not Ownership.Matches (Object.Owner, Budget) then
+      if Object.Borrowed then
+         return False;
+      elsif not Ownership.Matches (Object.Owner, Budget) then
          return False;
       end if;
       if Object.Pointer /= null then
@@ -65,17 +71,48 @@ package body Giflib.Internal.Owned_Objects is
    function Is_Allocated (Object : Handle) return Boolean is
      (Object.Pointer /= null);
 
+   function Is_Borrowed (Object : Handle) return Boolean is
+     (Object.Borrowed);
+
    procedure Query
-     (Object : Handle;
-      Process : not null access procedure (Value : Element_Type)) is
+     (Object : in out Handle;
+      Process : not null access procedure (Value : Element_Type))
+   is
+      Acquired : Boolean := False;
    begin
+      if Object.Borrowed then
+         raise Program_Error with "owned object is already borrowed";
+      end if;
+      Object.Borrowed := True;
+      Acquired := True;
       Process (Object.Pointer.all);
+      Object.Borrowed := False;
+   exception
+      when others =>
+         if Acquired then
+            Object.Borrowed := False;
+         end if;
+         raise;
    end Query;
 
    procedure Update
      (Object : in out Handle;
-      Process : not null access procedure (Value : in out Element_Type)) is
+      Process : not null access procedure (Value : in out Element_Type))
+   is
+      Acquired : Boolean := False;
    begin
+      if Object.Borrowed then
+         raise Program_Error with "owned object is already borrowed";
+      end if;
+      Object.Borrowed := True;
+      Acquired := True;
       Process (Object.Pointer.all);
+      Object.Borrowed := False;
+   exception
+      when others =>
+         if Acquired then
+            Object.Borrowed := False;
+         end if;
+         raise;
    end Update;
 end Giflib.Internal.Owned_Objects;

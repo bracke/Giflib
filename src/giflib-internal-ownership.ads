@@ -15,6 +15,7 @@ package Giflib.Internal.Ownership is
       Allocation_Limit,
       Allocation_Storage_Error,
       Allocation_Size_Error,
+      Allocation_Borrow_Error,
       Allocation_Owner_Error);
    type Allocation_Outcome is record
       Status : Allocation_Status := Allocation_Ready;

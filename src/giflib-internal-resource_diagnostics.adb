@@ -22,7 +22,8 @@ package body Giflib.Internal.Resource_Diagnostics is
       Context : Errors.Diagnostic_Context := Base;
    begin
       case Outcome.Status is
-         when Ownership.Allocation_Owner_Error =>
+         when Ownership.Allocation_Owner_Error |
+              Ownership.Allocation_Borrow_Error =>
             return Errors.Make (Errors.Internal_Invariant_Failed, Context);
          when Ownership.Allocation_Size_Error =>
             return Errors.Make (Errors.Integer_Overflow, Context);

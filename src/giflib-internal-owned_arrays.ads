@@ -47,6 +47,7 @@ package Giflib.Internal.Owned_Arrays is
    --  still frees and clears Object and is recorded by the ledger.
 
    function Is_Allocated (Object : Handle) return Boolean;
+   function Is_Borrowed (Object : Handle) return Boolean;
    function Matches
      (Object : Handle;
       Budget : aliased Ownership.Byte_Budget) return Boolean;
@@ -59,13 +60,23 @@ package Giflib.Internal.Owned_Arrays is
    function Length (Object : Handle) return Natural;
    function Allocation_Bytes (Length : Natural) return Byte_Count;
    procedure Query
-     (Object : Handle;
+     (Object : in out Handle;
       Process : not null access procedure (Value : Element_Array))
-     with Pre => Is_Allocated (Object);
+     with Pre => Is_Allocated (Object) and then not Is_Borrowed (Object);
    procedure Update
      (Object : in out Handle;
       Process : not null access procedure (Value : in out Element_Array))
-     with Pre => Is_Allocated (Object);
+     with Pre => Is_Allocated (Object) and then not Is_Borrowed (Object);
+   procedure Query_Update
+     (Source : in out Handle;
+      Target : in out Handle;
+      Process : not null access procedure
+        (Source_Value : Element_Array;
+         Target_Value : in out Element_Array))
+     with Pre => Is_Allocated (Source)
+                 and then Is_Allocated (Target)
+                 and then not Is_Borrowed (Source)
+                 and then not Is_Borrowed (Target);
    --  Scratch storage is visible only for the dynamic extent of Process.
    --  Logical collections use Owned_Vectors instead of exposing capacity.
    function Element
@@ -76,12 +87,13 @@ package Giflib.Internal.Owned_Arrays is
      (Object : in out Handle;
       Index : Index_Type;
       Value : Element_Type)
-     with Pre => Contains (Object, Index);
+     with Pre => Contains (Object, Index) and then not Is_Borrowed (Object);
 
 private
    type Element_Array_Access is access all Element_Array;
    type Handle is limited record
       Pointer : Element_Array_Access := null;
       Owner : Ownership.Budget_Owner;
+      Borrowed : Boolean := False;
    end record;
 end Giflib.Internal.Owned_Arrays;

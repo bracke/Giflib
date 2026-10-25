@@ -1,6 +1,9 @@
 with Giflib.Errors;
+with Giflib.Internal.Owned_Buffers.Result_Operations;
 
 package body Giflib.Internal.Encoder_Storage.Frame_Operations is
+   package Buffer_Results renames Owned_Buffers.Result_Operations;
+
    function Encode_LZW
      (Object : in out Resources;
       Destination : in out Streams.Destination'Class;
@@ -42,10 +45,10 @@ package body Giflib.Internal.Encoder_Storage.Frame_Operations is
       Interlace_Width : Natural := 0;
       Interlace_Height : Natural := 0) return Results.Result
    is
-      Outcome : Results.Result;
-      procedure Run (Pixels : Streams.Byte_Array) is
+      function Run
+        (Pixels : Streams.Byte_Array) return Results.Result is
       begin
-         Outcome := LZW_Encoding.Encode
+         return LZW_Encoding.Encode
            (Object.LZW_Data,
             Destination,
             Pixels (1 .. Natural (Pixel_Count)),
@@ -75,7 +78,6 @@ package body Giflib.Internal.Encoder_Storage.Frame_Operations is
          return Results.Failure
            (Errors.Make (Errors.Internal_Invariant_Failed));
       end if;
-      Owned_Buffers.Query (Object.Truecolor_Buffer, Run'Access);
-      return Outcome;
+      return Buffer_Results.Query (Object.Truecolor_Buffer, Run'Access);
    end Encode_Stored_LZW;
 end Giflib.Internal.Encoder_Storage.Frame_Operations;

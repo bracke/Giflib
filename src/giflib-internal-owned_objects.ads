@@ -23,20 +23,22 @@ package Giflib.Internal.Owned_Objects is
    --  still frees and clears Object and is recorded by the ledger.
 
    function Is_Allocated (Object : Handle) return Boolean;
+   function Is_Borrowed (Object : Handle) return Boolean;
    function Allocation_Bytes return Byte_Count;
    procedure Query
-     (Object : Handle;
+     (Object : in out Handle;
       Process : not null access procedure (Value : Element_Type))
-     with Pre => Is_Allocated (Object);
+     with Pre => Is_Allocated (Object) and then not Is_Borrowed (Object);
    procedure Update
      (Object : in out Handle;
       Process : not null access procedure (Value : in out Element_Type))
-     with Pre => Is_Allocated (Object);
+     with Pre => Is_Allocated (Object) and then not Is_Borrowed (Object);
 
 private
    type Element_Access is access all Element_Type;
    type Handle is limited record
       Pointer : Element_Access := null;
       Owner : Ownership.Budget_Owner;
+      Borrowed : Boolean := False;
    end record;
 end Giflib.Internal.Owned_Objects;

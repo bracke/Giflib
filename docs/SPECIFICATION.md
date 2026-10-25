@@ -134,6 +134,7 @@ Giflib.Internal.Ownership_Arithmetic -- proved injection state transitions
 Giflib.Internal.Owned_Arrays  -- budget-bound reusable array ownership
 Giflib.Internal.Owned_Vectors -- budget-bound logical-length collections
 Giflib.Internal.Owned_Buffers -- budget-bound reusable byte-buffer ownership
+Giflib.Internal.Owned_Buffers.Result_Operations -- result-preserving scoped buffer access
 Giflib.Internal.Owned_Objects -- budget-bound fixed-object ownership
 Giflib.Internal.Optimization_Arithmetic -- proved optimizer decisions/bounds
 Giflib.Internal.Pixel_Arithmetic -- proved row-major/component offsets
@@ -204,8 +205,12 @@ A palette is a bounded count and array of at most 256 RGB entries; tables writte
   containers keep handles, payloads, and their ledgers paired behind cohesive
   operations. Session and workspace façades do not return payload access values;
   algorithms consume owned storage only during an operation controlled by its
-  owner. Successful ensure operations establish both allocation and required
-  capacity as part of their contract.
+  owner. A scoped query or update marks its handle as borrowed for the complete
+  callback, including exceptional unwinding. Reentrant release, growth, or
+  mutation is rejected without invalidating the borrowed value. Operations
+  involving two buffers acquire both borrows before exposing either payload.
+  Successful ensure operations establish both allocation and required capacity
+  as part of their contract.
 - Initialization/reset/finalization must be idempotent where explicitly specified and must clean up all owned allocations on failures and cancellation. No dangling pointers or leakage on decoder/encoder reuse.
 - Cleanup bookkeeping is production state, not a test callback embedded in a
   resource record. Controlled finalizers must not propagate cleanup failures;

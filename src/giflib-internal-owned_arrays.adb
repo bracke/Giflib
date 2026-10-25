@@ -51,7 +51,11 @@ package body Giflib.Internal.Owned_Arrays is
       New_Charge : Byte_Count;
       Old_Charge : Byte_Count := 0;
    begin
-      if not Ownership.Matches (Object.Owner, Budget) then
+      if Object.Borrowed then
+         return
+           (Status => Ownership.Allocation_Borrow_Error,
+            Attempted => Ownership.Used (Budget));
+      elsif not Ownership.Matches (Object.Owner, Budget) then
          return
            (Status => Ownership.Allocation_Owner_Error,
             Attempted => Ownership.Used (Budget));
@@ -130,7 +134,9 @@ package body Giflib.Internal.Owned_Arrays is
    is
       Released : Boolean;
    begin
-      if not Ownership.Matches (Object.Owner, Budget) then
+      if Object.Borrowed then
+         return False;
+      elsif not Ownership.Matches (Object.Owner, Budget) then
          return False;
       end if;
       if Object.Pointer /= null then
@@ -145,6 +151,9 @@ package body Giflib.Internal.Owned_Arrays is
 
    function Is_Allocated (Object : Handle) return Boolean is
      (Object.Pointer /= null);
+
+   function Is_Borrowed (Object : Handle) return Boolean is
+     (Object.Borrowed);
 
    function Matches
      (Object : Handle;
@@ -161,18 +170,79 @@ package body Giflib.Internal.Owned_Arrays is
      (if Object.Pointer = null then 0 else Object.Pointer'Length);
 
    procedure Query
-     (Object : Handle;
-      Process : not null access procedure (Value : Element_Array)) is
+     (Object : in out Handle;
+      Process : not null access procedure (Value : Element_Array))
+   is
+      Acquired : Boolean := False;
    begin
+      if Object.Borrowed then
+         raise Program_Error with "owned array is already borrowed";
+      end if;
+      Object.Borrowed := True;
+      Acquired := True;
       Process (Object.Pointer.all);
+      Object.Borrowed := False;
+   exception
+      when others =>
+         if Acquired then
+            Object.Borrowed := False;
+         end if;
+         raise;
    end Query;
 
    procedure Update
      (Object : in out Handle;
-      Process : not null access procedure (Value : in out Element_Array)) is
+      Process : not null access procedure (Value : in out Element_Array))
+   is
+      Acquired : Boolean := False;
    begin
+      if Object.Borrowed then
+         raise Program_Error with "owned array is already borrowed";
+      end if;
+      Object.Borrowed := True;
+      Acquired := True;
       Process (Object.Pointer.all);
+      Object.Borrowed := False;
+   exception
+      when others =>
+         if Acquired then
+            Object.Borrowed := False;
+         end if;
+         raise;
    end Update;
+
+   procedure Query_Update
+     (Source : in out Handle;
+      Target : in out Handle;
+      Process : not null access procedure
+        (Source_Value : Element_Array;
+         Target_Value : in out Element_Array))
+   is
+      Source_Acquired : Boolean := False;
+      Target_Acquired : Boolean := False;
+   begin
+      if Source.Borrowed or else Target.Borrowed then
+         raise Program_Error with "owned array is already borrowed";
+      elsif Source.Pointer = Target.Pointer then
+         raise Program_Error with "owned array cannot borrow itself twice";
+      end if;
+      Source.Borrowed := True;
+      Source_Acquired := True;
+      Target.Borrowed := True;
+      Target_Acquired := True;
+      Process (Source.Pointer.all, Target.Pointer.all);
+      Target.Borrowed := False;
+      Source.Borrowed := False;
+   exception
+      when others =>
+         if Target_Acquired then
+            Target.Borrowed := False;
+         end if;
+         if Source_Acquired then
+            Source.Borrowed := False;
+         end if;
+         raise;
+   end Query_Update;
 
    function Element
      (Object : Handle;
@@ -185,6 +255,9 @@ package body Giflib.Internal.Owned_Arrays is
       Value : Element_Type)
    is
    begin
+      if Object.Borrowed then
+         raise Program_Error with "owned array is already borrowed";
+      end if;
       Object.Pointer (Index) := Value;
    end Set_Element;
 end Giflib.Internal.Owned_Arrays;

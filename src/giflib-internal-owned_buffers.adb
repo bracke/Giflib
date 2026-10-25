@@ -22,11 +22,14 @@ package body Giflib.Internal.Owned_Buffers is
    function Is_Allocated (Buffer : Handle) return Boolean is
      (Storage.Is_Allocated (Buffer.Owner));
 
+   function Is_Borrowed (Buffer : Handle) return Boolean is
+     (Storage.Is_Borrowed (Buffer.Owner));
+
    function Length (Buffer : Handle) return Byte_Count is
      (Byte_Count (Storage.Length (Buffer.Owner)));
 
    procedure Query
-     (Buffer : Handle;
+     (Buffer : in out Handle;
       Process : not null access procedure (Value : Streams.Byte_Array)) is
    begin
       Storage.Query (Buffer.Owner, Process);
@@ -39,4 +42,14 @@ package body Giflib.Internal.Owned_Buffers is
    begin
       Storage.Update (Buffer.Owner, Process);
    end Update;
+
+   procedure Query_Update
+     (Source : in out Handle;
+      Target : in out Handle;
+      Process : not null access procedure
+        (Source_Value : Streams.Byte_Array;
+         Target_Value : in out Streams.Byte_Array)) is
+   begin
+      Storage.Query_Update (Source.Owner, Target.Owner, Process);
+   end Query_Update;
 end Giflib.Internal.Owned_Buffers;
