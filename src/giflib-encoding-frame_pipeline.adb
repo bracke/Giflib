@@ -1,4 +1,5 @@
 with Giflib.Encoding.Resource_Management;
+with Giflib.Encoding.Session_Transitions;
 with Giflib.Encoding.State_Arithmetic;
 with Giflib.Internal.Container_Writer;
 with Giflib.Internal.Encoder_Storage.Frame_Operations;
@@ -106,14 +107,11 @@ package body Giflib.Encoding.Frame_Pipeline is
       Compressed : Byte_Count;
       Wire_Bytes : Byte_Count) return Results.Result is
    begin
-      Object.Bytes_Written := Object.Bytes_Written + Wire_Bytes;
-      Object.Compressed_Bytes_Written :=
-        Object.Compressed_Bytes_Written + Compressed;
       if not Results.Succeeded (Outcome) then
+         Session_Transitions.Record_Output (Object, Compressed, Wire_Bytes);
          return Fail_Frame (Object, Outcome.First_Error);
       end if;
-      State_Arithmetic.Frame_Accepted
-        (Object.Current_State, Object.Frames_Written);
+      Session_Transitions.Complete_Frame (Object, Compressed, Wire_Bytes);
       return Results.Success;
    end Complete;
 

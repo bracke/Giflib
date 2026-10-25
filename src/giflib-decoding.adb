@@ -211,25 +211,12 @@ package body Giflib.Decoding is
       then
          return Invalid_Transition (Object);
       end if;
-      Object.Options := Options;
-      Object.Constraints := Constraints;
-      Object.Header_Data := (others => <>);
-      Object.Frames_Seen := 0;
-      Object.Total_Decoded_Pixels := 0;
-      Object.Total_Compressed_Bytes := 0;
-      Object.Extensions_Seen := 0;
       Resource_Management.Release (Object);
       if not Internal.Decoder_Storage.Cleanup_Succeeded (Object.Resources) then
          Object.Diagnostic := Errors.Make (Errors.Internal_Invariant_Failed);
          State_Arithmetic.Fail (Object.Current_State);
          return Results.Failure (Object.Diagnostic);
       end if;
-      Object.Pending_Control := Frames.Default_Control;
-      Object.Has_Pending_Control := False;
-      Object.Has_Pending_Frame := False;
-      Object.Loop_Data := Animations.No_Loop;
-      Object.Stored_Warnings := 0;
-      Object.Diagnostic := Errors.Make (Errors.No_Error);
       if not Input_Position (Object).Available then
          Object.Diagnostic := Errors.Make
            (Errors.Source_Read_Failed,
@@ -238,7 +225,7 @@ package body Giflib.Decoding is
          State_Arithmetic.Fail (Object.Current_State);
          return Results.Failure (Object.Diagnostic);
       end if;
-      State_Arithmetic.Initialize (Object.Current_State);
+      Session_Transitions.Begin_Session (Object, Options, Constraints);
       return Results.Success;
    end Initialize;
 
@@ -521,15 +508,6 @@ package body Giflib.Decoding is
       then
          Object.Diagnostic := Errors.Make (Errors.Internal_Invariant_Failed);
       end if;
-      Object.Header_Data := (others => <>);
-      Object.Frames_Seen := 0;
-      Object.Total_Decoded_Pixels := 0;
-      Object.Total_Compressed_Bytes := 0;
-      Object.Extensions_Seen := 0;
-      Object.Pending_Control := Frames.Default_Control;
-      Object.Has_Pending_Control := False;
-      Object.Loop_Data := Animations.No_Loop;
-      Object.Stored_Warnings := 0;
-      State_Arithmetic.Finalize (Object.Current_State);
+      Session_Transitions.Finalize_Session (Object);
    end Finalize;
 end Giflib.Decoding;

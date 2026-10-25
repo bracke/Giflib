@@ -1,6 +1,7 @@
 with Giflib.Encoding.Extensions;
 with Giflib.Encoding.Frame_Pipeline;
 with Giflib.Encoding.Resource_Management;
+with Giflib.Encoding.Session_Transitions;
 with Giflib.Internal.Diagnostics;
 with Giflib.Internal.Budget_Arithmetic;
 with Giflib.Internal.Container_Writer;
@@ -208,19 +209,7 @@ package body Giflib.Encoding is
          State_Arithmetic.Fail (Object.Current_State);
          return Results.Failure (Object.Diagnostic);
       end if;
-      Object.Options := Options;
-      Object.Constraints := Constraints;
-      Object.Screen := (others => <>);
-      Object.Global_Palette := (others => <>);
-      Object.Has_Global_Palette := False;
-      Object.Loop_Data := Animations.No_Loop;
-      Object.Header_Written := False;
-      Object.Frames_Written := 0;
-      Object.Extensions_Written := 0;
-      Object.Bytes_Written := 0;
-      Object.Compressed_Bytes_Written := 0;
-      Object.Diagnostic := Errors.Make (Errors.No_Error);
-      State_Arithmetic.Initialize (Object.Current_State);
+      Session_Transitions.Begin_Session (Object, Options, Constraints);
       return Results.Success;
    end Initialize;
 
@@ -469,6 +458,6 @@ package body Giflib.Encoding is
       then
          Object.Diagnostic := Errors.Make (Errors.Internal_Invariant_Failed);
       end if;
-      State_Arithmetic.Finalize (Object.Current_State);
+      Session_Transitions.Finalize_Session (Object);
    end Finalize;
 end Giflib.Encoding;

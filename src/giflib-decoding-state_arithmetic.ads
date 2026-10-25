@@ -25,10 +25,6 @@ is
    procedure Initialize (State : in out Decoder_State)
      with Pre => Can_Initialize (State),
           Post => State = Initialized;
-   procedure Header_Parsed
-     (State : in out Decoder_State)
-     with Pre => State = Initialized,
-          Post => State = Header_Ready;
    procedure Frame_Discovered (State : in out Decoder_State)
      with Pre => State = Header_Ready,
           Post => State = Decoding_Frame;
@@ -40,18 +36,6 @@ is
    procedure Begin_Frame (State : in out Decoder_State)
      with Pre => Can_Process_Frame (State),
           Post => State = Decoding_Frame;
-   procedure Complete_Frame
-     (State : in out Decoder_State;
-      Has_Pending_Control : out Boolean;
-      Has_Pending_Frame : in out Boolean;
-      Frames_Seen : in out Frame_Ordinal)
-     with Pre => State = Decoding_Frame
-                 and then Has_Pending_Frame
-                 and then Frames_Seen < Frame_Ordinal'Last,
-          Post => State = Header_Ready
-                  and then not Has_Pending_Frame
-                  and then not Has_Pending_Control
-                  and then Frames_Seen = Frames_Seen'Old + 1;
    procedure Complete_Stream (State : in out Decoder_State)
      with Pre => State = Header_Ready,
           Post => State = Completed;
