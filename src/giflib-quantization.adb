@@ -1,4 +1,5 @@
 with Giflib.Errors;
+with Giflib.Internal.Cleanup;
 with Giflib.Internal.Work_Budgets;
 with Giflib.Internal.Geometry_Arithmetic;
 with Giflib.Quantization.Palette_Building;
@@ -19,9 +20,31 @@ package body Giflib.Quantization is
    function Cleanup_Succeeded (Context : Workspace) return Boolean is
      (Storage.Cleanup_Succeeded (Context.Resources));
 
-   procedure Finalize (Context : in out Workspace) is
+   function Release (Context : in out Workspace) return Cleanup_Status is
+      Outcome : Internal.Cleanup.Cleanup_Outcome;
    begin
       Storage.Release (Context.Resources);
+      Outcome := Storage.Last_Cleanup (Context.Resources);
+      return
+        (case Outcome.Status is
+            when Internal.Cleanup.Cleanup_Complete => Cleanup_Complete,
+            when Internal.Cleanup.Cleanup_Borrow_Conflict =>
+              Cleanup_Borrow_Conflict,
+            when Internal.Cleanup.Cleanup_Owner_Mismatch =>
+              Cleanup_Owner_Mismatch,
+            when Internal.Cleanup.Cleanup_Preflight_Refused =>
+              Cleanup_Preflight_Refused,
+            when Internal.Cleanup.Cleanup_Callback_Failed =>
+              Cleanup_Callback_Failed,
+            when Internal.Cleanup.Cleanup_Accounting_Failed =>
+              Cleanup_Accounting_Failed);
+   end Release;
+
+   procedure Finalize (Context : in out Workspace) is
+      Status : constant Cleanup_Status := Release (Context);
+      pragma Unreferenced (Status);
+   begin
+      null;
    end Finalize;
 
    function Validate_Request

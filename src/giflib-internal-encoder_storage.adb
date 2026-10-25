@@ -39,26 +39,34 @@ package body Giflib.Internal.Encoder_Storage is
       Status : Resource_Cleanup.Guard
         (Object.Allocation_Budget'Access, Object.Cleanup_State'Access);
       function Release_Buffer return Cleanup.Cleanup_Outcome is
-         Released : constant Boolean := Owned_Buffers.Release
-           (Object.Truecolor_Buffer, Object.Allocation_Budget);
       begin
-         return Cleanup.From_Release
-           (Released, Owned_Buffers.Is_Allocated (Object.Truecolor_Buffer));
+         return Owned_Buffers.Release
+           (Object.Truecolor_Buffer, Object.Allocation_Budget);
       end Release_Buffer;
       function Release_LZW return Cleanup.Cleanup_Outcome is
-         Released : constant Boolean := LZW_Encoding.Release
-           (Object.LZW_Data, Object.Allocation_Budget);
       begin
-         return Cleanup.From_Release
-           (Released, LZW_Encoding.Is_Allocated (Object.LZW_Data));
+         return LZW_Encoding.Release
+           (Object.LZW_Data, Object.Allocation_Budget);
       end Release_LZW;
       function Release_Quantizer return Cleanup.Cleanup_Outcome is
+         Status : constant Quantization.Cleanup_Status :=
+           Quantization.Release (Object.Quantizer_Data);
       begin
-         Quantization.Finalize (Object.Quantizer_Data);
          return
-           (if Quantization.Cleanup_Succeeded (Object.Quantizer_Data)
-            then Cleanup.Success
-            else (Status => Cleanup.Cleanup_Accounting_Failed));
+           (Status =>
+              (case Status is
+                  when Quantization.Cleanup_Complete =>
+                    Cleanup.Cleanup_Complete,
+                  when Quantization.Cleanup_Borrow_Conflict =>
+                    Cleanup.Cleanup_Borrow_Conflict,
+                  when Quantization.Cleanup_Owner_Mismatch =>
+                    Cleanup.Cleanup_Owner_Mismatch,
+                  when Quantization.Cleanup_Preflight_Refused =>
+                    Cleanup.Cleanup_Preflight_Refused,
+                  when Quantization.Cleanup_Callback_Failed =>
+                    Cleanup.Cleanup_Callback_Failed,
+                  when Quantization.Cleanup_Accounting_Failed =>
+                    Cleanup.Cleanup_Accounting_Failed));
       end Release_Quantizer;
       procedure Try_Buffer is new Resource_Cleanup.Attempt (Release_Buffer);
       procedure Try_LZW is new Resource_Cleanup.Attempt (Release_LZW);

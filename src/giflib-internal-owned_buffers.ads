@@ -1,5 +1,6 @@
 with Giflib.Internal.Ownership;
 with Giflib.Internal.Owned_Arrays;
+with Giflib.Internal.Cleanup;
 with Giflib.Streams;
 
 package Giflib.Internal.Owned_Buffers is
@@ -22,9 +23,9 @@ package Giflib.Internal.Owned_Buffers is
 
    function Release
      (Buffer : in out Handle;
-      Budget : aliased in out Ownership.Byte_Budget) return Boolean;
-   --  A foreign Budget returns False without changing Buffer. Cleanup can be
-   --  retried with the owning ledger.
+      Budget : aliased in out Ownership.Byte_Budget)
+      return Cleanup.Cleanup_Outcome;
+   --  Cleanup reports borrow, ownership and accounting failures distinctly.
 
    function Is_Allocated (Buffer : Handle) return Boolean;
    function Is_Borrowed (Buffer : Handle) return Boolean;

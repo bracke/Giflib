@@ -27,4 +27,7 @@ package body Giflib.Internal.Encoder_Storage.Testing is
 
    function Quantizer_Cleanup_Succeeded (Object : Resources) return Boolean is
      (Quantization.Cleanup_Succeeded (Object.Quantizer_Data));
+
+   function Last_Cleanup (Object : Resources) return Cleanup.Cleanup_Status is
+     (Object.Cleanup_State);
 end Giflib.Internal.Encoder_Storage.Testing;

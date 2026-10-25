@@ -37,6 +37,7 @@ begin
       and then Test_Array_Ownership.Element (Object, 3) = 0,
       "owned-array growth did not initialize unused capacity");
    Assert
-     (Test_Array_Ownership.Release (Object, Budget),
+     (Giflib.Internal.Cleanup.Succeeded
+        (Test_Array_Ownership.Release (Object, Budget)),
       "owned-array initialized-capacity cleanup failed");
 end Owned_Array_Growth_Is_Transactional;

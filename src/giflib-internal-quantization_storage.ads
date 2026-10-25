@@ -41,6 +41,7 @@ package Giflib.Internal.Quantization_Storage is
    function Allocated_Bytes (Object : Resources) return Byte_Count;
    function Is_Released (Object : Resources) return Boolean;
    function Cleanup_Succeeded (Object : Resources) return Boolean;
+   function Last_Cleanup (Object : Resources) return Cleanup.Cleanup_Outcome;
 
    procedure Release (Object : in out Resources);
    overriding procedure Finalize (Object : in out Resources);

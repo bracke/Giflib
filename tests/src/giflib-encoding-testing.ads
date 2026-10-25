@@ -1,3 +1,5 @@
+with Giflib.Quantization;
+
 package Giflib.Encoding.Testing is
    function Allocated_Bytes (Object : Encoder) return Byte_Count;
 
@@ -29,4 +31,6 @@ package Giflib.Encoding.Testing is
    function Resources_Released (Object : Encoder) return Boolean;
 
    function Quantizer_Cleanup_Succeeded (Object : Encoder) return Boolean;
+   function Last_Cleanup
+     (Object : Encoder) return Quantization.Cleanup_Status;
 end Giflib.Encoding.Testing;

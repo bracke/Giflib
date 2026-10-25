@@ -81,7 +81,9 @@ begin
    Assert
      (Outcome.First_Error.Code = Giflib.Errors.Internal_Invariant_Failed
       and then not Giflib.Encoding.Testing.Quantizer_Cleanup_Succeeded
-        (Cleanup_Encoder),
+        (Cleanup_Encoder)
+      and then Giflib.Encoding.Testing.Last_Cleanup (Cleanup_Encoder) =
+        Giflib.Quantization.Cleanup_Accounting_Failed,
       "quantizer cleanup failure was not propagated to the encoder");
    Giflib.Encoding.Finalize (Cleanup_Encoder);
 

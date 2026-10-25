@@ -1,5 +1,6 @@
 with Giflib.Internal.Ownership;
 with Giflib.Internal.Borrow_Guards;
+with Giflib.Internal.Cleanup;
 
 generic
    type Index_Type is range <>;
@@ -42,10 +43,12 @@ package Giflib.Internal.Owned_Arrays is
 
    function Release
      (Object : in out Handle;
-      Budget : aliased in out Ownership.Byte_Budget) return Boolean;
-   --  A foreign Budget returns False without changing Object, so cleanup can
-   --  be retried with the owning ledger. A same-ledger bookkeeping failure
-   --  still frees and clears Object and is recorded by the ledger.
+      Budget : aliased in out Ownership.Byte_Budget)
+      return Cleanup.Cleanup_Outcome;
+   --  A foreign Budget reports Cleanup_Owner_Mismatch without changing Object,
+   --  and an active borrow reports Cleanup_Borrow_Conflict. A same-ledger
+   --  bookkeeping failure still frees and clears Object and is recorded by the
+   --  ledger.
 
    function Is_Allocated (Object : Handle) return Boolean;
    function Is_Borrowed (Object : Handle) return Boolean;

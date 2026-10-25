@@ -2,6 +2,7 @@ with AUnit.Assertions;
 with Giflib.Errors;
 with Giflib.Internal.Cleanup;
 with Giflib.Internal.Metadata_Store;
+with Giflib.Internal.Metadata_Store.Testing;
 with Giflib.Internal.Ownership;
 with Giflib.Internal.Ownership.Testing;
 with Giflib.Metadata;
@@ -41,6 +42,10 @@ package body Giflib.Testing.Test_Metadata_Ownership is
       Fault : Giflib.Internal.Ownership.Fault_State;
       Info : constant Giflib.Metadata.Extension_Info :=
         (Kind => Giflib.Metadata.Comment_Extension,
+         others => <>);
+      Mismatched_Info : constant Giflib.Metadata.Extension_Info :=
+        (Kind => Giflib.Metadata.Unknown_Extension,
+         Label => 16#77#,
          others => <>);
       Data : constant Giflib.Streams.Byte_Array := [1 => 16#41#];
       Stored_Info : Giflib.Metadata.Extension_Info;
@@ -91,6 +96,24 @@ package body Giflib.Testing.Test_Metadata_Ownership is
         (Outcome.First_Error.Code = Giflib.Errors.Internal_Invariant_Failed
          and then Giflib.Internal.Ownership.Used (Second_Budget) = 0,
          "metadata store accepted a foreign ledger");
+      Outcome := Store.Append
+        (Object,
+         Data,
+         Giflib.Byte_Count'Last,
+         Giflib.Byte_Count'Last,
+         First_Budget,
+         Fault);
+      Assert
+        (Giflib.Results.Succeeded (Outcome),
+         "metadata identity test payload setup failed");
+      Outcome := Store.Finish (Object, Mismatched_Info);
+      Assert
+        (Outcome.First_Error.Code = Giflib.Errors.Internal_Invariant_Failed,
+         "metadata finish accepted a changed extension identity");
+      Outcome := Store.Finish (Object, Info);
+      Assert
+        (Giflib.Results.Succeeded (Outcome),
+         "metadata finish did not remain retryable after identity rejection");
       Cleanup_Outcome := Store.Release (Object, Second_Budget);
       Assert
         (Cleanup_Outcome.Status =
@@ -137,6 +160,11 @@ package body Giflib.Testing.Test_Metadata_Ownership is
          and then Copied_Count = 1
          and then Copied (1) = Data (1),
          "metadata store trusted a stale caller payload length");
+      Giflib.Internal.Metadata_Store.Testing.Corrupt_First_Chunk_Span (Object);
+      Outcome := Store.Copy_Payload (Object, 1, Copied, Copied_Count);
+      Assert
+        (Outcome.First_Error.Code = Giflib.Errors.Internal_Invariant_Failed,
+         "metadata observer did not reject a corrupt chunk span");
       Giflib.Internal.Ownership.Testing.Set_Used (First_Budget, 0);
       Cleanup_Outcome := Store.Release (Object, First_Budget);
       Assert

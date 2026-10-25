@@ -46,8 +46,8 @@ package body Giflib.Internal.Owned_Vectors is
       Value : Element_Type)
    is
    begin
+      Storage.Set_Element (Object.Data, Object.Count + 1, Value);
       Object.Count := Object.Count + 1;
-      Storage.Set_Element (Object.Data, Object.Count, Value);
    end Append;
 
    procedure Replace
@@ -60,9 +60,11 @@ package body Giflib.Internal.Owned_Vectors is
 
    function Release
      (Object : in out Handle;
-      Budget : aliased in out Ownership.Byte_Budget) return Boolean
+      Budget : aliased in out Ownership.Byte_Budget)
+      return Cleanup.Cleanup_Outcome
    is
-      Released : constant Boolean := Storage.Release (Object.Data, Budget);
+      Released : constant Cleanup.Cleanup_Outcome :=
+        Storage.Release (Object.Data, Budget);
    begin
       if not Storage.Is_Allocated (Object.Data) then
          Object.Count := 0;

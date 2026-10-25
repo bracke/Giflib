@@ -56,7 +56,7 @@ package body Giflib.Internal.Owned_Element_Vectors is
    is
       Released : Cleanup.Cleanup_Outcome := Cleanup.Success;
       Step : Cleanup.Cleanup_Outcome;
-      Accounting_Succeeded : Boolean;
+      Index_Cleanup : Cleanup.Cleanup_Outcome;
       Value : Element_Access;
    begin
       if Borrow_Guards.Is_Active (Object.Borrow)
@@ -116,15 +116,18 @@ package body Giflib.Internal.Owned_Element_Vectors is
       Released := (Status => Object.Cleanup_Status);
       for Index in 1 .. Indexes.Length (Object.Entries) loop
          Value := Indexes.Element (Object.Entries, Index);
-         Accounting_Succeeded := Ownership.Release (Budget, Element_Charge);
-         if not Accounting_Succeeded and then Cleanup.Succeeded (Released) then
+         if not Ownership.Release (Budget, Element_Charge)
+           and then Cleanup.Succeeded (Released)
+         then
             Released := (Status => Cleanup.Cleanup_Accounting_Failed);
          end if;
          Free (Value);
       end loop;
-      Accounting_Succeeded := Indexes.Release (Object.Entries, Budget);
-      if not Accounting_Succeeded and then Cleanup.Succeeded (Released) then
-         Released := (Status => Cleanup.Cleanup_Accounting_Failed);
+      Index_Cleanup := Indexes.Release (Object.Entries, Budget);
+      if not Cleanup.Succeeded (Index_Cleanup)
+        and then Cleanup.Succeeded (Released)
+      then
+         Released := Index_Cleanup;
       end if;
       Object.Cleanup_Active := False;
       Object.Cleanup_Position := 0;

@@ -40,12 +40,14 @@ begin
       and then Giflib.Internal.Ownership.Used (Foreign_Budget) = 0,
       "owned vector accepted a foreign ledger through spare capacity");
    Assert
-     (not Test_Vector.Release (Vector, Foreign_Budget)
+     (not Giflib.Internal.Cleanup.Succeeded
+        (Test_Vector.Release (Vector, Foreign_Budget))
       and then Test_Vector.Length (Vector) = 3
       and then Test_Vector.Element (Vector, 3) = 13,
       "foreign-ledger vector release changed logical contents");
    Assert
-     (Test_Vector.Release (Vector, Budget)
+     (Giflib.Internal.Cleanup.Succeeded
+        (Test_Vector.Release (Vector, Budget))
       and then Test_Vector.Length (Vector) = 0,
       "owned vector cleanup did not reset logical length");
 end Owned_Vector_Ownership_Is_Exact;

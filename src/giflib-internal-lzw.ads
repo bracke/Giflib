@@ -1,5 +1,6 @@
 with Giflib.Internal.Blocks;
 with Giflib.Internal.Interlacing;
+with Giflib.Internal.Cleanup;
 with Giflib.Internal.Ownership;
 with Giflib.Results;
 with Giflib.Streams;
@@ -27,7 +28,8 @@ package Giflib.Internal.LZW is
       Maximum : Byte_Count) return Ownership.Allocation_Outcome;
    function Release
      (Object : in out Workspace_Handle;
-      Budget : aliased in out Ownership.Byte_Budget) return Boolean;
+      Budget : aliased in out Ownership.Byte_Budget)
+      return Cleanup.Cleanup_Outcome;
    function Is_Allocated (Object : Workspace_Handle) return Boolean;
    function Decode
      (Context : in out Workspace_Handle;

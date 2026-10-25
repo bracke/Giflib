@@ -56,6 +56,13 @@ package Giflib.Quantization is
    end record;
 
    type Workspace is limited private;
+   type Cleanup_Status is
+     (Cleanup_Complete,
+      Cleanup_Borrow_Conflict,
+      Cleanup_Owner_Mismatch,
+      Cleanup_Preflight_Refused,
+      Cleanup_Callback_Failed,
+      Cleanup_Accounting_Failed);
 
    --  Source and Indexed_Pixels remain caller-owned. Indexed_Pixels must contain
    --  exactly Width * Height bytes. Alpha <= Alpha_Threshold becomes transparent
@@ -78,6 +85,7 @@ package Giflib.Quantization is
 
    function Allocated_Bytes (Context : Workspace) return Byte_Count;
    function Cleanup_Succeeded (Context : Workspace) return Boolean;
+   function Release (Context : in out Workspace) return Cleanup_Status;
    procedure Finalize (Context : in out Workspace);
 
 private
@@ -93,4 +101,5 @@ private
       Output : out Quantization_Result;
       Options : Quantize_Options;
       Constraints : Limits.Limit_Set) return Results.Result;
+
 end Giflib.Quantization;

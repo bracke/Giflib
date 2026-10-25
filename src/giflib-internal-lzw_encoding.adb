@@ -19,7 +19,8 @@ package body Giflib.Internal.LZW_Encoding is
 
    function Release
      (Object : in out Workspace_Handle;
-      Budget : aliased in out Ownership.Byte_Budget) return Boolean
+      Budget : aliased in out Ownership.Byte_Budget)
+      return Cleanup.Cleanup_Outcome
    is
    begin
       return Workspace_Ownership.Release (Object.Owner, Budget);

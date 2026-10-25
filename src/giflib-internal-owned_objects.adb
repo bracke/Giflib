@@ -49,14 +49,15 @@ package body Giflib.Internal.Owned_Objects is
 
    function Release
      (Object : in out Handle;
-      Budget : aliased in out Ownership.Byte_Budget) return Boolean
+      Budget : aliased in out Ownership.Byte_Budget)
+      return Cleanup.Cleanup_Outcome
    is
       Released : Boolean;
    begin
       if Borrow_Guards.Is_Active (Object.Borrow) then
-         return False;
+         return (Status => Cleanup.Cleanup_Borrow_Conflict);
       elsif not Ownership.Matches (Object.Owner, Budget) then
-         return False;
+         return (Status => Cleanup.Cleanup_Owner_Mismatch);
       end if;
       if Object.Pointer /= null then
          Released := Ownership.Release_Owned
@@ -65,7 +66,10 @@ package body Giflib.Internal.Owned_Objects is
       else
          Released := Ownership.Release_Owned (Object.Owner, Budget, 0);
       end if;
-      return Released;
+      return
+        (if Released
+         then Cleanup.Success
+         else (Status => Cleanup.Cleanup_Accounting_Failed));
    end Release;
 
    function Is_Allocated (Object : Handle) return Boolean is

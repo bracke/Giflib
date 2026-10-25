@@ -1,6 +1,7 @@
 with AUnit.Assertions;
 
 with Giflib.Errors;
+with Giflib.Internal.Cleanup;
 with Giflib.Internal.Image_Data;
 with Giflib.Internal.LZW;
 with Giflib.Internal.Ownership;
@@ -95,7 +96,8 @@ package body Giflib.Testing.Test_Image_Data is
         (Decode_Outcome.First_Error = Skip_Outcome.First_Error,
          "decode and skip disagree on truncated image-data framing");
       Assert
-        (Giflib.Internal.LZW.Release (Context, Budget),
+        (Giflib.Internal.Cleanup.Succeeded
+           (Giflib.Internal.LZW.Release (Context, Budget)),
          "shared-prefix test leaked its LZW workspace");
    end Decode_And_Skip_Share_Prefix_Diagnostics;
 
@@ -153,7 +155,8 @@ package body Giflib.Testing.Test_Image_Data is
       Assert (Output = [0, 1], "caller-owned output is wrong");
       Assert (Pixels = 2, "decoded pixel accounting is wrong");
       Assert (Compressed = 2, "compressed byte accounting is wrong");
-      Assert (Giflib.Internal.LZW.Release (Context, Budget),
+      Assert (Giflib.Internal.Cleanup.Succeeded
+                (Giflib.Internal.LZW.Release (Context, Budget)),
               "image-data LZW workspace ledger mismatch");
    end Decodes_Into_Caller_Buffer;
 
@@ -201,7 +204,8 @@ package body Giflib.Testing.Test_Image_Data is
          Pixels, Compressed, Output);
       Assert (Outcome.First_Error.Code = Giflib.Errors.Truncated_Block,
               "truncated compressed sub-block has wrong error");
-      Assert (Giflib.Internal.LZW.Release (Context, Budget),
+      Assert (Giflib.Internal.Cleanup.Succeeded
+                (Giflib.Internal.LZW.Release (Context, Budget)),
               "malformed-image LZW workspace ledger mismatch");
    end Rejects_Palette_Index_And_Truncation;
 
@@ -241,7 +245,8 @@ package body Giflib.Testing.Test_Image_Data is
               "compressed byte budget was ignored");
       Assert (Outcome.First_Error.Context.Limit = Giflib.Compressed_Byte_Limit,
               "compressed byte failure lost context");
-      Assert (Giflib.Internal.LZW.Release (Context, Budget),
+      Assert (Giflib.Internal.Cleanup.Succeeded
+                (Giflib.Internal.LZW.Release (Context, Budget)),
               "budgeted-image LZW workspace ledger mismatch");
    end Enforces_Buffer_And_Total_Budgets;
 end Giflib.Testing.Test_Image_Data;

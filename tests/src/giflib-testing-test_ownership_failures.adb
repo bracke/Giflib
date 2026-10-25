@@ -143,6 +143,8 @@ package body Giflib.Testing.Test_Ownership_Failures is
      (T : in out AUnit.Test_Cases.Test_Case'Class);
    procedure Element_Cleanup_Outcomes_Are_Structured
      (T : in out AUnit.Test_Cases.Test_Case'Class);
+   procedure Aggregate_Cleanup_Outcomes_Are_Preserved
+     (T : in out AUnit.Test_Cases.Test_Case'Class);
 
    overriding function Name (T : Test) return AUnit.Message_String is
       pragma Unreferenced (T);
@@ -186,6 +188,9 @@ package body Giflib.Testing.Test_Ownership_Failures is
       Register_Routine
         (T, Element_Cleanup_Outcomes_Are_Structured'Access,
          "allocation_failures.element_cleanup_outcome");
+      Register_Routine
+        (T, Aggregate_Cleanup_Outcomes_Are_Preserved'Access,
+         "allocation_failures.aggregate_cleanup_outcome");
    end Register_Tests;
 
    procedure Ownership_Transitions_Are_Exact
@@ -221,6 +226,10 @@ package body Giflib.Testing.Test_Ownership_Failures is
    is separate;
 
    procedure Element_Cleanup_Outcomes_Are_Structured
+     (T : in out AUnit.Test_Cases.Test_Case'Class)
+   is separate;
+
+   procedure Aggregate_Cleanup_Outcomes_Are_Preserved
      (T : in out AUnit.Test_Cases.Test_Case'Class)
    is separate;
 
@@ -279,13 +288,15 @@ package body Giflib.Testing.Test_Ownership_Failures is
          and then Giflib.Internal.Ownership.Used (Second_Budget) = 0,
          "owned buffer accepted a foreign ledger");
       Assert
-        (not Buffers.Release (Buffer, Second_Budget)
+        (not Giflib.Internal.Cleanup.Succeeded
+           (Buffers.Release (Buffer, Second_Budget))
          and then Buffers.Is_Allocated (Buffer)
          and then Giflib.Internal.Ownership.Used (First_Budget) = 8
          and then Giflib.Internal.Ownership.Used (Second_Budget) = 0,
          "foreign-ledger cleanup changed storage or a ledger");
       Assert
-        (Buffers.Release (Buffer, First_Budget)
+        (Giflib.Internal.Cleanup.Succeeded
+           (Buffers.Release (Buffer, First_Budget))
          and then not Buffers.Is_Allocated (Buffer)
          and then Giflib.Internal.Ownership.Used (First_Budget) = 0,
          "owned buffer cleanup was not retryable with its owner");
@@ -297,7 +308,8 @@ package body Giflib.Testing.Test_Ownership_Failures is
          "owned buffer cleanup-fault setup failed");
       Giflib.Internal.Ownership.Testing.Set_Used (First_Budget, 0);
       Assert
-        (not Buffers.Release (Buffer, First_Budget)
+        (not Giflib.Internal.Cleanup.Succeeded
+           (Buffers.Release (Buffer, First_Budget))
          and then not Buffers.Is_Allocated (Buffer),
          "owned buffer retained storage after a ledger mismatch");
       Giflib.Internal.Ownership.Testing.Set_Used (First_Budget, 0);
@@ -320,14 +332,16 @@ package body Giflib.Testing.Test_Ownership_Failures is
          and then Objects.Is_Allocated (Object),
          "owned object accepted a foreign ledger");
       Assert
-        (not Objects.Release (Object, Second_Budget)
+        (not Giflib.Internal.Cleanup.Succeeded
+           (Objects.Release (Object, Second_Budget))
          and then Objects.Is_Allocated (Object)
          and then Giflib.Internal.Ownership.Used (First_Budget)
            = Objects.Allocation_Bytes
          and then Giflib.Internal.Ownership.Used (Second_Budget) = 0,
          "foreign-ledger object cleanup changed storage or a ledger");
       Assert
-        (Objects.Release (Object, First_Budget)
+        (Giflib.Internal.Cleanup.Succeeded
+           (Objects.Release (Object, First_Budget))
          and then not Objects.Is_Allocated (Object)
          and then Giflib.Internal.Ownership.Used (First_Budget) = 0,
          "owned object cleanup was not retryable with its owner");

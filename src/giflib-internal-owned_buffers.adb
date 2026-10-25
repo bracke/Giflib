@@ -13,7 +13,8 @@ package body Giflib.Internal.Owned_Buffers is
 
    function Release
      (Buffer : in out Handle;
-      Budget : aliased in out Ownership.Byte_Budget) return Boolean
+      Budget : aliased in out Ownership.Byte_Budget)
+      return Cleanup.Cleanup_Outcome
    is
    begin
       return Storage.Release (Buffer.Owner, Budget);

@@ -14,11 +14,11 @@ is
    Budget : aliased Giflib.Internal.Ownership.Byte_Budget;
    Fault : Giflib.Internal.Ownership.Fault_State;
    Outcome : Giflib.Internal.Ownership.Allocation_Outcome;
-   Release_Rejected : Boolean := False;
+   Buffer_Release : Giflib.Internal.Cleanup.Cleanup_Outcome;
    Growth_Rejected : Boolean := False;
    Nested_Borrow_Rejected : Boolean := False;
    Value_Remained_Valid : Boolean := False;
-   Object_Release_Rejected : Boolean := False;
+   Object_Release : Giflib.Internal.Cleanup.Cleanup_Outcome;
    Object_Exception_Propagated : Boolean := False;
 
    procedure Inspect (Value : Giflib.Streams.Byte_Array) is
@@ -34,7 +34,7 @@ is
          when Ada.Assertions.Assertion_Error | Program_Error =>
             Nested_Borrow_Rejected := True;
       end;
-      Release_Rejected := not Buffers.Release (Buffer, Budget);
+      Buffer_Release := Buffers.Release (Buffer, Budget);
       Outcome := Buffers.Ensure
         (Buffer, Budget, Fault, Required => 16, Maximum => 16);
       Growth_Rejected :=
@@ -44,7 +44,7 @@ is
 
    function Update_Object (Value : in out Test_Object) return Boolean is
    begin
-      Object_Release_Rejected := not Objects.Release (Object, Budget);
+      Object_Release := Objects.Release (Object, Budget);
       Value.Value := 7;
       return Value.Value = 7;
    end Update_Object;
@@ -63,13 +63,14 @@ begin
    Buffers.Query (Buffer, Inspect'Access);
    Assert
      (Nested_Borrow_Rejected
-      and then Release_Rejected
+      and then Buffer_Release.Status =
+        Giflib.Internal.Cleanup.Cleanup_Borrow_Conflict
       and then Growth_Rejected
       and then Value_Remained_Valid
       and then not Buffers.Is_Borrowed (Buffer),
       "scoped borrow allowed reentrant storage mutation");
    Assert
-     (Buffers.Release (Buffer, Budget),
+     (Giflib.Internal.Cleanup.Succeeded (Buffers.Release (Buffer, Budget)),
       "scoped borrow was not released after the callback");
 
    Outcome := Objects.Ensure (Object, Budget, Fault, Maximum => 16);
@@ -78,7 +79,8 @@ begin
       "owned-object borrow setup failed");
    Assert
      (Object_Results.Update (Object, Update_Object'Access)
-      and then Object_Release_Rejected,
+      and then Object_Release.Status =
+        Giflib.Internal.Cleanup.Cleanup_Borrow_Conflict,
       "result-returning borrow did not preserve callback status");
    begin
       Objects.Update (Object, Raise_From_Object'Access);
@@ -88,6 +90,7 @@ begin
    Assert
      (Object_Exception_Propagated
       and then not Objects.Is_Borrowed (Object)
-      and then Objects.Release (Object, Budget),
+      and then Giflib.Internal.Cleanup.Succeeded
+        (Objects.Release (Object, Budget)),
       "owned-object borrow was not released during exceptional unwind");
 end Scoped_Borrows_Block_Reentrant_Mutation;

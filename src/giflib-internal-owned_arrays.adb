@@ -100,13 +100,20 @@ package body Giflib.Internal.Owned_Arrays is
             return Outcome;
          end if;
          if Preserve > 0 then
-            for Offset in 0 .. Preserve - 1 loop
-               New_Pointer
-                 (Index_Type'Val (Index_Type'Pos (First) + Offset)) :=
-                   Object.Pointer
-                     (Index_Type'Val
-                        (Index_Type'Pos (Object.Pointer'First) + Offset));
-            end loop;
+            begin
+               for Offset in 0 .. Preserve - 1 loop
+                  New_Pointer
+                    (Index_Type'Val (Index_Type'Pos (First) + Offset)) :=
+                      Object.Pointer
+                        (Index_Type'Val
+                           (Index_Type'Pos (Object.Pointer'First) + Offset));
+               end loop;
+            exception
+               when others =>
+                  Ownership.Rollback (Budget, New_Charge);
+                  Free (New_Pointer);
+                  raise;
+            end;
          end if;
          if Object.Pointer /= null then
             Old_Charge := Allocation_Bytes (Object.Pointer'Length);
@@ -130,14 +137,15 @@ package body Giflib.Internal.Owned_Arrays is
 
    function Release
      (Object : in out Handle;
-      Budget : aliased in out Ownership.Byte_Budget) return Boolean
+      Budget : aliased in out Ownership.Byte_Budget)
+      return Cleanup.Cleanup_Outcome
    is
       Released : Boolean;
    begin
       if Borrow_Guards.Is_Active (Object.Borrow) then
-         return False;
+         return (Status => Cleanup.Cleanup_Borrow_Conflict);
       elsif not Ownership.Matches (Object.Owner, Budget) then
-         return False;
+         return (Status => Cleanup.Cleanup_Owner_Mismatch);
       end if;
       if Object.Pointer /= null then
          Released := Ownership.Release_Owned
@@ -146,7 +154,10 @@ package body Giflib.Internal.Owned_Arrays is
       else
          Released := Ownership.Release_Owned (Object.Owner, Budget, 0);
       end if;
-      return Released;
+      return
+        (if Released
+         then Cleanup.Success
+         else (Status => Cleanup.Cleanup_Accounting_Failed));
    end Release;
 
    function Is_Allocated (Object : Handle) return Boolean is

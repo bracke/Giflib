@@ -23,13 +23,58 @@ package body Giflib.Internal.Metadata_Store is
              others => <>)));
    end Allocation_Error;
 
+   function Invalid_Store return Results.Result is
+     (Results.Failure (Errors.Make (Errors.Internal_Invariant_Failed)));
+
+   function Span_Is_Valid
+     (Object : Store;
+      Node : Extension_Node) return Boolean
+   is
+      Total : constant Natural := Payload_Chunks.Length (Object.Chunks);
+   begin
+      if Node.Chunk_Count = 0 then
+         return Node.First_Chunk = 0 and then Node.Retained_Length = 0;
+      elsif Node.First_Chunk = 0
+        or else Node.First_Chunk > Total
+        or else Node.Retained_Length = 0
+      then
+         return False;
+      end if;
+      return Node.Chunk_Count <= Total - Node.First_Chunk + 1;
+   end Span_Is_Valid;
+
+   function Load_Node
+     (Object : Store;
+      Index : Positive;
+      Node : out Extension_Node) return Results.Result
+   is
+   begin
+      if Index > Extension_Nodes.Length (Object.Entries) then
+         return Results.Failure (Errors.Make (Errors.Invalid_Index));
+      end if;
+      Node := Extension_Nodes.Element (Object.Entries, Index);
+      if not Span_Is_Valid (Object, Node) then
+         return Invalid_Store;
+      end if;
+      return Results.Success;
+   end Load_Node;
+
+   function Same_Identity
+     (Left : Metadata.Extension_Info;
+      Right : Metadata.Extension_Info) return Boolean
+   is
+     (Left.Kind = Right.Kind
+      and then Left.Offset = Right.Offset
+      and then Left.Before_Frame = Right.Before_Frame
+      and then Metadata.Label_Of (Left) = Metadata.Label_Of (Right));
+
    function Release
      (Object : in out Store;
       Budget : aliased in out Ownership.Byte_Budget)
       return Cleanup.Cleanup_Outcome
    is
-      Chunks_Released : Boolean;
-      Entries_Released : Boolean;
+      Chunks_Released : Cleanup.Cleanup_Outcome;
+      Entries_Released : Cleanup.Cleanup_Outcome;
    begin
       if not Extension_Nodes.Matches (Object.Entries, Budget)
         or else not Payload_Chunks.Matches (Object.Chunks, Budget)
@@ -45,9 +90,11 @@ package body Giflib.Internal.Metadata_Store is
          Object.Pending := (State => Idle);
       end if;
       return
-        (if Chunks_Released and then Entries_Released
-         then Cleanup.Success
-         else (Status => Cleanup.Cleanup_Accounting_Failed));
+        (if not Cleanup.Succeeded (Chunks_Released)
+         then Chunks_Released
+         elsif not Cleanup.Succeeded (Entries_Released)
+         then Entries_Released
+         else Cleanup.Success);
    end Release;
 
    function Start
@@ -115,6 +162,9 @@ package body Giflib.Internal.Metadata_Store is
          return Results.Failure (Errors.Make (Errors.Internal_Invariant_Failed));
       end if;
       Node := Extension_Nodes.Element (Object.Entries, Object.Pending.Index);
+      if not Span_Is_Valid (Object, Node) then
+         return Invalid_Store;
+      end if;
       if Data'Length > 255 then
          return Results.Failure
            (Errors.Make
@@ -173,10 +223,16 @@ package body Giflib.Internal.Metadata_Store is
       if Object.Pending.State = Idle then
          return Results.Failure (Errors.Make (Errors.Invalid_State));
       elsif Object.Pending.State = Building then
-         Node := Extension_Nodes.Element
-           (Object.Entries, Object.Pending.Index);
+         if not Results.Succeeded
+           (Load_Node (Object, Object.Pending.Index, Node))
+         then
+            return Invalid_Store;
+         elsif not Same_Identity (Node.Info, Info) then
+            return Invalid_Store;
+         end if;
          Node.Info := Info;
          Node.Info.Payload_Length := Node.Retained_Length;
+         Node.Info.Sub_Block_Count := Node.Chunk_Count;
          Extension_Nodes.Replace
            (Object.Entries, Object.Pending.Index, Node);
       end if;
@@ -199,11 +255,12 @@ package body Giflib.Internal.Metadata_Store is
       Info : out Metadata.Extension_Info) return Results.Result
    is
       Node : Extension_Node;
+      Outcome : Results.Result;
    begin
-      if Index > Extension_Nodes.Length (Object.Entries) then
-         return Results.Failure (Errors.Make (Errors.Invalid_Index));
+      Outcome := Load_Node (Object, Index, Node);
+      if not Results.Succeeded (Outcome) then
+         return Outcome;
       end if;
-      Node := Extension_Nodes.Element (Object.Entries, Index);
       if Info'Constrained and then Info.Kind /= Node.Info.Kind then
          return Results.Failure
            (Errors.Make
@@ -226,12 +283,13 @@ package body Giflib.Internal.Metadata_Store is
       Position : Natural := 0;
       Node : Extension_Node;
       Chunk : Payload_Chunk;
+      Outcome : Results.Result;
    begin
       Count := 0;
-      if Index > Extension_Nodes.Length (Object.Entries) then
-         return Results.Failure (Errors.Make (Errors.Invalid_Index));
+      Outcome := Load_Node (Object, Index, Node);
+      if not Results.Succeeded (Outcome) then
+         return Outcome;
       end if;
-      Node := Extension_Nodes.Element (Object.Entries, Index);
       if Byte_Count (Target'Length) < Node.Retained_Length then
          return Results.Failure
            (Errors.Make
@@ -243,12 +301,18 @@ package body Giflib.Internal.Metadata_Store is
          for Offset in 0 .. Node.Chunk_Count - 1 loop
             Chunk := Payload_Chunks.Element
               (Object.Chunks, Node.First_Chunk + Offset);
+            if Chunk.Length > Target'Length - Position then
+               return Invalid_Store;
+            end if;
             for I in 0 .. Chunk.Length - 1 loop
                Target (Target'First + Position) :=
                  Chunk.Data (Chunk.Data'First + I);
                Position := Position + 1;
             end loop;
          end loop;
+      end if;
+      if Byte_Count (Position) /= Node.Retained_Length then
+         return Invalid_Store;
       end if;
       Count := Byte_Count (Position);
       return Results.Success;
@@ -259,12 +323,15 @@ package body Giflib.Internal.Metadata_Store is
       Index : Positive;
       Count : out Natural) return Results.Result
    is
+      Node : Extension_Node;
+      Outcome : Results.Result;
    begin
       Count := 0;
-      if Index > Extension_Nodes.Length (Object.Entries) then
-         return Results.Failure (Errors.Make (Errors.Invalid_Index));
+      Outcome := Load_Node (Object, Index, Node);
+      if not Results.Succeeded (Outcome) then
+         return Outcome;
       end if;
-      Count := Extension_Nodes.Element (Object.Entries, Index).Chunk_Count;
+      Count := Node.Chunk_Count;
       return Results.Success;
    end Chunk_Count;
 
@@ -277,12 +344,13 @@ package body Giflib.Internal.Metadata_Store is
    is
       Node : Extension_Node;
       Chunk : Payload_Chunk;
+      Outcome : Results.Result;
    begin
       Count := 0;
-      if Index > Extension_Nodes.Length (Object.Entries) then
-         return Results.Failure (Errors.Make (Errors.Invalid_Index));
+      Outcome := Load_Node (Object, Index, Node);
+      if not Results.Succeeded (Outcome) then
+         return Outcome;
       end if;
-      Node := Extension_Nodes.Element (Object.Entries, Index);
       if Chunk_Index > Node.Chunk_Count then
          return Results.Failure (Errors.Make (Errors.Invalid_Index));
       end if;

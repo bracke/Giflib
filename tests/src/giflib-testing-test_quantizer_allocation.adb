@@ -9,12 +9,16 @@ with Giflib.Streams;
 package body Giflib.Testing.Test_Quantizer_Allocation is
    use AUnit.Assertions;
    use type Giflib.Errors.Error_Code;
+   use type Giflib.Quantization.Cleanup_Status;
 
    procedure Require_Allocation_Failure
      (Outcome : Giflib.Results.Result;
       Message : String);
 
    procedure Quantizer_Allocation_Failures
+     (T : in out AUnit.Test_Cases.Test_Case'Class)
+   is separate;
+   procedure Quantizer_Cleanup_Outcomes_Are_Preserved
      (T : in out AUnit.Test_Cases.Test_Case'Class)
    is separate;
 
@@ -30,6 +34,9 @@ package body Giflib.Testing.Test_Quantizer_Allocation is
       Register_Routine
         (T, Quantizer_Allocation_Failures'Access,
          "allocation_failures.quantizer");
+      Register_Routine
+        (T, Quantizer_Cleanup_Outcomes_Are_Preserved'Access,
+         "allocation_failures.quantizer_cleanup_outcome");
    end Register_Tests;
 
    procedure Require_Allocation_Failure

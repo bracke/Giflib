@@ -1,4 +1,5 @@
 with Giflib.Internal.Owned_Arrays;
+with Giflib.Internal.Cleanup;
 with Giflib.Internal.Ownership;
 
 generic
@@ -32,18 +33,21 @@ package Giflib.Internal.Owned_Vectors is
      (Object : in out Handle;
       Value : Element_Type)
      with Pre => Length (Object) < Capacity (Object),
-          Post => Length (Object) = Length (Object)'Old + 1;
+          Post => Length (Object) = Length (Object)'Old + 1
+                  and then Element (Object, Length (Object)) = Value;
 
    procedure Replace
      (Object : in out Handle;
       Index : Positive;
       Value : Element_Type)
      with Pre => Index <= Length (Object),
-          Post => Length (Object) = Length (Object)'Old;
+          Post => Length (Object) = Length (Object)'Old
+                  and then Element (Object, Index) = Value;
 
    function Release
      (Object : in out Handle;
-      Budget : aliased in out Ownership.Byte_Budget) return Boolean;
+      Budget : aliased in out Ownership.Byte_Budget)
+      return Cleanup.Cleanup_Outcome;
 
    function Element
      (Object : Handle;
@@ -54,5 +58,6 @@ private
    type Handle is limited record
       Data : Storage.Handle;
       Count : Natural := 0;
-   end record;
+   end record
+     with Type_Invariant => Count <= Storage.Length (Data);
 end Giflib.Internal.Owned_Vectors;

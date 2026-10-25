@@ -1,6 +1,7 @@
 with AUnit.Assertions;
 
 with Giflib.Internal.Image_Data;
+with Giflib.Internal.Cleanup;
 with Giflib.Internal.Interlacing;
 with Giflib.Internal.LZW;
 with Giflib.Internal.Ownership;
@@ -92,7 +93,8 @@ package body Giflib.Testing.Test_Interlacing is
          Pixels, Compressed, Output);
       Assert (Giflib.Results.Succeeded (Outcome), "interlaced image data failed");
       Assert (Output = [0, 1, 4, 5, 2, 3, 6, 7], "interlaced output is not row-major");
-      Assert (Giflib.Internal.LZW.Release (Context, Budget),
+      Assert (Giflib.Internal.Cleanup.Succeeded
+                (Giflib.Internal.LZW.Release (Context, Budget)),
               "interlace LZW workspace ledger mismatch");
    end Image_Decode_Writes_Row_Major;
 end Giflib.Testing.Test_Interlacing;

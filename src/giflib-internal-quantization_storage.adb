@@ -40,33 +40,26 @@ package body Giflib.Internal.Quantization_Storage is
      (Object.Cleanup_State = Cleanup.Cleanup_Complete
       and then Is_Released (Object)
       and then Allocated_Bytes (Object) = 0);
+   function Last_Cleanup (Object : Resources) return Cleanup.Cleanup_Outcome is
+     (Status => Object.Cleanup_State);
 
    procedure Release (Object : in out Resources) is
       Status : Resource_Cleanup.Guard
         (Object.Allocation_Budget'Access, Object.Cleanup_State'Access);
       function Release_Histogram return Cleanup.Cleanup_Outcome is
-         Released : constant Boolean := Histogram_Ownership.Release
-           (Object.Histogram_Data, Object.Allocation_Budget);
       begin
-         return Cleanup.From_Release
-           (Released,
-            Histogram_Ownership.Is_Allocated (Object.Histogram_Data));
+         return Histogram_Ownership.Release
+           (Object.Histogram_Data, Object.Allocation_Budget);
       end Release_Histogram;
       function Release_Nearest_Cache return Cleanup.Cleanup_Outcome is
-         Released : constant Boolean := Nearest_Cache_Ownership.Release
-           (Object.Nearest_Cache_Data, Object.Allocation_Budget);
       begin
-         return Cleanup.From_Release
-           (Released,
-            Nearest_Cache_Ownership.Is_Allocated
-              (Object.Nearest_Cache_Data));
+         return Nearest_Cache_Ownership.Release
+           (Object.Nearest_Cache_Data, Object.Allocation_Budget);
       end Release_Nearest_Cache;
       function Release_Error_Buffer return Cleanup.Cleanup_Outcome is
-         Released : constant Boolean := Error_Ownership.Release
-           (Object.Error_Data, Object.Allocation_Budget);
       begin
-         return Cleanup.From_Release
-           (Released, Error_Ownership.Is_Allocated (Object.Error_Data));
+         return Error_Ownership.Release
+           (Object.Error_Data, Object.Allocation_Budget);
       end Release_Error_Buffer;
       procedure Try_Histogram is new Resource_Cleanup.Attempt
         (Release_Histogram);

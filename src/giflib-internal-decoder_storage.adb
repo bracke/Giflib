@@ -66,33 +66,23 @@ package body Giflib.Internal.Decoder_Storage is
         (Metadata_Store.Release
            (Object.Metadata_Storage, Object.Allocation_Budget));
       function Release_Canvas return Cleanup.Cleanup_Outcome is
-         Released : constant Boolean := Owned_Buffers.Release
-           (Object.Canvas_Buffer, Object.Allocation_Budget);
       begin
-         return Cleanup.From_Release
-           (Released, Owned_Buffers.Is_Allocated (Object.Canvas_Buffer));
+         return Owned_Buffers.Release
+           (Object.Canvas_Buffer, Object.Allocation_Budget);
       end Release_Canvas;
       function Release_Snapshot return Cleanup.Cleanup_Outcome is
-         Released : constant Boolean := Owned_Buffers.Release
-           (Object.Snapshot_Buffer, Object.Allocation_Budget);
       begin
-         return Cleanup.From_Release
-           (Released, Owned_Buffers.Is_Allocated (Object.Snapshot_Buffer));
+         return Owned_Buffers.Release
+           (Object.Snapshot_Buffer, Object.Allocation_Budget);
       end Release_Snapshot;
       function Release_Frame_Scratch return Cleanup.Cleanup_Outcome is
-         Released : constant Boolean := Owned_Buffers.Release
-           (Object.Frame_Scratch_Buffer, Object.Allocation_Budget);
       begin
-         return Cleanup.From_Release
-           (Released,
-            Owned_Buffers.Is_Allocated (Object.Frame_Scratch_Buffer));
+         return Owned_Buffers.Release
+           (Object.Frame_Scratch_Buffer, Object.Allocation_Budget);
       end Release_Frame_Scratch;
       function Release_LZW return Cleanup.Cleanup_Outcome is
-         Released : constant Boolean :=
-           LZW.Release (Object.LZW_Data, Object.Allocation_Budget);
       begin
-         return Cleanup.From_Release
-           (Released, LZW.Is_Allocated (Object.LZW_Data));
+         return LZW.Release (Object.LZW_Data, Object.Allocation_Budget);
       end Release_LZW;
       procedure Try_Metadata is new Resource_Cleanup.Attempt (Release_Metadata);
       procedure Try_Canvas is new Resource_Cleanup.Attempt (Release_Canvas);
