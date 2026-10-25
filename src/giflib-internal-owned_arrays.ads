@@ -48,6 +48,9 @@ package Giflib.Internal.Owned_Arrays is
    --  still frees and clears Object and is recorded by the ledger.
 
    function Is_Allocated (Object : Handle) return Boolean;
+   function Matches
+     (Object : Handle;
+      Budget : aliased Ownership.Byte_Budget) return Boolean;
    function Contains
      (Object : Handle;
       Index : Index_Type) return Boolean;

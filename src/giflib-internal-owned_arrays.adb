@@ -146,6 +146,11 @@ package body Giflib.Internal.Owned_Arrays is
    function Is_Allocated (Object : Handle) return Boolean is
      (Object.Pointer /= null);
 
+   function Matches
+     (Object : Handle;
+      Budget : aliased Ownership.Byte_Budget) return Boolean
+   is (Ownership.Matches (Object.Owner, Budget));
+
    function Contains
      (Object : Handle;
       Index : Index_Type) return Boolean

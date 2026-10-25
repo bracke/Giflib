@@ -18,7 +18,11 @@ package body Giflib.Internal.Owned_Vectors is
       Maximum : Byte_Count) return Ownership.Allocation_Outcome
    is
    begin
-      if Object.Count < Storage.Length (Object.Data) then
+      if not Storage.Matches (Object.Data, Budget) then
+         return
+           (Status => Ownership.Allocation_Owner_Error,
+            Attempted => Ownership.Used (Budget));
+      elsif Object.Count < Storage.Length (Object.Data) then
          return
            (Status => Ownership.Allocation_Ready,
             Attempted => Ownership.Used (Budget));
@@ -52,7 +56,9 @@ package body Giflib.Internal.Owned_Vectors is
    is
       Released : constant Boolean := Storage.Release (Object.Data, Budget);
    begin
-      Object.Count := 0;
+      if not Storage.Is_Allocated (Object.Data) then
+         Object.Count := 0;
+      end if;
       return Released;
    end Release;
 
