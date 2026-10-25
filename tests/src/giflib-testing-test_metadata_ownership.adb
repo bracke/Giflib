@@ -12,7 +12,6 @@ with Giflib.Streams;
 package body Giflib.Testing.Test_Metadata_Ownership is
    use AUnit.Assertions;
    use type Giflib.Errors.Error_Code;
-   use type Giflib.Internal.Cleanup.Cleanup_Status;
 
    procedure Metadata_Store_Rejects_Foreign_Ledgers
      (T : in out AUnit.Test_Cases.Test_Case'Class);
@@ -51,6 +50,7 @@ package body Giflib.Testing.Test_Metadata_Ownership is
       Stored_Info : Giflib.Metadata.Extension_Info;
       Copied : Giflib.Streams.Byte_Array (1 .. 1);
       Copied_Count : Giflib.Byte_Count;
+      Observed_Chunks : Natural;
       Outcome : Giflib.Results.Result;
       Cleanup_Outcome : Giflib.Internal.Cleanup.Cleanup_Outcome;
    begin
@@ -160,6 +160,18 @@ package body Giflib.Testing.Test_Metadata_Ownership is
          and then Copied_Count = 1
          and then Copied (1) = Data (1),
          "metadata store trusted a stale caller payload length");
+      Giflib.Internal.Metadata_Store.Testing.Corrupt_Payload_Length (Object);
+      Outcome := Store.Info_At (Object, 1, Stored_Info);
+      Assert
+        (Outcome.First_Error.Code = Giflib.Errors.Internal_Invariant_Failed,
+         "metadata observer accepted a corrupt payload length");
+      Giflib.Internal.Metadata_Store.Testing.Repair_Descriptor (Object);
+      Giflib.Internal.Metadata_Store.Testing.Corrupt_Sub_Block_Count (Object);
+      Outcome := Store.Chunk_Count (Object, 1, Observed_Chunks);
+      Assert
+        (Outcome.First_Error.Code = Giflib.Errors.Internal_Invariant_Failed,
+         "metadata observer accepted a corrupt sub-block count");
+      Giflib.Internal.Metadata_Store.Testing.Repair_Descriptor (Object);
       Giflib.Internal.Metadata_Store.Testing.Corrupt_First_Chunk_Span (Object);
       Outcome := Store.Copy_Payload (Object, 1, Copied, Copied_Count);
       Assert

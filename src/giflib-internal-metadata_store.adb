@@ -43,6 +43,23 @@ package body Giflib.Internal.Metadata_Store is
       return Node.Chunk_Count <= Total - Node.First_Chunk + 1;
    end Span_Is_Valid;
 
+   function Node_Is_Valid
+     (Object : Store;
+      Index : Positive;
+      Node : Extension_Node) return Boolean
+   is
+      Is_Pending : constant Boolean :=
+        Object.Pending.State = Building
+        and then Object.Pending.Index = Index;
+   begin
+      return Span_Is_Valid (Object, Node)
+        and then
+          (Is_Pending
+           or else
+             (Node.Info.Payload_Length = Node.Retained_Length
+              and then Node.Info.Sub_Block_Count = Node.Chunk_Count));
+   end Node_Is_Valid;
+
    function Load_Node
      (Object : Store;
       Index : Positive;
@@ -53,7 +70,7 @@ package body Giflib.Internal.Metadata_Store is
          return Results.Failure (Errors.Make (Errors.Invalid_Index));
       end if;
       Node := Extension_Nodes.Element (Object.Entries, Index);
-      if not Span_Is_Valid (Object, Node) then
+      if not Node_Is_Valid (Object, Index, Node) then
          return Invalid_Store;
       end if;
       return Results.Success;
@@ -162,7 +179,7 @@ package body Giflib.Internal.Metadata_Store is
          return Results.Failure (Errors.Make (Errors.Internal_Invariant_Failed));
       end if;
       Node := Extension_Nodes.Element (Object.Entries, Object.Pending.Index);
-      if not Span_Is_Valid (Object, Node) then
+      if not Node_Is_Valid (Object, Object.Pending.Index, Node) then
          return Invalid_Store;
       end if;
       if Data'Length > 255 then
