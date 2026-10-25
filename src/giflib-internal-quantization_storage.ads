@@ -10,7 +10,6 @@ package Giflib.Internal.Quantization_Storage is
    use type Ownership.Allocation_Status;
 
    type Resources is new Ada.Finalization.Limited_Controlled with private;
-   Cache_Capacity : constant Positive := 4_096;
 
    function Histogram_Allocated (Object : Resources) return Boolean;
    function Nearest_Cache_Allocated (Object : Resources) return Boolean;
@@ -39,12 +38,14 @@ package Giflib.Internal.Quantization_Storage is
        (if Ensure_Errors'Result.Status = Ownership.Allocation_Ready
         then Error_Length (Object) >= Last + 1);
    function Allocated_Bytes (Object : Resources) return Byte_Count;
+   function Is_Released (Object : Resources) return Boolean;
    function Cleanup_Succeeded (Object : Resources) return Boolean;
 
    procedure Release (Object : in out Resources);
    overriding procedure Finalize (Object : in out Resources);
 
 private
+   Cache_Capacity : constant Positive := 4_096;
    type Cache_Item is record
       Used : Boolean := False;
       Key : Natural range 0 .. 16#FF_FF_FF# := 0;

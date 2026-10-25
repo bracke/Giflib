@@ -5,6 +5,7 @@ with Giflib.Images;
 with Giflib.Internal.Quantization_Arithmetic;
 with Giflib.Internal.Quantization_Buffer_Arithmetic;
 with Giflib.Internal.Quantization_Palette;
+with Giflib.Internal.Quantization_Pixels;
 with Giflib.Internal.Work_Budgets;
 with Giflib.Limits;
 with Giflib.Palettes;
@@ -27,6 +28,7 @@ package body Giflib.Testing.Test_Quantization is
    procedure Handles_BGR_Channel_Orders (T : in out AUnit.Test_Cases.Test_Case'Class);
    procedure Enforces_Quantization_Budgets (T : in out AUnit.Test_Cases.Test_Case'Class);
    procedure Color_Arithmetic_Is_Bounded (T : in out AUnit.Test_Cases.Test_Case'Class);
+   procedure Pixel_Access_Is_Checked (T : in out AUnit.Test_Cases.Test_Case'Class);
    procedure Error_Buffer_Arithmetic_Is_Bounded (T : in out AUnit.Test_Cases.Test_Case'Class);
    procedure Workspace_Reuses_Storage (T : in out AUnit.Test_Cases.Test_Case'Class);
    procedure Workspace_Respects_Dither_Mode (T : in out AUnit.Test_Cases.Test_Case'Class);
@@ -53,6 +55,8 @@ package body Giflib.Testing.Test_Quantization is
       Register_Routine (T, Enforces_Quantization_Budgets'Access, "quantization.budgets");
       Register_Routine (T, Color_Arithmetic_Is_Bounded'Access,
                         "quantization.color_arithmetic");
+      Register_Routine (T, Pixel_Access_Is_Checked'Access,
+                        "quantization.pixel_access");
       Register_Routine (T, Error_Buffer_Arithmetic_Is_Bounded'Access,
                         "quantization.error_buffer_arithmetic");
       Register_Routine (T, Workspace_Reuses_Storage'Access,
@@ -186,6 +190,30 @@ package body Giflib.Testing.Test_Quantization is
               and then Arithmetic.Squared_Distance ((7, 8, 9), (7, 8, 9)) = 0,
               "quantization color distance is wrong");
    end Color_Arithmetic_Is_Bounded;
+
+   procedure Pixel_Access_Is_Checked
+     (T : in out AUnit.Test_Cases.Test_Case'Class)
+   is
+      pragma Unreferenced (T);
+      package Pixels renames Giflib.Internal.Quantization_Pixels;
+      Data : aliased constant Giflib.Streams.Byte_Array := [12, 34, 56];
+      Valid_View : constant Giflib.Images.Image_View :=
+        (Format => Giflib.RGB_24, Width => 1, Height => 1, Stride => 3,
+         Accessible_Bytes => 3, Data => Data'Access);
+      Short_View : constant Giflib.Images.Image_View :=
+        (Format => Giflib.RGB_24, Width => 1, Height => 1, Stride => 3,
+         Accessible_Bytes => 2, Data => Data'Access);
+      Read : Pixels.Pixel_Result;
+   begin
+      Read := Pixels.Read_Pixel (Valid_View, 0, 0);
+      Assert
+        (Read.Valid and then Read.Value.Color = (12, 34, 56),
+         "valid pixel access returned the wrong color");
+      Read := Pixels.Read_Pixel (Valid_View, 1, 0);
+      Assert (not Read.Valid, "out-of-range pixel access was accepted");
+      Read := Pixels.Read_Pixel (Short_View, 0, 0);
+      Assert (not Read.Valid, "short pixel storage was accessed");
+   end Pixel_Access_Is_Checked;
 
    procedure Validates_Image_Views (T : in out AUnit.Test_Cases.Test_Case'Class) is
       pragma Unreferenced (T);

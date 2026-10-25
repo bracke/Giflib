@@ -9,9 +9,14 @@ package Giflib.Internal.Quantization_Pixels is
       Alpha : Byte := 255;
    end record;
 
-   function Pixel_At
+   type Pixel_Result is record
+      Valid : Boolean := False;
+      Value : Source_Pixel := (Color => (others => 0), Alpha => 255);
+   end record;
+
+   function Read_Pixel
      (Source : Images.Image_View;
-      X, Y   : Natural) return Source_Pixel;
+      X, Y   : Natural) return Pixel_Result;
 
    function Is_Transparent
      (Pixel            : Source_Pixel;
@@ -20,5 +25,4 @@ package Giflib.Internal.Quantization_Pixels is
       Alpha_Threshold  : Byte) return Boolean;
 
    function Color_Key (Color : Palettes.RGB_Color) return Natural;
-   function Cache_Start (Key, Cache_Size : Natural) return Natural;
 end Giflib.Internal.Quantization_Pixels;

@@ -30,8 +30,15 @@ package body Giflib.Internal.Quantization_Storage is
      (Error_Ownership.Length (Object.Error_Data));
    function Allocated_Bytes (Object : Resources) return Byte_Count is
      (Ownership.Used (Object.Allocation_Budget));
+   function Is_Released (Object : Resources) return Boolean is
+     (not Histogram_Ownership.Is_Allocated (Object.Histogram_Data)
+      and then not Nearest_Cache_Ownership.Is_Allocated
+        (Object.Nearest_Cache_Data)
+      and then not Error_Ownership.Is_Allocated (Object.Error_Data));
    function Cleanup_Succeeded (Object : Resources) return Boolean is
-     (not Object.Cleanup_Failed and then Allocated_Bytes (Object) = 0);
+     (not Object.Cleanup_Failed
+      and then Is_Released (Object)
+      and then Allocated_Bytes (Object) = 0);
 
    procedure Release (Object : in out Resources) is
       Status : Resource_Cleanup.Guard

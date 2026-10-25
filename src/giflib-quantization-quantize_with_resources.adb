@@ -30,6 +30,7 @@ is
 
    Outcome : Results.Result;
    Pixel : Pixels.Source_Pixel;
+   Pixel_Read : Pixels.Pixel_Result;
    Found : Boolean;
    Bucket : Histogram_Index;
    Status : Storage_Operations.Operation_Status;
@@ -58,8 +59,12 @@ begin
                      Internal.Resource_Diagnostics.With_Work_Limit
                        (Tracker, Quantization_Work_Limit));
                end if;
+               Pixel_Read := Pixels.Read_Pixel (Source, X, Y);
+               if not Pixel_Read.Valid then
+                  return Fail (Giflib.Errors.Internal_Invariant_Failed);
+               end if;
                if Pixels.Is_Transparent
-                 (Pixels.Pixel_At (Source, X, Y),
+                 (Pixel_Read.Value,
                   Source.Format,
                   Options.Transparency.Enabled,
                   (if Options.Transparency.Enabled
@@ -87,11 +92,12 @@ begin
       if not Results.Succeeded (Outcome) then
          return Outcome;
       end if;
-      Status := Storage_Operations.Reset_Histogram
+      Status := Histogram_Operations.Reset
         (Context.Resources, Tracker);
       if Status /= Storage_Operations.Operation_Ready then
          return
            (if Status = Storage_Operations.Operation_Work_Limit
+                 and then Internal.Work_Budgets.Failed (Tracker)
             then Fail
               (Giflib.Errors.Limit_Exceeded,
                Internal.Resource_Diagnostics.With_Work_Limit
@@ -107,7 +113,11 @@ begin
                   Internal.Resource_Diagnostics.With_Work_Limit
                     (Tracker, Quantization_Work_Limit));
             end if;
-            Pixel := Pixels.Pixel_At (Source, X, Y);
+            Pixel_Read := Pixels.Read_Pixel (Source, X, Y);
+            if not Pixel_Read.Valid then
+               return Fail (Giflib.Errors.Internal_Invariant_Failed);
+            end if;
+            Pixel := Pixel_Read.Value;
             if Pixels.Is_Transparent
               (Pixel,
                Source.Format,
@@ -118,7 +128,7 @@ begin
                Has_Transparency := True;
             else
                Bucket := Arithmetic.Histogram_Of (Pixel.Color);
-               Status := Storage_Operations.Add_Histogram_Sample
+               Status := Histogram_Operations.Add_Sample
                  (Context.Resources, Bucket);
                if Status /= Storage_Operations.Operation_Ready then
                   return Fail (Giflib.Errors.Internal_Invariant_Failed);
@@ -163,7 +173,7 @@ begin
          end loop;
          Output_Palette.Length := Generated_Start + Exact_Count;
       else
-         Outcome := Storage_Operations.Build_Median_Cut
+         Outcome := Histogram_Operations.Build_Median_Cut
            (Context.Resources,
             Generated_Start,
             Opaque_Capacity,

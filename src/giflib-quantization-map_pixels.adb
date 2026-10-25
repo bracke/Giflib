@@ -15,6 +15,7 @@ is
    Use_Dither : constant Boolean := Options.Dither = Floyd_Steinberg;
    Outcome : Results.Result;
    Pixel : Pixels.Source_Pixel;
+   Pixel_Read : Pixels.Pixel_Result;
    Index : Natural := 0;
 
    function Work_Failure return Results.Result is
@@ -33,62 +34,9 @@ is
    function Status_Failure
      (Status : Storage_Operations.Operation_Status) return Results.Result is
      (if Status = Storage_Operations.Operation_Work_Limit
+          and then Internal.Work_Budgets.Failed (Tracker)
       then Work_Failure
       else Invariant_Failure);
-
-   function Find_Nearest
-     (Color : Palettes.RGB_Color;
-      Chosen : out Palette_Index) return Results.Result
-   is
-      Key : constant Natural := Pixels.Color_Key (Color);
-      Probe : constant Storage_Operations.Cache_Probe_Result :=
-        Storage_Operations.Probe_Nearest_Cache
-          (Context.Resources, Key,
-           Pixels.Cache_Start
-             (Key, Storage_Operations.Nearest_Cache_Capacity));
-      Best : Natural := Generated_Start;
-      Best_Distance : Natural := Natural'Last;
-      Distance : Natural;
-      Status : Storage_Operations.Operation_Status;
-   begin
-      Chosen := 0;
-      if Probe.Status /= Storage_Operations.Operation_Ready then
-         return Status_Failure (Probe.Status);
-      elsif not Charge (Tracker, Byte_Count (Probe.Probe_Count)) then
-         return Work_Failure;
-      elsif Probe.Found then
-         Chosen := Probe.Value;
-         return Results.Success;
-      elsif Output_Palette.Length <= Generated_Start then
-         return Invariant_Failure;
-      elsif not Charge
-        (Tracker, Byte_Count (Output_Palette.Length - Generated_Start))
-      then
-         return Work_Failure;
-      end if;
-      for I in Generated_Start .. Output_Palette.Length - 1 loop
-         if not (Has_Transparency
-                 and then Options.Palette.Strategy = Use_Fixed_Palette
-                 and then Palette_Index (I) = Transparent_Index)
-         then
-            Distance := Natural
-              (Arithmetic.Squared_Distance
-                 (Color, Output_Palette.Colors (Palette_Index (I))));
-            if Distance < Best_Distance then
-               Best := I;
-               Best_Distance := Distance;
-            end if;
-         end if;
-      end loop;
-      if Best_Distance = Natural'Last then
-         return Invariant_Failure;
-      end if;
-      Chosen := Palette_Index (Best);
-      Status := Storage_Operations.Store_Nearest_Cache
-        (Context.Resources, Probe.Store_Slot, Key, Chosen);
-      return (if Status = Storage_Operations.Operation_Ready
-              then Results.Success else Status_Failure (Status));
-   end Find_Nearest;
 
    Status : Storage_Operations.Operation_Status;
 
@@ -97,7 +45,7 @@ begin
    if not Results.Succeeded (Outcome) then
       return Outcome;
    end if;
-   Status := Storage_Operations.Reset_Nearest_Cache
+   Status := Cache_Operations.Reset
      (Context.Resources, Tracker);
    if Status /= Storage_Operations.Operation_Ready then
       return Status_Failure (Status);
@@ -108,7 +56,7 @@ begin
       if not Results.Succeeded (Outcome) then
          return Outcome;
       end if;
-      Status := Storage_Operations.Reset_Errors
+      Status := Dither_Operations.Reset
         (Context.Resources,
          Buffer_Arithmetic.Error_Buffer_Length (Source.Width),
          Tracker);
@@ -132,7 +80,7 @@ begin
             then
                return Work_Failure;
             end if;
-            Status := Storage_Operations.Clear_Next_Row
+            Status := Dither_Operations.Clear_Next_Row
               (Context.Resources, Next_Group, Span);
             if Status /= Storage_Operations.Operation_Ready then
                return Status_Failure (Status);
@@ -143,7 +91,11 @@ begin
             then
                return Work_Failure;
             end if;
-            Pixel := Pixels.Pixel_At (Source, X, Y);
+            Pixel_Read := Pixels.Read_Pixel (Source, X, Y);
+            if not Pixel_Read.Valid then
+               return Invariant_Failure;
+            end if;
+            Pixel := Pixel_Read.Value;
             if Pixels.Is_Transparent
               (Pixel,
                Source.Format,
@@ -154,7 +106,7 @@ begin
                Indexed_Pixels (Indexed_Pixels'First + Index) :=
                  Byte (Transparent_Index);
                if Use_Dither then
-                  Status := Storage_Operations.Clear_Transparent
+                  Status := Dither_Operations.Clear_Transparent
                     (Context.Resources, Current_Group, X, Span);
                   if Status /= Storage_Operations.Operation_Ready then
                      return Status_Failure (Status);
@@ -167,7 +119,7 @@ begin
                   Adjusted_Result : Storage_Operations.Color_Outcome;
                begin
                   if Use_Dither then
-                     Adjusted_Result := Storage_Operations.Adjust
+                     Adjusted_Result := Dither_Operations.Adjust
                        (Context.Resources, Pixel.Color,
                         Current_Group, X, Span);
                      if Adjusted_Result.Status /=
@@ -177,14 +129,23 @@ begin
                      end if;
                      Adjusted := Adjusted_Result.Value;
                   end if;
-                  Outcome := Find_Nearest (Adjusted, Chosen);
+                  Outcome := Mapping.Find
+                    (Context.Resources,
+                     Adjusted,
+                     Output_Palette,
+                     Generated_Start,
+                     Has_Transparency
+                       and then Options.Palette.Strategy = Use_Fixed_Palette,
+                     Transparent_Index,
+                     Tracker,
+                     Chosen);
                   if not Results.Succeeded (Outcome) then
                      return Outcome;
                   end if;
                   Indexed_Pixels (Indexed_Pixels'First + Index) :=
                     Byte (Chosen);
                   if Use_Dither then
-                     Status := Storage_Operations.Diffuse
+                     Status := Dither_Operations.Diffuse
                        (Context.Resources,
                         Current_Group,
                         Next_Group,

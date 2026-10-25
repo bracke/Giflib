@@ -5,7 +5,11 @@ with Giflib.Internal.Geometry_Arithmetic;
 with Giflib.Internal.Quantization_Arithmetic;
 with Giflib.Internal.Quantization_Buffer_Arithmetic;
 with Giflib.Internal.Quantization_Pixels;
+with Giflib.Internal.Quantization_Mapping;
 with Giflib.Internal.Quantization_Storage.Operations;
+with Giflib.Internal.Quantization_Storage.Cache_Operations;
+with Giflib.Internal.Quantization_Storage.Dither_Operations;
+with Giflib.Internal.Quantization_Storage.Histogram_Operations;
 
 package body Giflib.Quantization is
    use type Internal.Ownership.Allocation_Status;
@@ -14,9 +18,16 @@ package body Giflib.Quantization is
    package Arithmetic renames Internal.Quantization_Arithmetic;
    package Buffer_Arithmetic renames Internal.Quantization_Buffer_Arithmetic;
    package Pixels renames Internal.Quantization_Pixels;
+   package Mapping renames Internal.Quantization_Mapping;
    package Storage renames Internal.Quantization_Storage;
    package Storage_Operations renames
      Internal.Quantization_Storage.Operations;
+   package Cache_Operations renames
+     Internal.Quantization_Storage.Cache_Operations;
+   package Dither_Operations renames
+     Internal.Quantization_Storage.Dither_Operations;
+   package Histogram_Operations renames
+     Internal.Quantization_Storage.Histogram_Operations;
    subtype Histogram_Index is Arithmetic.Histogram_Index;
 
    subtype Work_Tracker is Internal.Work_Budgets.Meter;
