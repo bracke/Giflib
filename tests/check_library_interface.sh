@@ -10,6 +10,81 @@ dependency_probe=$(mktemp)
 dependency_probe_output=$(mktemp)
 trap 'rm -f "$actual_interface" "$expected_interface" "$actual_dependencies" "$expected_dependencies" "$dependency_probe" "$dependency_probe_output"' EXIT HUP INT TERM
 
+check_transition_writes() {
+    prefix=$1
+    allowed=$2
+    fields=$3
+    violations=$(find "$root/src" -type f -name "giflib-$prefix*.adb" \
+      ! -name "$allowed" -print | while IFS= read -r source_file; do
+        awk -v file="$source_file" -v fields="$fields" '
+          {
+            sub(/--.*/, "")
+            statement = statement " " $0
+            while (index(statement, ";") != 0) {
+              stop = index(statement, ";")
+              clause = substr(statement, 1, stop - 1)
+              statement = substr(statement, stop + 1)
+              gsub(/[[:space:]]+/, " ", clause)
+              pattern = "[[:alnum:]_]+[.](" fields ")" \
+                        "([[:space:]]*[(][^)]*[)])?[[:space:]]*:="
+              if (clause ~ pattern) print file ":" clause ";"
+            }
+          }
+        ' "$source_file"
+      done)
+    if [ -n "$violations" ]; then
+        echo "$prefix session fields are written outside their transition owner" >&2
+        echo "$violations" >&2
+        exit 1
+    fi
+}
+
+check_transition_calls() {
+    prefix=$1
+    allowed=$2
+    operations=$3
+    violations=$(find "$root/src" -type f -name "giflib-$prefix*.adb" \
+      ! -name "$allowed" -print | while IFS= read -r source_file; do
+        awk -v file="$source_file" -v operations="$operations" '
+          {
+            sub(/--.*/, "")
+            statement = statement " " $0
+            while (index(statement, ";") != 0) {
+              stop = index(statement, ";")
+              clause = substr(statement, 1, stop - 1)
+              statement = substr(statement, stop + 1)
+              gsub(/[[:space:]]+/, " ", clause)
+              pattern = "State_Arithmetic[.](" operations ")" \
+                        "[[:space:]]*[(]"
+              if (clause ~ pattern) print file ":" clause ";"
+            }
+          }
+        ' "$source_file"
+      done)
+    if [ -n "$violations" ]; then
+        echo "$prefix state arithmetic is mutated outside its transition owner" >&2
+        echo "$violations" >&2
+        exit 1
+    fi
+}
+
+check_transition_writes \
+  decoding \
+  giflib-decoding-session_transitions.adb \
+  'Current_State|Options|Constraints|Header_Data|Frames_Seen|Total_Decoded_Pixels|Total_Compressed_Bytes|Extensions_Seen|Pending_Control|Has_Pending_Control|Pending_Frame|Has_Pending_Frame|Loop_Data|Snapshot_Rectangle|Previous_Rectangle|Previous_Control|Has_Previous_Frame|Warnings|Stored_Warnings|Diagnostic'
+check_transition_writes \
+  encoding \
+  giflib-encoding-session_transitions.adb \
+  'Current_State|Options|Constraints|Screen|Global_Palette|Has_Global_Palette|Loop_Data|Header_Written|Frames_Written|Extensions_Written|Bytes_Written|Compressed_Bytes_Written|Diagnostic'
+check_transition_calls \
+  decoding \
+  giflib-decoding-session_transitions.adb \
+  'Reset|Fail|Initialize|Header_Read|Frame_Discovered|Await_Frame_Decision|Begin_Frame|Complete_Frame|Complete_Stream|Cancel|Finalize'
+check_transition_calls \
+  encoding \
+  giflib-encoding-session_transitions.adb \
+  'Fail|Initialize|Define_Screen|Frame_Accepted|Record_Extension|Accept_Data|Complete|Cancel|Finalize'
+
 extract_internal_dependencies() {
     source_file=$1
     display_name=$2
@@ -77,11 +152,15 @@ Giflib.Internal
 Giflib.Internal.Blocks
 Giflib.Internal.Borrow_Guards
 Giflib.Internal.Budget_Arithmetic
+Giflib.Internal.Cleanup
 Giflib.Internal.Decoder_Storage
 Giflib.Internal.Encoder_Storage
+Giflib.Internal.Interlacing
 Giflib.Internal.LZW
 Giflib.Internal.LZW_Arithmetic
+Giflib.Internal.LZW_Decoder_Dictionary
 Giflib.Internal.LZW_Encoding
+Giflib.Internal.LZW_Encoder_Dictionary
 Giflib.Internal.Metadata_Store
 Giflib.Internal.Owned_Arrays
 Giflib.Internal.Owned_Buffers
