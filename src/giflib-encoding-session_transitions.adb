@@ -19,10 +19,24 @@ package body Giflib.Encoding.Session_Transitions is
       State_Arithmetic.Initialize (Object.Current_State);
    end Begin_Session;
 
-   procedure Fail_Session (Object : in out Encoder) is
+   procedure Fail_Session
+     (Object : in out Encoder;
+      Diagnostic : Errors.Error) is
    begin
+      if Object.Diagnostic.Code = Errors.No_Error then
+         Object.Diagnostic := Diagnostic;
+      end if;
       State_Arithmetic.Fail (Object.Current_State);
    end Fail_Session;
+
+   procedure Record_Diagnostic
+     (Object : in out Encoder;
+      Diagnostic : Errors.Error) is
+   begin
+      if Object.Diagnostic.Code = Errors.No_Error then
+         Object.Diagnostic := Diagnostic;
+      end if;
+   end Record_Diagnostic;
 
    procedure Define_Screen
      (Object : in out Encoder;

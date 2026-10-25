@@ -15,9 +15,11 @@ package body Giflib.Internal.Encoder_Storage.Frame_Operations is
       Compressed_Bytes : out Byte_Count;
       Wire_Bytes : out Byte_Count;
       Maximum_Index : Byte := 255;
-      Interlace_Width : Natural := 0;
-      Interlace_Height : Natural := 0) return Results.Result
+      Layout : Interlacing.Traversal_Layout :=
+        Interlacing.Sequential_Layout) return Results.Result
    is
+      Statistics : LZW_Encoding.Encode_Statistics;
+      Outcome : Results.Result;
    begin
       if not LZW_Allocated (Object) then
          Compressed_Bytes := 0;
@@ -25,10 +27,18 @@ package body Giflib.Internal.Encoder_Storage.Frame_Operations is
          return Results.Failure
            (Errors.Make (Errors.Internal_Invariant_Failed));
       end if;
-      return LZW_Encoding.Encode
-        (Object.LZW_Data, Destination, Input, Minimum_Code_Size, Max_Work,
-         Max_Compressed_Bytes, Max_Wire_Bytes, Compressed_Bytes, Wire_Bytes,
-         Maximum_Index, Interlace_Width, Interlace_Height);
+      Outcome := LZW_Encoding.Encode
+        (Object.LZW_Data, Destination, Input,
+         (Minimum_Code_Size => Minimum_Code_Size,
+          Max_Work => Max_Work,
+          Max_Compressed_Bytes => Max_Compressed_Bytes,
+          Max_Wire_Bytes => Max_Wire_Bytes,
+          Maximum_Index => Maximum_Index,
+          Layout => Layout),
+         Statistics);
+      Compressed_Bytes := Statistics.Compressed_Bytes;
+      Wire_Bytes := Statistics.Wire_Bytes;
+      return Outcome;
    end Encode_LZW;
 
    function Encode_Stored_LZW
@@ -42,25 +52,29 @@ package body Giflib.Internal.Encoder_Storage.Frame_Operations is
       Compressed_Bytes : out Byte_Count;
       Wire_Bytes : out Byte_Count;
       Maximum_Index : Byte := 255;
-      Interlace_Width : Natural := 0;
-      Interlace_Height : Natural := 0) return Results.Result
+      Layout : Interlacing.Traversal_Layout :=
+        Interlacing.Sequential_Layout) return Results.Result
    is
       function Run
-        (Pixels : Streams.Byte_Array) return Results.Result is
+        (Pixels : Streams.Byte_Array) return Results.Result
+      is
+         Statistics : LZW_Encoding.Encode_Statistics;
+         Outcome : Results.Result;
       begin
-         return LZW_Encoding.Encode
+         Outcome := LZW_Encoding.Encode
            (Object.LZW_Data,
             Destination,
             Pixels (1 .. Natural (Pixel_Count)),
-            Minimum_Code_Size,
-            Max_Work,
-            Max_Compressed_Bytes,
-            Max_Wire_Bytes,
-            Compressed_Bytes,
-            Wire_Bytes,
-            Maximum_Index,
-            Interlace_Width,
-            Interlace_Height);
+            (Minimum_Code_Size => Minimum_Code_Size,
+             Max_Work => Max_Work,
+             Max_Compressed_Bytes => Max_Compressed_Bytes,
+             Max_Wire_Bytes => Max_Wire_Bytes,
+             Maximum_Index => Maximum_Index,
+             Layout => Layout),
+            Statistics);
+         Compressed_Bytes := Statistics.Compressed_Bytes;
+         Wire_Bytes := Statistics.Wire_Bytes;
+         return Outcome;
       end Run;
    begin
       if Pixel_Count = 0

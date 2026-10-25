@@ -21,4 +21,10 @@ package Giflib.Internal.Image_Data is
       Frame : Frame_Ordinal := 0) return Results.Result
      with Pre => LZW.Is_Allocated (Context);
 
+   function Skip
+     (Object : in out Streams.Source'Class;
+      Constraints : Limits.Limit_Set;
+      Total_Compressed_Bytes : in out Byte_Count;
+      Frame : Frame_Ordinal := 0) return Results.Result;
+
 end Giflib.Internal.Image_Data;

@@ -7,60 +7,27 @@ is
    Prepared : Prepared_Frame renames Object.Pending_Frame;
    Pixels : Byte_Count;
    Outcome : Results.Result;
-   Decoded_Pixels : Pixel_Count := Object.Total_Decoded_Pixels;
-   Compressed_Bytes : Byte_Count := Object.Total_Compressed_Bytes;
    Source_Position, Target_Position : Natural;
    Index : Palette_Index;
    Color : Palettes.RGB_Color;
 begin
-   if not State_Arithmetic.Can_Process_Frame (Object.Current_State)
-   then
-      return Invalid_Transition (Object);
-   elsif Object.Options.Mode /= Expanded_Frame then
-      return Results.Failure
-        (Errors.Make
-           (Errors.Unsupported_Feature,
-            Internal.Diagnostics.At_Source
-              (Object.Input.all,
-               (Frame => Errors.Frame_At (Object.Frames_Seen),
-                others => <>))));
-   elsif not Object.Has_Pending_Frame then
-      return Fail (Object, Errors.Make (Errors.Internal_Invariant_Failed));
-   end if;
-   Pixels := Internal.Geometry_Arithmetic.Area
-     (Prepared.Width, Prepared.Height);
-   Outcome := Validate_Frame_Output
+   Outcome := Frame_Pipeline.Start_Decode
      (Object,
+      Expanded_Frame,
       Byte_Count (Target'Length),
-      Pixels * 4,
       Info'Constrained,
       (if Info'Constrained
        then Info.Has_Local_Palette
-       else Prepared.Has_Local_Palette));
+       else False));
    if not Results.Succeeded (Outcome) then
       return Outcome;
    end if;
-   Session_Transitions.Begin_Frame (Object);
-   Outcome := Resource_Management.Ensure_LZW_Workspace (Object);
+   Pixels := Internal.Geometry_Arithmetic.Area
+     (Prepared.Width, Prepared.Height);
+   Outcome := Frame_Pipeline.Decode_Indices
+     (Object, Target (Target'First .. Target'First + Natural (Pixels) - 1));
    if not Results.Succeeded (Outcome) then
-      return Fail (Object, Outcome.First_Error);
-   end if;
-   Outcome := Internal.Decoder_Storage.Image_Operations.Decode_Indices
-     (Object.Resources,
-      Object.Input.all,
-      Prepared.Width,
-      Prepared.Height,
-      Prepared.Interlaced,
-      Prepared.Palette,
-      Object.Constraints,
-      Decoded_Pixels,
-      Compressed_Bytes,
-      Target (Target'First .. Target'First + Natural (Pixels) - 1),
-      Object.Frames_Seen);
-   Session_Transitions.Commit_Resource_Usage
-     (Object, Decoded_Pixels, Compressed_Bytes);
-   if not Results.Succeeded (Outcome) then
-      return Fail (Object, Outcome.First_Error);
+      return Outcome;
    end if;
    for Pixel in reverse 0 .. Natural (Pixels) - 1 loop
       Source_Position := Target'First + Pixel;

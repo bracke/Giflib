@@ -4,57 +4,22 @@ function Decode_Indexed_Frame
    Target : out Streams.Byte_Array;
    Info : out Frame_Info) return Results.Result
 is
-   Prepared : Prepared_Frame renames Object.Pending_Frame;
    Outcome : Results.Result;
-   Decoded_Pixels : Pixel_Count := Object.Total_Decoded_Pixels;
-   Compressed_Bytes : Byte_Count := Object.Total_Compressed_Bytes;
 begin
-   if not State_Arithmetic.Can_Process_Frame (Object.Current_State)
-   then
-      return Invalid_Transition (Object);
-   elsif Object.Options.Mode /= Raw_Indexed then
-      return Results.Failure
-        (Errors.Make
-           (Errors.Unsupported_Feature,
-            Internal.Diagnostics.At_Source
-              (Object.Input.all,
-               (Frame => Errors.Frame_At (Object.Frames_Seen),
-                others => <>))));
-   elsif not Object.Has_Pending_Frame then
-      return Fail (Object, Errors.Make (Errors.Internal_Invariant_Failed));
-   end if;
-   Outcome := Validate_Frame_Output
+   Outcome := Frame_Pipeline.Start_Decode
      (Object,
+      Raw_Indexed,
       Byte_Count (Target'Length),
-      Internal.Geometry_Arithmetic.Area (Prepared.Width, Prepared.Height),
       Info'Constrained,
       (if Info'Constrained
        then Info.Has_Local_Palette
-       else Prepared.Has_Local_Palette));
+       else False));
    if not Results.Succeeded (Outcome) then
       return Outcome;
    end if;
-   Session_Transitions.Begin_Frame (Object);
-   Outcome := Resource_Management.Ensure_LZW_Workspace (Object);
+   Outcome := Frame_Pipeline.Decode_Indices (Object, Target);
    if not Results.Succeeded (Outcome) then
-      return Fail (Object, Outcome.First_Error);
-   end if;
-   Outcome := Internal.Decoder_Storage.Image_Operations.Decode_Indices
-     (Object.Resources,
-      Object.Input.all,
-      Prepared.Width,
-      Prepared.Height,
-      Prepared.Interlaced,
-      Prepared.Palette,
-      Object.Constraints,
-      Decoded_Pixels,
-      Compressed_Bytes,
-      Target,
-      Object.Frames_Seen);
-   Session_Transitions.Commit_Resource_Usage
-     (Object, Decoded_Pixels, Compressed_Bytes);
-   if not Results.Succeeded (Outcome) then
-      return Fail (Object, Outcome.First_Error);
+      return Outcome;
    end if;
    return Complete_Frame (Object, Info);
 end Decode_Indexed_Frame;

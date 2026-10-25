@@ -1,5 +1,3 @@
-with Giflib.Decoding.Session_Arithmetic;
-
 package body Giflib.Decoding.Session_Transitions is
    procedure Reset_Session_Data (Object : in out Decoder) is
    begin
@@ -35,19 +33,48 @@ package body Giflib.Decoding.Session_Transitions is
    procedure Commit_Header
      (Object : in out Decoder;
       Header : Header_Info) is
-      Transition : Session_Arithmetic.Header_Transition_State :=
-        (Current_State => Object.Current_State,
-         Header_Data => Object.Header_Data);
    begin
-      Session_Arithmetic.Commit_Header (Transition, Header);
-      Object.Header_Data := Transition.Header_Data;
-      Object.Current_State := Transition.Current_State;
+      Object.Header_Data := Header;
+      State_Arithmetic.Header_Read (Object.Current_State);
    end Commit_Header;
 
-   procedure Fail_Session (Object : in out Decoder) is
+   procedure Fail_Session
+     (Object : in out Decoder;
+      Diagnostic : Errors.Error) is
    begin
+      if Object.Diagnostic.Code = Errors.No_Error then
+         Object.Diagnostic := Diagnostic;
+      end if;
       State_Arithmetic.Fail (Object.Current_State);
    end Fail_Session;
+
+   procedure Record_Diagnostic
+     (Object : in out Decoder;
+      Diagnostic : Errors.Error) is
+   begin
+      if Object.Diagnostic.Code = Errors.No_Error then
+         Object.Diagnostic := Diagnostic;
+      end if;
+   end Record_Diagnostic;
+
+   procedure Record_Warning
+     (Object : in out Decoder;
+      Item : Errors.Warning)
+   is
+      Capacity : constant Limits.Warning_Record_Limit :=
+        Object.Constraints.Max_Warning_Records;
+   begin
+      if Capacity = 0 then
+         return;
+      elsif Object.Stored_Warnings < Capacity then
+         Object.Stored_Warnings := Object.Stored_Warnings + 1;
+         Object.Warnings (Object.Stored_Warnings) := Item;
+      elsif Object.Warnings (Capacity).Code /= Errors.Warnings_Suppressed then
+         Object.Warnings (Capacity) :=
+           Errors.Make_Warning
+             (Errors.Warnings_Suppressed, Errors.Data_Loss, Item.Context);
+      end if;
+   end Record_Warning;
 
    procedure Reset_Session (Object : in out Decoder) is
    begin
@@ -65,6 +92,13 @@ package body Giflib.Decoding.Session_Transitions is
       State_Arithmetic.Await_Frame_Decision
         (Object.Current_State, Object.Has_Pending_Frame);
    end Await_Frame_Decision;
+
+   procedure Stage_Frame
+     (Object : in out Decoder;
+      Frame : Prepared_Frame) is
+   begin
+      Object.Pending_Frame := Frame;
+   end Stage_Frame;
 
    procedure Begin_Frame (Object : in out Decoder) is
    begin
@@ -97,13 +131,6 @@ package body Giflib.Decoding.Session_Transitions is
       Object.Loop_Data := Looping;
    end Set_Loop;
 
-   procedure Record_Compressed_Bytes
-     (Object : in out Decoder;
-      Count : Byte_Count) is
-   begin
-      Object.Total_Compressed_Bytes := Object.Total_Compressed_Bytes + Count;
-   end Record_Compressed_Bytes;
-
    procedure Commit_Resource_Usage
      (Object : in out Decoder;
       Decoded_Pixels : Pixel_Count;
@@ -112,6 +139,38 @@ package body Giflib.Decoding.Session_Transitions is
       Object.Total_Decoded_Pixels := Decoded_Pixels;
       Object.Total_Compressed_Bytes := Compressed_Bytes;
    end Commit_Resource_Usage;
+
+   procedure Clear_Resource_State (Object : in out Decoder) is
+   begin
+      Object.Pending_Frame := (others => <>);
+      Object.Has_Pending_Frame := False;
+      Object.Snapshot_Rectangle := (others => <>);
+      Object.Previous_Rectangle := (others => <>);
+      Object.Has_Previous_Frame := False;
+      Object.Previous_Control := Frames.Default_Control;
+   end Clear_Resource_State;
+
+   procedure Clear_Previous_Frame (Object : in out Decoder) is
+   begin
+      Object.Has_Previous_Frame := False;
+   end Clear_Previous_Frame;
+
+   procedure Commit_Snapshot
+     (Object : in out Decoder;
+      Rectangle : Frames.Rectangle) is
+   begin
+      Object.Snapshot_Rectangle := Rectangle;
+   end Commit_Snapshot;
+
+   procedure Commit_Composited_Frame
+     (Object : in out Decoder;
+      Rectangle : Frames.Rectangle;
+      Control : Frames.Graphic_Control) is
+   begin
+      Object.Previous_Rectangle := Rectangle;
+      Object.Previous_Control := Control;
+      Object.Has_Previous_Frame := True;
+   end Commit_Composited_Frame;
 
    procedure Complete_Stream (Object : in out Decoder) is
    begin
@@ -125,19 +184,14 @@ package body Giflib.Decoding.Session_Transitions is
    end Cancel_Session;
 
    procedure Complete_Frame (Object : in out Decoder) is
-      Transition : Session_Arithmetic.Frame_Transition_State :=
-        (Current_State => Object.Current_State,
-         Has_Pending_Control => Object.Has_Pending_Control,
-         Has_Pending_Frame => Object.Has_Pending_Frame,
-         Frames_Seen => Object.Frames_Seen,
-         Pending_Control => Object.Pending_Control);
    begin
-      Session_Arithmetic.Complete_Frame (Transition);
-      Object.Pending_Control := Transition.Pending_Control;
-      Object.Has_Pending_Control := Transition.Has_Pending_Control;
-      Object.Has_Pending_Frame := Transition.Has_Pending_Frame;
-      Object.Frames_Seen := Transition.Frames_Seen;
-      Object.Current_State := Transition.Current_State;
+      Object.Pending_Control := Frames.Default_Control;
+      Object.Pending_Frame := (others => <>);
+      State_Arithmetic.Complete_Frame
+        (Object.Current_State,
+         Object.Has_Pending_Control,
+         Object.Has_Pending_Frame,
+         Object.Frames_Seen);
    end Complete_Frame;
 
    procedure Finalize_Session (Object : in out Decoder) is

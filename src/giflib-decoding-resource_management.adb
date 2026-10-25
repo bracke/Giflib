@@ -3,6 +3,7 @@ with Giflib.Internal.Decoder_Storage.Image_Operations;
 with Giflib.Internal.Resource_Diagnostics;
 with Giflib.Internal.Geometry_Arithmetic;
 with Giflib.Palettes;
+with Giflib.Decoding.Session_Transitions;
 
 package body Giflib.Decoding.Resource_Management is
    use type Internal.Ownership.Allocation_Status;
@@ -15,9 +16,7 @@ package body Giflib.Decoding.Resource_Management is
    procedure Release (Object : in out Decoder) is
    begin
       Release (Object.Resources);
-      Object.Has_Pending_Frame := False;
-      Object.Has_Previous_Frame := False;
-      Object.Previous_Control := Frames.Default_Control;
+      Session_Transitions.Clear_Resource_State (Object);
    end Release;
 
    function Allocation_Result
@@ -185,7 +184,7 @@ package body Giflib.Decoding.Resource_Management is
          when others =>
             null;
       end case;
-      Object.Has_Previous_Frame := False;
+      Session_Transitions.Clear_Previous_Frame (Object);
       return Results.Success;
    end Apply_Previous_Disposal;
 
@@ -221,9 +220,11 @@ package body Giflib.Decoding.Resource_Management is
       if Allocation.Status /= Internal.Ownership.Allocation_Ready then
          return Allocation_Result (Object, Allocation);
       end if;
-      Object.Snapshot_Rectangle := Rectangle;
       Outcome := Internal.Decoder_Storage.Image_Operations.Capture_Snapshot
         (Object.Resources, Object.Header_Data.Width, Rectangle);
+      if Results.Succeeded (Outcome) then
+         Session_Transitions.Commit_Snapshot (Object, Rectangle);
+      end if;
       return Outcome;
    end Save_Snapshot;
 

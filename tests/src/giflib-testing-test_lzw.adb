@@ -3,9 +3,15 @@ with AUnit.Assertions;
 
 with Giflib.Errors;
 with Giflib.Internal.Blocks;
+with Giflib.Internal.Interlacing;
 with Giflib.Internal.LZW;
+with Giflib.Internal.LZW.Testing;
 with Giflib.Internal.LZW_Arithmetic;
 with Giflib.Internal.LZW_Bit_Arithmetic;
+with Giflib.Internal.LZW_Decoder_Output;
+with Giflib.Internal.LZW_Decoder_Reader;
+with Giflib.Internal.LZW_Decoder_Dictionary;
+with Giflib.Internal.Work_Budgets;
 with Giflib.Results;
 with Giflib.Streams;
 
@@ -167,6 +173,8 @@ package body Giflib.Testing.Test_LZW is
    procedure Arithmetic_Transitions_Are_Bounded (T : in out AUnit.Test_Cases.Test_Case'Class);
    procedure Bit_Arithmetic_Is_Exact (T : in out AUnit.Test_Cases.Test_Case'Class);
    procedure Compressed_Input_Is_Buffered (T : in out AUnit.Test_Cases.Test_Case'Class);
+   procedure Decoder_Components_Honor_Boundaries
+     (T : in out AUnit.Test_Cases.Test_Case'Class);
 
    overriding procedure Register_Tests (T : in out Test) is
       use AUnit.Test_Cases.Registration;
@@ -180,7 +188,83 @@ package body Giflib.Testing.Test_LZW is
       Register_Routine (T, Arithmetic_Transitions_Are_Bounded'Access, "lzw.arithmetic_transitions");
       Register_Routine (T, Bit_Arithmetic_Is_Exact'Access, "lzw.bit_arithmetic");
       Register_Routine (T, Compressed_Input_Is_Buffered'Access, "lzw.buffered_input");
+      Register_Routine
+        (T, Decoder_Components_Honor_Boundaries'Access,
+         "lzw.decoder_component_boundaries");
    end Register_Tests;
+
+   procedure Decoder_Components_Honor_Boundaries
+     (T : in out AUnit.Test_Cases.Test_Case'Class)
+   is
+      pragma Unreferenced (T);
+      --  One sub-block containing the clear code (4) in a three-bit stream.
+      Input : aliased constant Giflib.Streams.Byte_Array := [1, 4, 0];
+      Source : Giflib.Streams.Memory_Source (Input'Access);
+      Blocks_Reader : Giflib.Internal.Blocks.Sub_Block_Reader;
+      Reader : Giflib.Internal.LZW_Decoder_Reader.Code_Reader;
+      Work : Giflib.Internal.Work_Budgets.Meter (100);
+      Output : Giflib.Streams.Byte_Array (1 .. 1) := [0];
+      Position : Natural := 0;
+      Code : Giflib.Internal.LZW_Arithmetic.Code_Value;
+      Outcome : Giflib.Results.Result;
+      Dictionary : Giflib.Internal.LZW_Decoder_Dictionary.Dictionary;
+   begin
+      Assert
+        (not Giflib.Internal.LZW_Decoder_Dictionary.Is_Initialized
+           (Dictionary),
+         "decoder dictionary unexpectedly started initialized");
+      Giflib.Internal.LZW_Decoder_Dictionary.Reset (Dictionary, 6);
+      Giflib.Internal.LZW_Decoder_Dictionary.Set_Entry
+        (Dictionary, 6, 0, 1);
+      Assert
+        (Giflib.Internal.LZW_Decoder_Dictionary.Is_Defined (Dictionary, 6)
+         and then Giflib.Internal.LZW_Decoder_Dictionary.Prefix_At
+           (Dictionary, 6) = 0
+         and then Giflib.Internal.LZW_Decoder_Dictionary.Suffix_At
+           (Dictionary, 6) = 1,
+         "decoder dictionary did not own its definition boundary");
+      Giflib.Streams.Open (Source);
+      Giflib.Internal.Blocks.Initialize
+        (Blocks_Reader, 100, Giflib.Compressed_Byte_Limit,
+         Giflib.Image_Data_Block);
+      Outcome := Giflib.Internal.LZW_Decoder_Reader.Next_Code
+        (Reader, Source, Blocks_Reader, Work,
+         (Code_Width => 3, Frame => 2,
+          Output_Length => Output'Length,
+          Output_Position => Position),
+         Code);
+      Assert
+        (Giflib.Results.Succeeded (Outcome)
+         and then Code = 4
+         and then Giflib.Internal.LZW_Decoder_Reader.Ordinal (Reader) = 1,
+         "decoder reader lost its code or ordinal boundary");
+
+      Outcome := Giflib.Internal.LZW_Decoder_Output.Emit
+        (Source, Output, Position, 1, Work,
+         (Code_Ordinal =>
+            Giflib.Internal.LZW_Decoder_Reader.Ordinal (Reader),
+          Maximum_Index => 1,
+          Layout => Giflib.Internal.Interlacing.Sequential_Layout,
+          Code_Width => 3,
+          Frame => 2));
+      Assert
+        (Giflib.Results.Succeeded (Outcome)
+         and then Position = 1
+         and then Output = [1],
+         "decoder output did not place a valid literal");
+
+      Outcome := Giflib.Internal.LZW_Decoder_Output.Emit
+        (Source, Output, Position, 0, Work,
+         (Code_Ordinal =>
+            Giflib.Internal.LZW_Decoder_Reader.Ordinal (Reader),
+          Maximum_Index => 1,
+          Layout => Giflib.Internal.Interlacing.Sequential_Layout,
+          Code_Width => 3,
+          Frame => 2));
+      Assert
+        (Outcome.First_Error.Code = Giflib.Errors.LZW_Output_Size_Mismatch,
+         "decoder output accepted a literal beyond its target");
+   end Decoder_Components_Honor_Boundaries;
 
    procedure Compressed_Input_Is_Buffered
      (T : in out AUnit.Test_Cases.Test_Case'Class)
@@ -191,7 +275,7 @@ package body Giflib.Testing.Test_LZW is
         Literal_Stream (Item_Count);
       Source : Counting_Source (Input'Access);
       Reader : Giflib.Internal.Blocks.Sub_Block_Reader;
-      Context : Giflib.Internal.LZW.Workspace;
+      Context : Giflib.Internal.LZW.Testing.Workspace;
       Output : Giflib.Streams.Byte_Array (1 .. Item_Count);
       Count : Giflib.Byte_Count;
       Outcome : Giflib.Results.Result;
@@ -202,7 +286,7 @@ package body Giflib.Testing.Test_LZW is
          Giflib.Byte_Count (Input'Length),
          Giflib.Compressed_Byte_Limit,
          Giflib.Image_Data_Block);
-      Outcome := Giflib.Internal.LZW.Decode
+      Outcome := Giflib.Internal.LZW.Testing.Decode
         (Context, Source, Reader, 2, Output, Count, 100_000);
       Assert (Giflib.Results.Succeeded (Outcome),
               "buffered LZW fixture failed");
@@ -249,7 +333,7 @@ package body Giflib.Testing.Test_LZW is
       Source : Giflib.Streams.Memory_Source (Basic'Access);
       Repeated_Source : Giflib.Streams.Memory_Source (Repeated'Access);
       Reader : Giflib.Internal.Blocks.Sub_Block_Reader;
-      Context : Giflib.Internal.LZW.Workspace;
+      Context : Giflib.Internal.LZW.Testing.Workspace;
       Output : Giflib.Streams.Byte_Array (1 .. 2);
       Count : Giflib.Byte_Count;
       Outcome : Giflib.Results.Result;
@@ -257,7 +341,7 @@ package body Giflib.Testing.Test_LZW is
       Giflib.Streams.Open (Source, Max_Transfer => 1);
       Giflib.Internal.Blocks.Initialize
         (Reader, 100, Giflib.Compressed_Byte_Limit, Giflib.Image_Data_Block);
-      Outcome := Giflib.Internal.LZW.Decode
+      Outcome := Giflib.Internal.LZW.Testing.Decode
         (Context, Source, Reader, 2, Output, Count, 100);
       Assert (Giflib.Results.Succeeded (Outcome), "basic LZW stream failed");
       Assert (Count = 2 and then Output = [0, 1], "basic LZW output is wrong");
@@ -265,7 +349,7 @@ package body Giflib.Testing.Test_LZW is
       Giflib.Streams.Open (Repeated_Source);
       Giflib.Internal.Blocks.Initialize
         (Reader, 100, Giflib.Compressed_Byte_Limit, Giflib.Image_Data_Block);
-      Outcome := Giflib.Internal.LZW.Decode
+      Outcome := Giflib.Internal.LZW.Testing.Decode
         (Context, Repeated_Source, Reader, 2, Output (1 .. 1), Count, 100);
       Assert (Giflib.Results.Succeeded (Outcome), "repeated clear codes failed");
       Assert (Count = 1 and then Output (1) = 1, "repeated-clear output is wrong");
@@ -278,7 +362,7 @@ package body Giflib.Testing.Test_LZW is
       Source : Giflib.Streams.Memory_Source (KwKwK'Access);
       Wider_Source : Giflib.Streams.Memory_Source (Wider'Access);
       Reader : Giflib.Internal.Blocks.Sub_Block_Reader;
-      Context : Giflib.Internal.LZW.Workspace;
+      Context : Giflib.Internal.LZW.Testing.Workspace;
       Output : Giflib.Streams.Byte_Array (1 .. 4);
       Count : Giflib.Byte_Count;
       Outcome : Giflib.Results.Result;
@@ -286,7 +370,7 @@ package body Giflib.Testing.Test_LZW is
       Giflib.Streams.Open (Source);
       Giflib.Internal.Blocks.Initialize
         (Reader, 100, Giflib.Compressed_Byte_Limit, Giflib.Image_Data_Block);
-      Outcome := Giflib.Internal.LZW.Decode
+      Outcome := Giflib.Internal.LZW.Testing.Decode
         (Context, Source, Reader, 2, Output (1 .. 3), Count, 100);
       Assert (Giflib.Results.Succeeded (Outcome) and then Output (1 .. 3) = [0, 0, 0],
               "KwKwK sequence failed");
@@ -294,7 +378,7 @@ package body Giflib.Testing.Test_LZW is
       Giflib.Streams.Open (Wider_Source);
       Giflib.Internal.Blocks.Initialize
         (Reader, 100, Giflib.Compressed_Byte_Limit, Giflib.Image_Data_Block);
-      Outcome := Giflib.Internal.LZW.Decode
+      Outcome := Giflib.Internal.LZW.Testing.Decode
         (Context, Wider_Source, Reader, 2, Output, Count, 100);
       Assert (Giflib.Results.Succeeded (Outcome) and then Output = [0, 1, 2, 3],
               "code-width transition failed");
@@ -306,7 +390,7 @@ package body Giflib.Testing.Test_LZW is
       Input : aliased constant Giflib.Streams.Byte_Array := Literal_Stream (Item_Count);
       Source : Giflib.Streams.Memory_Source (Input'Access);
       Reader : Giflib.Internal.Blocks.Sub_Block_Reader;
-      Context : Giflib.Internal.LZW.Workspace;
+      Context : Giflib.Internal.LZW.Testing.Workspace;
       Output : Giflib.Streams.Byte_Array (1 .. Item_Count);
       Count : Giflib.Byte_Count;
       Outcome : Giflib.Results.Result;
@@ -314,7 +398,7 @@ package body Giflib.Testing.Test_LZW is
       Giflib.Streams.Open (Source, Max_Transfer => 3);
       Giflib.Internal.Blocks.Initialize
         (Reader, Giflib.Byte_Count (Input'Length), Giflib.Compressed_Byte_Limit, Giflib.Image_Data_Block);
-      Outcome := Giflib.Internal.LZW.Decode
+      Outcome := Giflib.Internal.LZW.Testing.Decode
         (Context, Source, Reader, 2, Output, Count, 100_000);
       Assert (Giflib.Results.Succeeded (Outcome), "full 12-bit dictionary stream failed");
       Assert (Count = Giflib.Byte_Count (Item_Count), "dictionary-full output count is wrong");
@@ -337,7 +421,7 @@ package body Giflib.Testing.Test_LZW is
       No_Clear_Source : Giflib.Streams.Memory_Source (No_Initial_Clear'Access);
       No_End_Source : Giflib.Streams.Memory_Source (No_End'Access);
       Reader : Giflib.Internal.Blocks.Sub_Block_Reader;
-      Context : Giflib.Internal.LZW.Workspace;
+      Context : Giflib.Internal.LZW.Testing.Workspace;
       Output : Giflib.Streams.Byte_Array (1 .. 7);
       Count : Giflib.Byte_Count;
       Outcome : Giflib.Results.Result;
@@ -350,25 +434,25 @@ package body Giflib.Testing.Test_LZW is
       end Start;
    begin
       Start (Source);
-      Outcome := Giflib.Internal.LZW.Decode
+      Outcome := Giflib.Internal.LZW.Testing.Decode
         (Context, Source, Reader, 2, Output (1 .. 3), Count, 100);
       Assert (Outcome.First_Error.Code = Giflib.Errors.LZW_Invalid_Code,
               "forward dictionary reference was accepted");
 
       Start (Early_Source);
-      Outcome := Giflib.Internal.LZW.Decode
+      Outcome := Giflib.Internal.LZW.Testing.Decode
         (Context, Early_Source, Reader, 2, Output (1 .. 2), Count, 100);
       Assert (Outcome.First_Error.Code = Giflib.Errors.LZW_Output_Size_Mismatch,
               "early end code was accepted");
 
       Start (Excess_Source);
-      Outcome := Giflib.Internal.LZW.Decode
+      Outcome := Giflib.Internal.LZW.Testing.Decode
         (Context, Excess_Source, Reader, 2, Output (1 .. 1), Count, 100);
       Assert (Outcome.First_Error.Code = Giflib.Errors.LZW_Output_Size_Mismatch,
               "excess output was accepted");
 
       Start (No_Clear_Source);
-      Outcome := Giflib.Internal.LZW.Decode
+      Outcome := Giflib.Internal.LZW.Testing.Decode
         (Context, No_Clear_Source, Reader, 2, Output (1 .. 1), Count, 100);
       Assert (Outcome.First_Error.Code = Giflib.Errors.LZW_Invalid_Code,
               "stream without an initial clear code was accepted");
@@ -379,7 +463,7 @@ package body Giflib.Testing.Test_LZW is
          "missing-initial-clear diagnostic context is wrong");
 
       Start (No_End_Source);
-      Outcome := Giflib.Internal.LZW.Decode
+      Outcome := Giflib.Internal.LZW.Testing.Decode
         (Context, No_End_Source, Reader, 2, Output, Count, 1_000);
       Assert (Outcome.First_Error.Code = Giflib.Errors.LZW_Missing_End_Code,
               "missing end code was accepted");
@@ -390,7 +474,7 @@ package body Giflib.Testing.Test_LZW is
       Input : aliased constant Giflib.Streams.Byte_Array := Pack ([4, 0, 1, 5], [3, 3, 3, 3]);
       Source : Giflib.Streams.Memory_Source (Input'Access);
       Reader : Giflib.Internal.Blocks.Sub_Block_Reader;
-      Context : Giflib.Internal.LZW.Workspace;
+      Context : Giflib.Internal.LZW.Testing.Workspace;
       Output : Giflib.Streams.Byte_Array (1 .. 2);
       Count : Giflib.Byte_Count;
       Outcome : Giflib.Results.Result;
@@ -398,7 +482,7 @@ package body Giflib.Testing.Test_LZW is
       Giflib.Streams.Open (Source);
       Giflib.Internal.Blocks.Initialize
         (Reader, 100, Giflib.Compressed_Byte_Limit, Giflib.Image_Data_Block);
-      Outcome := Giflib.Internal.LZW.Decode
+      Outcome := Giflib.Internal.LZW.Testing.Decode
         (Context, Source, Reader, 1, Output, Count, 100);
       Assert (Outcome.First_Error.Code = Giflib.Errors.LZW_Invalid_Minimum_Code_Size,
               "invalid minimum code size was accepted");
@@ -406,7 +490,7 @@ package body Giflib.Testing.Test_LZW is
       Giflib.Streams.Open (Source);
       Giflib.Internal.Blocks.Initialize
         (Reader, 100, Giflib.Compressed_Byte_Limit, Giflib.Image_Data_Block);
-      Outcome := Giflib.Internal.LZW.Decode
+      Outcome := Giflib.Internal.LZW.Testing.Decode
         (Context, Source, Reader, 2, Output, Count, 1);
       Assert (Outcome.First_Error.Code = Giflib.Errors.Limit_Exceeded,
               "LZW work limit was ignored");
@@ -417,7 +501,7 @@ package body Giflib.Testing.Test_LZW is
    procedure Decodes_All_Minimum_Code_Sizes (T : in out AUnit.Test_Cases.Test_Case'Class) is
       pragma Unreferenced (T);
       Reader : Giflib.Internal.Blocks.Sub_Block_Reader;
-      Context : Giflib.Internal.LZW.Workspace;
+      Context : Giflib.Internal.LZW.Testing.Workspace;
       Output : Giflib.Streams.Byte_Array (1 .. 1);
       Count : Giflib.Byte_Count;
       Outcome : Giflib.Results.Result;
@@ -433,7 +517,7 @@ package body Giflib.Testing.Test_LZW is
             Giflib.Streams.Open (Source);
             Giflib.Internal.Blocks.Initialize
               (Reader, 100, Giflib.Compressed_Byte_Limit, Giflib.Image_Data_Block);
-            Outcome := Giflib.Internal.LZW.Decode
+            Outcome := Giflib.Internal.LZW.Testing.Decode
               (Context, Source, Reader, Giflib.Byte (Minimum), Output, Count, 100);
             Assert (Giflib.Results.Succeeded (Outcome)
                     and then Output (1) = Giflib.Byte (Clear - 1),

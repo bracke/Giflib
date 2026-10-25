@@ -1,13 +1,14 @@
 with Giflib.Decoding.Extensions;
+with Giflib.Decoding.Frame_Pipeline;
 with Giflib.Decoding.Resource_Management;
 with Giflib.Decoding.Session_Transitions;
 with Giflib.Internal.Decoder_Storage.Image_Operations;
 with Giflib.Internal.Decoder_Storage.Metadata_Operations;
-with Giflib.Internal.Blocks;
 with Giflib.Internal.Bytes;
 with Giflib.Internal.Diagnostics;
 with Giflib.Internal.Container;
 with Giflib.Internal.Geometry_Arithmetic;
+with Giflib.Internal.Image_Data;
 with Giflib.Internal.Pixel_Arithmetic;
 with Giflib.Decoding.State_Arithmetic;
 with Giflib.Internal.Stream_Arithmetic;
@@ -43,11 +44,8 @@ package body Giflib.Decoding is
       then
          Enriched.Context.Frame := Errors.Frame_At (Object.Frames_Seen);
       end if;
-      if Object.Diagnostic.Code = Errors.No_Error then
-         Object.Diagnostic := Enriched;
-      end if;
       Resource_Management.Release (Object);
-      Session_Transitions.Fail_Session (Object);
+      Session_Transitions.Fail_Session (Object, Enriched);
       return Results.Failure (Object.Diagnostic);
    end Fail;
 
@@ -118,24 +116,13 @@ package body Giflib.Decoding is
       Severity : Errors.Warning_Severity;
       Context : Errors.Diagnostic_Context := (others => <>))
    is
-      Capacity : constant Limits.Warning_Record_Limit :=
-        Object.Constraints.Max_Warning_Records;
       Enriched : Errors.Diagnostic_Context := Context;
    begin
       if Enriched.Source_Position.State = Errors.Position_Not_Checked then
          Enriched := Internal.Diagnostics.At_Source (Object.Input.all, Enriched);
       end if;
-      if Capacity = 0 then
-         return;
-      elsif Object.Stored_Warnings < Capacity then
-         Object.Stored_Warnings := Object.Stored_Warnings + 1;
-         Object.Warnings (Object.Stored_Warnings) :=
-           Errors.Make_Warning (Code, Severity, Enriched);
-      elsif Object.Warnings (Capacity).Code /= Errors.Warnings_Suppressed then
-         Object.Warnings (Capacity) :=
-           Errors.Make_Warning
-             (Errors.Warnings_Suppressed, Errors.Data_Loss, Enriched);
-      end if;
+      Session_Transitions.Record_Warning
+        (Object, Errors.Make_Warning (Code, Severity, Enriched));
    end Add_Warning;
 
    function Check_Trailing_Data (Object : in out Decoder) return Results.Result is
@@ -213,16 +200,17 @@ package body Giflib.Decoding is
       end if;
       Resource_Management.Release (Object);
       if not Internal.Decoder_Storage.Cleanup_Succeeded (Object.Resources) then
-         Object.Diagnostic := Errors.Make (Errors.Internal_Invariant_Failed);
-         Session_Transitions.Fail_Session (Object);
+         Session_Transitions.Fail_Session
+           (Object, Errors.Make (Errors.Internal_Invariant_Failed));
          return Results.Failure (Object.Diagnostic);
       end if;
       if not Input_Position (Object).Available then
-         Object.Diagnostic := Errors.Make
-           (Errors.Source_Read_Failed,
-            (Source_Position => (State => Errors.Position_Unavailable),
-             others => <>));
-         Session_Transitions.Fail_Session (Object);
+         Session_Transitions.Fail_Session
+           (Object,
+            Errors.Make
+              (Errors.Source_Read_Failed,
+               (Source_Position => (State => Errors.Position_Unavailable),
+                others => <>)));
          return Results.Failure (Object.Diagnostic);
       end if;
       Session_Transitions.Begin_Session (Object, Options, Constraints);
@@ -287,7 +275,7 @@ package body Giflib.Decoding is
    function Prepare_Frame
      (Object : in out Decoder) return Results.Result
    is
-      Prepared : Prepared_Frame renames Object.Pending_Frame;
+      Prepared : Prepared_Frame;
       Descriptor : Internal.Container.Image_Descriptor;
       Outcome : Results.Result;
    begin
@@ -341,6 +329,7 @@ package body Giflib.Decoding is
                     Actual => Byte_Count (Prepared.Control.Transparent_Index),
                     others => <>))));
       end if;
+      Session_Transitions.Stage_Frame (Object, Prepared);
       return Results.Success;
    end Prepare_Frame;
 
@@ -403,8 +392,8 @@ package body Giflib.Decoding is
       if State_Arithmetic.Can_Cancel (Object.Current_State) then
          Resource_Management.Release (Object);
          if not Internal.Decoder_Storage.Cleanup_Succeeded (Object.Resources) then
-            Session_Transitions.Fail_Session (Object);
-            Object.Diagnostic := Errors.Make (Errors.Internal_Invariant_Failed);
+            Session_Transitions.Fail_Session
+              (Object, Errors.Make (Errors.Internal_Invariant_Failed));
             return Results.Failure (Object.Diagnostic);
          end if;
          Session_Transitions.Cancel_Session (Object);
@@ -504,7 +493,8 @@ package body Giflib.Decoding is
       if not Internal.Decoder_Storage.Cleanup_Succeeded (Object.Resources)
         and then Object.Diagnostic.Code = Errors.No_Error
       then
-         Object.Diagnostic := Errors.Make (Errors.Internal_Invariant_Failed);
+         Session_Transitions.Record_Diagnostic
+           (Object, Errors.Make (Errors.Internal_Invariant_Failed));
       end if;
       Session_Transitions.Finalize_Session (Object);
    end Finalize;

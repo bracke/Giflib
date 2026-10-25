@@ -1,5 +1,6 @@
 with Giflib.Results;
 with Giflib.Streams;
+with Giflib.Internal.Interlacing;
 
 package Giflib.Internal.Encoder_Storage.Frame_Operations is
    pragma Preelaborate;
@@ -15,8 +16,8 @@ package Giflib.Internal.Encoder_Storage.Frame_Operations is
       Compressed_Bytes : out Byte_Count;
       Wire_Bytes : out Byte_Count;
       Maximum_Index : Byte := 255;
-      Interlace_Width : Natural := 0;
-      Interlace_Height : Natural := 0) return Results.Result;
+      Layout : Interlacing.Traversal_Layout :=
+        Interlacing.Sequential_Layout) return Results.Result;
 
    function Encode_Stored_LZW
      (Object : in out Resources;
@@ -29,6 +30,6 @@ package Giflib.Internal.Encoder_Storage.Frame_Operations is
       Compressed_Bytes : out Byte_Count;
       Wire_Bytes : out Byte_Count;
       Maximum_Index : Byte := 255;
-      Interlace_Width : Natural := 0;
-      Interlace_Height : Natural := 0) return Results.Result;
+      Layout : Interlacing.Traversal_Layout :=
+        Interlacing.Sequential_Layout) return Results.Result;
 end Giflib.Internal.Encoder_Storage.Frame_Operations;

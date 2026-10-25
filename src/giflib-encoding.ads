@@ -77,12 +77,20 @@ package Giflib.Encoding is
    type Encoder
      (Output : not null access Streams.Destination'Class)
       is limited private;
+   function State (Object : Encoder) return Encoder_State;
 
    function Initialize
      (Object : in out Encoder;
       Options : Encode_Options := Default_Options;
-      Constraints : Limits.Limit_Set := Limits.Default_Limits) return Results.Result;
-   function Define_Screen (Object : in out Encoder; Screen : Screen_Info) return Results.Result;
+      Constraints : Limits.Limit_Set := Limits.Default_Limits) return Results.Result
+     with Post =>
+       (if Results.Succeeded (Initialize'Result)
+        then State (Object) = Initialized);
+   function Define_Screen (Object : in out Encoder; Screen : Screen_Info)
+      return Results.Result
+     with Post =>
+       (if Results.Succeeded (Define_Screen'Result)
+        then State (Object) = Screen_Defined);
    function Set_Global_Palette
      (Object : in out Encoder;
       Palette : Palettes.Palette) return Results.Result;
@@ -93,16 +101,25 @@ package Giflib.Encoding is
      (Object : in out Encoder;
       Info : Frame_Info;
       Palette : Frame_Palette;
-      Pixels : Streams.Byte_Array) return Results.Result;
+      Pixels : Streams.Byte_Array) return Results.Result
+     with Post =>
+       (if Results.Succeeded (Add_Indexed_Frame'Result)
+        then State (Object) = Accepting_Frames);
    function Add_Extension
      (Object : in out Encoder;
       Descriptor : Extension_Descriptor;
-      Payload : Streams.Byte_Array) return Results.Result;
+      Payload : Streams.Byte_Array) return Results.Result
+     with Post =>
+       (if Results.Succeeded (Add_Extension'Result)
+        then State (Object) = Accepting_Frames);
    function Add_Extension_Exact
      (Object : in out Encoder;
       Descriptor : Extension_Descriptor;
       Payload : Streams.Byte_Array;
-      Chunk_Lengths : Chunk_Length_Array) return Results.Result;
+      Chunk_Lengths : Chunk_Length_Array) return Results.Result
+     with Post =>
+       (if Results.Succeeded (Add_Extension_Exact'Result)
+        then State (Object) = Accepting_Frames);
 
    --  Compatibility operations for decoded metadata.  Only Kind and Label are
    --  encoding inputs; the remaining observational fields are ignored.  Their
@@ -110,20 +127,35 @@ package Giflib.Encoding is
    function Add_Decoded_Extension
      (Object : in out Encoder;
       Info : Metadata.Extension_Info;
-      Payload : Streams.Byte_Array) return Results.Result;
+      Payload : Streams.Byte_Array) return Results.Result
+     with Post =>
+       (if Results.Succeeded (Add_Decoded_Extension'Result)
+        then State (Object) = Accepting_Frames);
    function Add_Decoded_Extension_Exact
      (Object : in out Encoder;
       Info : Metadata.Extension_Info;
       Payload : Streams.Byte_Array;
-      Chunk_Lengths : Chunk_Length_Array) return Results.Result;
+      Chunk_Lengths : Chunk_Length_Array) return Results.Result
+     with Post =>
+       (if Results.Succeeded (Add_Decoded_Extension_Exact'Result)
+        then State (Object) = Accepting_Frames);
    function Add_Truecolor_Frame
      (Object : in out Encoder;
       Info : Frame_Info;
       Source : Images.Image_View;
-      Options : Quantization.Quantize_Options := Quantization.Default_Options) return Results.Result;
-   function Finish (Object : in out Encoder) return Results.Result;
-   function Cancel (Object : in out Encoder) return Results.Result;
-   function State (Object : Encoder) return Encoder_State;
+      Options : Quantization.Quantize_Options := Quantization.Default_Options)
+      return Results.Result
+     with Post =>
+       (if Results.Succeeded (Add_Truecolor_Frame'Result)
+        then State (Object) = Accepting_Frames);
+   function Finish (Object : in out Encoder) return Results.Result
+     with Post =>
+       (if Results.Succeeded (Finish'Result)
+        then State (Object) = Completed);
+   function Cancel (Object : in out Encoder) return Results.Result
+     with Post =>
+       (if Results.Succeeded (Cancel'Result)
+        then State (Object) = Cancelled);
    function First_Error (Object : Encoder) return Errors.Error;
    procedure Finalize (Object : in out Encoder);
 

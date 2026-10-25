@@ -6,6 +6,8 @@ is
    use type Header_Info;
    use type Animations.Loop_Info;
    use type Errors.Error_Code;
+   use type Errors.Warning;
+   use type Errors.Warning_Code;
    use type Frames.Graphic_Control;
    use type Frames.Rectangle;
    use type Limits.Limit_Set;
@@ -45,8 +47,42 @@ is
           Post => Object.Current_State = Header_Ready
                   and then Object.Header_Data = Header;
 
-   procedure Fail_Session (Object : in out Decoder)
-     with Post => Object.Current_State = Failed;
+   procedure Fail_Session
+     (Object : in out Decoder;
+      Diagnostic : Errors.Error)
+     with Pre => Diagnostic.Code /= Errors.No_Error,
+          Post => Object.Current_State = Failed
+                  and then Object.Diagnostic.Code /= Errors.No_Error;
+
+   procedure Record_Diagnostic
+     (Object : in out Decoder;
+      Diagnostic : Errors.Error)
+     with Pre => Diagnostic.Code /= Errors.No_Error,
+          Post => Object.Diagnostic.Code /= Errors.No_Error;
+
+   procedure Record_Warning
+     (Object : in out Decoder;
+      Item : Errors.Warning)
+     with Pre => Object.Stored_Warnings
+                   <= Object.Constraints.Max_Warning_Records
+                 and then Object.Current_State in
+                   Header_Ready | Awaiting_Frame_Decision | Decoding_Frame
+                     | Completed,
+          Post => Object.Stored_Warnings =
+                    (if Object.Constraints.Max_Warning_Records = 0
+                     then Object.Stored_Warnings'Old
+                     else Limits.Warning_Record_Limit'Min
+                       (Object.Stored_Warnings'Old + 1,
+                        Object.Constraints.Max_Warning_Records))
+                  and then
+                    (if Object.Constraints.Max_Warning_Records = 0
+                     then True
+                     elsif Object.Stored_Warnings'Old <
+                       Object.Constraints.Max_Warning_Records
+                     then Object.Warnings (Object.Stored_Warnings) = Item
+                     else Object.Warnings
+                       (Object.Constraints.Max_Warning_Records).Code =
+                         Errors.Warnings_Suppressed);
 
    procedure Reset_Session (Object : in out Decoder)
      with Post => Object.Current_State = Uninitialized
@@ -61,44 +97,78 @@ is
           Post => Object.Current_State = Awaiting_Frame_Decision
                   and then Object.Has_Pending_Frame;
 
+   procedure Stage_Frame
+     (Object : in out Decoder;
+      Frame : Prepared_Frame)
+     with Pre => Object.Current_State = Decoding_Frame
+                 and then not Object.Has_Pending_Frame,
+          Post => Object.Pending_Frame = Frame;
+
    procedure Begin_Frame (Object : in out Decoder)
      with Pre => Object.Current_State = Awaiting_Frame_Decision,
           Post => Object.Current_State = Decoding_Frame;
 
    procedure Record_Extension (Object : in out Decoder)
-     with Pre => Object.Extensions_Seen < Natural'Last,
+     with Pre => Object.Current_State = Header_Ready
+                 and then Object.Extensions_Seen < Natural'Last,
           Post => Object.Extensions_Seen = Object.Extensions_Seen'Old + 1;
 
    procedure Set_Pending_Control
      (Object : in out Decoder;
       Control : Frames.Graphic_Control)
-     with Post => Object.Pending_Control = Control
+     with Pre => Object.Current_State = Header_Ready,
+          Post => Object.Pending_Control = Control
                   and then Object.Has_Pending_Control;
 
    procedure Clear_Pending_Control (Object : in out Decoder)
-     with Post => Object.Pending_Control = Frames.Default_Control
+     with Pre => Object.Current_State = Header_Ready,
+          Post => Object.Pending_Control = Frames.Default_Control
                   and then not Object.Has_Pending_Control;
 
    procedure Set_Loop
      (Object : in out Decoder;
       Looping : Animations.Loop_Info)
-     with Post => Object.Loop_Data = Looping;
-
-   procedure Record_Compressed_Bytes
-     (Object : in out Decoder;
-      Count : Byte_Count)
-     with Pre => Object.Total_Compressed_Bytes <= Byte_Count'Last - Count,
-          Post => Object.Total_Compressed_Bytes =
-                    Object.Total_Compressed_Bytes'Old + Count;
+     with Pre => Object.Current_State = Header_Ready,
+          Post => Object.Loop_Data = Looping;
 
    procedure Commit_Resource_Usage
      (Object : in out Decoder;
       Decoded_Pixels : Pixel_Count;
       Compressed_Bytes : Byte_Count)
-     with Pre => Decoded_Pixels >= Object.Total_Decoded_Pixels
+     with Pre => Object.Current_State = Decoding_Frame
+                 and then Decoded_Pixels >= Object.Total_Decoded_Pixels
                  and then Compressed_Bytes >= Object.Total_Compressed_Bytes,
           Post => Object.Total_Decoded_Pixels = Decoded_Pixels
                   and then Object.Total_Compressed_Bytes = Compressed_Bytes;
+
+   procedure Clear_Resource_State (Object : in out Decoder)
+     with Post => Object.Pending_Frame = Prepared_Frame'(others => <>)
+                  and then not Object.Has_Pending_Frame
+                  and then Object.Snapshot_Rectangle =
+                    Frames.Rectangle'(others => <>)
+                  and then Object.Previous_Rectangle =
+                    Frames.Rectangle'(others => <>)
+                  and then not Object.Has_Previous_Frame
+                  and then Object.Previous_Control = Frames.Default_Control;
+
+   procedure Clear_Previous_Frame (Object : in out Decoder)
+     with Pre => Object.Current_State = Decoding_Frame,
+          Post => not Object.Has_Previous_Frame;
+
+   procedure Commit_Snapshot
+     (Object : in out Decoder;
+      Rectangle : Frames.Rectangle)
+     with Pre => Object.Current_State = Decoding_Frame,
+          Post => Object.Snapshot_Rectangle = Rectangle;
+
+   procedure Commit_Composited_Frame
+     (Object : in out Decoder;
+      Rectangle : Frames.Rectangle;
+      Control : Frames.Graphic_Control)
+     with Pre => Object.Current_State = Decoding_Frame,
+          Post => Object.Previous_Rectangle = Rectangle
+                  and then Object.Previous_Control = Control
+                  and then Object.Has_Previous_Frame;
 
    procedure Complete_Stream (Object : in out Decoder)
      with Pre => Object.Current_State = Header_Ready,
@@ -117,6 +187,7 @@ is
                   and then not Object.Has_Pending_Frame
                   and then not Object.Has_Pending_Control
                   and then Object.Pending_Control = Frames.Default_Control
+                  and then Object.Pending_Frame = Prepared_Frame'(others => <>)
                   and then Object.Frames_Seen = Object.Frames_Seen'Old + 1;
 
    procedure Finalize_Session (Object : in out Decoder)

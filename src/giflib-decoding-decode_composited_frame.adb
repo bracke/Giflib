@@ -8,34 +8,15 @@ is
    Rectangle : Frames.Rectangle;
    Pixel_Bytes : Byte_Count;
    Outcome : Results.Result;
-   Decoded_Pixels : Pixel_Count := Object.Total_Decoded_Pixels;
-   Compressed_Bytes : Byte_Count := Object.Total_Compressed_Bytes;
 begin
-   if not State_Arithmetic.Can_Process_Frame (Object.Current_State)
-   then
-      return Invalid_Transition (Object);
-   elsif Object.Options.Mode /= Composited_RGBA then
-      return Results.Failure
-        (Errors.Make
-           (Errors.Unsupported_Feature,
-            Internal.Diagnostics.At_Source
-              (Object.Input.all,
-               (Frame => Errors.Frame_At (Object.Frames_Seen),
-                others => <>))));
-   elsif not Internal.Decoder_Storage.Canvas_Allocated (Object.Resources)
-   then
-      return Fail (Object, Errors.Make (Errors.Internal_Invariant_Failed));
-   elsif not Object.Has_Pending_Frame then
-      return Fail (Object, Errors.Make (Errors.Internal_Invariant_Failed));
-   end if;
-   Outcome := Validate_Frame_Output
+   Outcome := Frame_Pipeline.Start_Decode
      (Object,
+      Composited_RGBA,
       Byte_Count (Target'Length),
-      Internal.Decoder_Storage.Canvas_Length (Object.Resources),
       Info'Constrained,
       (if Info'Constrained
        then Info.Has_Local_Palette
-       else Prepared.Has_Local_Palette));
+       else False));
    if not Results.Succeeded (Outcome) then
       return Outcome;
    end if;
@@ -44,7 +25,6 @@ begin
    if not Results.Succeeded (Outcome) then
       return Fail (Object, Outcome.First_Error);
    end if;
-   Session_Transitions.Begin_Frame (Object);
    if Prepared.Control.Disposal > 3
      and then Object.Options.Strictness = Strict
    then
@@ -88,25 +68,9 @@ begin
    if not Results.Succeeded (Outcome) then
       return Fail (Object, Outcome.First_Error);
    end if;
-   Outcome := Resource_Management.Ensure_LZW_Workspace (Object);
+   Outcome := Frame_Pipeline.Decode_Scratch (Object, Pixel_Bytes);
    if not Results.Succeeded (Outcome) then
-      return Fail (Object, Outcome.First_Error);
-   end if;
-   Outcome := Internal.Decoder_Storage.Image_Operations.Decode_Frame_Scratch
-     (Object.Resources,
-      Object.Input.all,
-      Prepared.Width,
-      Prepared.Height,
-      Prepared.Interlaced,
-      Prepared.Palette,
-      Object.Constraints,
-      Decoded_Pixels, Compressed_Bytes,
-      Pixel_Bytes,
-      Object.Frames_Seen);
-   Session_Transitions.Commit_Resource_Usage
-     (Object, Decoded_Pixels, Compressed_Bytes);
-   if not Results.Succeeded (Outcome) then
-      return Fail (Object, Outcome.First_Error);
+      return Outcome;
    end if;
 
    Outcome := Internal.Decoder_Storage.Image_Operations.Overlay_Frame_Scratch
@@ -120,8 +84,7 @@ begin
    if not Results.Succeeded (Outcome) then
       return Fail (Object, Outcome.First_Error);
    end if;
-   Object.Previous_Rectangle := Rectangle;
-   Object.Previous_Control := Prepared.Control;
-   Object.Has_Previous_Frame := True;
+   Session_Transitions.Commit_Composited_Frame
+     (Object, Rectangle, Prepared.Control);
    return Complete_Frame (Object, Info);
 end Decode_Composited_Frame;

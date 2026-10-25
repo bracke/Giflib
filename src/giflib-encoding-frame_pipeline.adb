@@ -5,6 +5,7 @@ with Giflib.Internal.Container_Writer;
 with Giflib.Internal.Encoder_Storage.Frame_Operations;
 with Giflib.Internal.Encoding_Arithmetic;
 with Giflib.Internal.Geometry_Arithmetic;
+with Giflib.Internal.Interlacing;
 
 package body Giflib.Encoding.Frame_Pipeline is
    use type Frames.Graphic_Control;
@@ -150,10 +151,12 @@ package body Giflib.Encoding.Frame_Pipeline is
          Object.Constraints.Max_Output_Bytes - Object.Bytes_Written,
          Compressed, Wire_Bytes,
          Maximum_Index => Byte (Data.Effective.Length - 1),
-         Interlace_Width =>
-           (if Info.Interlaced then Natural (Info.Width) else 0),
-         Interlace_Height =>
-           (if Info.Interlaced then Natural (Info.Height) else 0));
+         Layout =>
+           (if Info.Interlaced
+            then (Is_Interlaced => True,
+                  Width => Natural (Info.Width),
+                  Height => Natural (Info.Height))
+            else Internal.Interlacing.Sequential_Layout));
       return Complete (Object, Outcome, Compressed, Wire_Bytes);
    end Add_Indexed;
 
@@ -191,10 +194,12 @@ package body Giflib.Encoding.Frame_Pipeline is
          Object.Constraints.Max_Output_Bytes - Object.Bytes_Written,
          Compressed, Wire_Bytes,
          Maximum_Index => Byte (Data.Effective.Length - 1),
-         Interlace_Width =>
-           (if Info.Interlaced then Natural (Info.Width) else 0),
-         Interlace_Height =>
-           (if Info.Interlaced then Natural (Info.Height) else 0));
+         Layout =>
+           (if Info.Interlaced
+            then (Is_Interlaced => True,
+                  Width => Natural (Info.Width),
+                  Height => Natural (Info.Height))
+            else Internal.Interlacing.Sequential_Layout));
       return Complete (Object, Outcome, Compressed, Wire_Bytes);
    end Add_Stored;
 end Giflib.Encoding.Frame_Pipeline;

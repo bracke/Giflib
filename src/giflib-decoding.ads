@@ -60,45 +60,76 @@ package Giflib.Decoding is
    type Decoder
      (Input : not null access Streams.Source'Class)
       is limited private;
+   function State (Object : Decoder) return Decoder_State;
 
    function Initialize
      (Object : in out Decoder;
       Options : Decode_Options := Default_Options;
-      Constraints : Limits.Limit_Set := Limits.Default_Limits) return Results.Result;
+      Constraints : Limits.Limit_Set := Limits.Default_Limits) return Results.Result
+     with Post =>
+       (if Results.Succeeded (Initialize'Result)
+        then State (Object) = Initialized);
 
    function Reset
      (Object : in out Decoder;
       Options : Decode_Options := Default_Options;
-      Constraints : Limits.Limit_Set := Limits.Default_Limits) return Results.Result;
+      Constraints : Limits.Limit_Set := Limits.Default_Limits) return Results.Result
+     with Post =>
+       (if Results.Succeeded (Reset'Result)
+        then State (Object) = Initialized);
 
    function Read_Header
      (Object : in out Decoder;
-      Header : out Header_Info) return Results.Result;
+      Header : out Header_Info) return Results.Result
+     with Post =>
+       (if Results.Succeeded (Read_Header'Result)
+        then State (Object) = Header_Ready);
 
    function Next_Event
      (Object : in out Decoder;
-      Event : out Decode_Event) return Results.Result;
+      Event : out Decode_Event) return Results.Result
+     with Post =>
+       (if Results.Succeeded (Next_Event'Result)
+        then State (Object) =
+          (case Event.Kind is
+              when Image_Event => Awaiting_Frame_Decision,
+              when Extension_Event => Header_Ready,
+              when End_Event => Completed));
 
    function Decode_Indexed_Frame
      (Object : in out Decoder;
       Target : out Streams.Byte_Array;
-      Info : out Frame_Info) return Results.Result;
+      Info : out Frame_Info) return Results.Result
+     with Post =>
+       (if Results.Succeeded (Decode_Indexed_Frame'Result)
+        then State (Object) = Header_Ready);
 
    --  Expands the frame rectangle (not the logical canvas) to row-major RGBA.
    --  Transparent pixels retain their palette RGB value with alpha zero.
    function Decode_Expanded_Frame
      (Object : in out Decoder;
       Target : out Streams.Byte_Array;
-      Info : out Frame_Info) return Results.Result;
+      Info : out Frame_Info) return Results.Result
+     with Post =>
+       (if Results.Succeeded (Decode_Expanded_Frame'Result)
+        then State (Object) = Header_Ready);
 
    function Decode_Composited_Frame
      (Object : in out Decoder;
       Target : out Streams.Byte_Array;
-      Info : out Frame_Info) return Results.Result;
+      Info : out Frame_Info) return Results.Result
+     with Post =>
+       (if Results.Succeeded (Decode_Composited_Frame'Result)
+        then State (Object) = Header_Ready);
 
-   function Skip_Frame (Object : in out Decoder) return Results.Result;
-   function Cancel (Object : in out Decoder) return Results.Result;
-   function State (Object : Decoder) return Decoder_State;
+   function Skip_Frame (Object : in out Decoder) return Results.Result
+     with Post =>
+       (if Results.Succeeded (Skip_Frame'Result)
+        then State (Object) = Header_Ready);
+   function Cancel (Object : in out Decoder) return Results.Result
+     with Post =>
+       (if Results.Succeeded (Cancel'Result)
+        then State (Object) = Cancelled);
    function First_Error (Object : Decoder) return Errors.Error;
    function Warning_Count (Object : Decoder) return Natural;
    function Warning_At
@@ -178,6 +209,16 @@ private
       Code : Errors.Warning_Code;
       Severity : Errors.Warning_Severity;
       Context : Errors.Diagnostic_Context := (others => <>));
+   function Fail
+     (Object : in out Decoder;
+      Item : Errors.Error) return Results.Result;
+   function Invalid_Transition (Object : Decoder) return Results.Result;
+   function Validate_Frame_Output
+     (Object : Decoder;
+      Target_Length : Byte_Count;
+      Expected_Length : Byte_Count;
+      Info_Is_Constrained : Boolean;
+      Info_Has_Local_Palette : Boolean) return Results.Result;
    function Input_Position
      (Object : Decoder) return Streams.Source_Position_Result;
 end Giflib.Decoding;

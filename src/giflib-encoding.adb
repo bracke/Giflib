@@ -37,11 +37,8 @@ package body Giflib.Encoding is
          Enriched.Context := Internal.Diagnostics.At_Destination
            (Object.Output.all, Enriched.Context);
       end if;
-      if Object.Diagnostic.Code = Errors.No_Error then
-         Object.Diagnostic := Enriched;
-      end if;
       Resource_Management.Release (Object);
-      Session_Transitions.Fail_Session (Object);
+      Session_Transitions.Fail_Session (Object, Enriched);
       return Results.Failure (Object.Diagnostic);
    end Fail;
 
@@ -205,8 +202,8 @@ package body Giflib.Encoding is
       end if;
       Resource_Management.Release (Object);
       if not Internal.Encoder_Storage.Cleanup_Succeeded (Object.Resources) then
-         Object.Diagnostic := Errors.Make (Errors.Internal_Invariant_Failed);
-         Session_Transitions.Fail_Session (Object);
+         Session_Transitions.Fail_Session
+           (Object, Errors.Make (Errors.Internal_Invariant_Failed));
          return Results.Failure (Object.Diagnostic);
       end if;
       Session_Transitions.Begin_Session (Object, Options, Constraints);
@@ -425,8 +422,8 @@ package body Giflib.Encoding is
          if Object.Current_State /= Cancelled then
             Resource_Management.Release (Object);
             if not Internal.Encoder_Storage.Cleanup_Succeeded (Object.Resources) then
-               Session_Transitions.Fail_Session (Object);
-               Object.Diagnostic := Errors.Make (Errors.Internal_Invariant_Failed);
+               Session_Transitions.Fail_Session
+                 (Object, Errors.Make (Errors.Internal_Invariant_Failed));
                return Results.Failure (Object.Diagnostic);
             end if;
             Session_Transitions.Cancel_Session (Object);
@@ -454,7 +451,8 @@ package body Giflib.Encoding is
       if not Internal.Encoder_Storage.Cleanup_Succeeded (Object.Resources)
         and then Object.Diagnostic.Code = Errors.No_Error
       then
-         Object.Diagnostic := Errors.Make (Errors.Internal_Invariant_Failed);
+         Session_Transitions.Record_Diagnostic
+           (Object, Errors.Make (Errors.Internal_Invariant_Failed));
       end if;
       Session_Transitions.Finalize_Session (Object);
    end Finalize;
