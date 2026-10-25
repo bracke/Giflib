@@ -7,9 +7,10 @@ with Giflib.Internal.Compositing;
 with Giflib.Internal.Container;
 with Giflib.Internal.Geometry_Arithmetic;
 with Giflib.Internal.Image_Data;
+with Giflib.Internal.Metadata_Store;
+with Giflib.Internal.Owned_Buffers;
 with Giflib.Internal.Pixel_Arithmetic;
 with Giflib.Decoding.State_Arithmetic;
-with Giflib.Internal.Session_Arithmetic;
 with Giflib.Internal.Stream_Arithmetic;
 with Giflib.Internal.Wire_Format;
 
@@ -18,7 +19,6 @@ package body Giflib.Decoding is
    use type Errors.Position_State;
    use type Errors.Warning_Code;
    use type Frames.Disposal_Method;
-   package Session_Arithmetic renames Internal.Session_Arithmetic;
 
    function Input_Position
      (Object : Decoder) return Streams.Source_Position_Result
@@ -48,7 +48,7 @@ package body Giflib.Decoding is
          Object.Diagnostic := Enriched;
       end if;
       Resource_Management.Release (Object);
-      Object.Current_State := Failed;
+      State_Arithmetic.Transition (Object.Current_State, Failed);
       return Results.Failure (Object.Diagnostic);
    end Fail;
 
@@ -119,8 +119,8 @@ package body Giflib.Decoding is
       Severity : Errors.Warning_Severity;
       Context : Errors.Diagnostic_Context := (others => <>))
    is
-      Capacity : constant Natural := Session_Arithmetic.Warning_Capacity
-        (Object.Constraints.Max_Warning_Records);
+      Capacity : constant Limits.Warning_Record_Limit :=
+        Object.Constraints.Max_Warning_Records;
       Enriched : Errors.Diagnostic_Context := Context;
    begin
       if Enriched.Source_Position.State = Errors.Position_Not_Checked then
@@ -222,7 +222,7 @@ package body Giflib.Decoding is
       Resource_Management.Release (Object);
       if Object.Resources.Cleanup_Failed then
          Object.Diagnostic := Errors.Make (Errors.Internal_Invariant_Failed);
-         Object.Current_State := Failed;
+         State_Arithmetic.Transition (Object.Current_State, Failed);
          return Results.Failure (Object.Diagnostic);
       end if;
       Object.Pending_Control := Frames.Default_Control;
@@ -236,10 +236,10 @@ package body Giflib.Decoding is
            (Errors.Source_Read_Failed,
             (Source_Position => (State => Errors.Position_Unavailable),
              others => <>));
-         Object.Current_State := Failed;
+         State_Arithmetic.Transition (Object.Current_State, Failed);
          return Results.Failure (Object.Diagnostic);
       end if;
-      Object.Current_State := Initialized;
+      State_Arithmetic.Transition (Object.Current_State, Initialized);
       return Results.Success;
    end Initialize;
 
@@ -249,7 +249,7 @@ package body Giflib.Decoding is
       Constraints : Limits.Limit_Set := Limits.Default_Limits) return Results.Result
    is
    begin
-      Object.Current_State := Uninitialized;
+      State_Arithmetic.Transition (Object.Current_State, Uninitialized);
       Object.Diagnostic := Errors.Make (Errors.No_Error);
       return Initialize (Object, Options, Constraints);
    end Reset;
@@ -288,7 +288,7 @@ package body Giflib.Decoding is
             return Fail (Object, Outcome.First_Error);
          end if;
       end if;
-      Object.Current_State := Header_Ready;
+      State_Arithmetic.Transition (Object.Current_State, Header_Ready);
       return Results.Success;
    end Read_Header;
 
@@ -357,7 +357,7 @@ package body Giflib.Decoding is
                    Expected => 1,
                    Actual => 0,
                    others => <>));
-               Object.Current_State := Completed;
+               State_Arithmetic.Transition (Object.Current_State, Completed);
                return Deliver_Event
                  (Object, Event, (Kind => End_Event, Offset => Position.Value));
             end if;
@@ -389,7 +389,7 @@ package body Giflib.Decoding is
                       Limit => Frame_Count_Limit,
                       others => <>)));
             end if;
-            Object.Current_State := Decoding_Frame;
+            State_Arithmetic.Transition (Object.Current_State, Decoding_Frame);
             Outcome := Prepare_Frame (Object);
             if not Results.Succeeded (Outcome) then
                return Fail (Object, Outcome.First_Error);
@@ -397,7 +397,8 @@ package body Giflib.Decoding is
             Object.Has_Pending_Frame := True;
             Pixels := Internal.Geometry_Arithmetic.Area
               (Object.Pending_Frame.Width, Object.Pending_Frame.Height);
-            Object.Current_State := Awaiting_Frame_Decision;
+            State_Arithmetic.Transition
+              (Object.Current_State, Awaiting_Frame_Decision);
             return Deliver_Event
               (Object,
                Event,
@@ -416,7 +417,7 @@ package body Giflib.Decoding is
             if not Results.Succeeded (Outcome) then
                return Fail (Object, Outcome.First_Error);
             end if;
-            Object.Current_State := Completed;
+            State_Arithmetic.Transition (Object.Current_State, Completed);
             return Deliver_Event
               (Object, Event, (Kind => End_Event, Offset => Marker_Offset));
          when Internal.Wire_Format.Extension_Introducer =>
@@ -540,7 +541,7 @@ package body Giflib.Decoding is
       Object.Has_Pending_Control := False;
       Object.Has_Pending_Frame := False;
       Object.Frames_Seen := Object.Frames_Seen + 1;
-      Object.Current_State := Header_Ready;
+      State_Arithmetic.Transition (Object.Current_State, Header_Ready);
       return Results.Success;
    end Complete_Frame;
 
@@ -569,11 +570,11 @@ package body Giflib.Decoding is
       if State_Arithmetic.Can_Cancel (Object.Current_State) then
          Resource_Management.Release (Object);
          if Object.Resources.Cleanup_Failed then
-            Object.Current_State := Failed;
+            State_Arithmetic.Transition (Object.Current_State, Failed);
             Object.Diagnostic := Errors.Make (Errors.Internal_Invariant_Failed);
             return Results.Failure (Object.Diagnostic);
          end if;
-         Object.Current_State := Cancelled;
+         State_Arithmetic.Transition (Object.Current_State, Cancelled);
          Object.Diagnostic := Errors.Make (Errors.Operation_Cancelled);
          return Results.Success;
       elsif Object.Current_State = Cancelled then
@@ -665,11 +666,6 @@ package body Giflib.Decoding is
         (Object.Resources.Metadata_Storage, Index, Chunk_Index, Target, Count);
    end Copy_Retained_Extension_Chunk;
 
-   overriding procedure Finalize (Object : in out Decoder_Resources) is
-   begin
-      Resource_Management.Release (Object);
-   end Finalize;
-
    procedure Finalize (Object : in out Decoder) is
    begin
       Resource_Management.Release (Object);
@@ -687,6 +683,6 @@ package body Giflib.Decoding is
       Object.Has_Pending_Control := False;
       Object.Loop_Data := Animations.No_Loop;
       Object.Stored_Warnings := 0;
-      Object.Current_State := Finalized;
+      State_Arithmetic.Transition (Object.Current_State, Finalized);
    end Finalize;
 end Giflib.Decoding;

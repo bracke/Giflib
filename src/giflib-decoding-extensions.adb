@@ -3,6 +3,7 @@ with Giflib.Internal.Bytes;
 with Giflib.Internal.Diagnostics;
 with Giflib.Internal.Extension_Arithmetic;
 with Giflib.Internal.Loop_Extensions;
+with Giflib.Internal.Metadata_Store;
 with Giflib.Internal.Metadata_Arithmetic;
 
 package body Giflib.Decoding.Extensions is

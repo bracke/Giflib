@@ -7,6 +7,8 @@ with Giflib.Internal.Encoding_Arithmetic;
 with Giflib.Encoding.State_Arithmetic;
 with Giflib.Internal.Geometry_Arithmetic;
 with Giflib.Internal.Loop_Extensions;
+with Giflib.Internal.LZW_Encoding;
+with Giflib.Internal.Owned_Buffers;
 with Giflib.Internal.Session_Arithmetic;
 with Giflib.Internal.Wire_Format;
 
@@ -20,11 +22,6 @@ package body Giflib.Encoding is
    package Encoding_Arithmetic renames Internal.Encoding_Arithmetic;
    package Geometry_Arithmetic renames Internal.Geometry_Arithmetic;
    package Session_Arithmetic renames Internal.Session_Arithmetic;
-
-   overriding procedure Finalize (Resources : in out Encoder_Resources) is
-   begin
-      Resource_Management.Release (Resources);
-   end Finalize;
 
    function Invalid_Transition (Object : Encoder) return Results.Result is
    begin
@@ -47,9 +44,36 @@ package body Giflib.Encoding is
          Object.Diagnostic := Enriched;
       end if;
       Resource_Management.Release (Object);
-      Object.Current_State := Failed;
+      State_Arithmetic.Transition (Object.Current_State, Failed);
       return Results.Failure (Object.Diagnostic);
    end Fail;
+
+   function Reject_Request
+     (Object : Encoder;
+      Item : Errors.Error) return Results.Result
+   is
+      Enriched : Errors.Error := Item;
+   begin
+      if Enriched.Context.Destination_Position.State =
+        Errors.Position_Not_Checked
+      then
+         Enriched.Context := Internal.Diagnostics.At_Destination
+           (Object.Output.all, Enriched.Context);
+      end if;
+      return Results.Failure (Enriched);
+   end Reject_Request;
+
+   function Reject_Frame_Request
+     (Object : Encoder;
+      Item : Errors.Error) return Results.Result
+   is
+      Enriched : Errors.Error := Item;
+   begin
+      if not Enriched.Context.Frame.Present then
+         Enriched.Context.Frame := Errors.Frame_At (Object.Frames_Written);
+      end if;
+      return Reject_Request (Object, Enriched);
+   end Reject_Frame_Request;
 
    function Fail_Frame
      (Object : in out Encoder;
@@ -246,7 +270,7 @@ package body Giflib.Encoding is
       Resource_Management.Release (Object);
       if Object.Resources.Cleanup_Failed then
          Object.Diagnostic := Errors.Make (Errors.Internal_Invariant_Failed);
-         Object.Current_State := Failed;
+         State_Arithmetic.Transition (Object.Current_State, Failed);
          return Results.Failure (Object.Diagnostic);
       end if;
       Object.Options := Options;
@@ -261,7 +285,7 @@ package body Giflib.Encoding is
       Object.Bytes_Written := 0;
       Object.Compressed_Bytes_Written := 0;
       Object.Diagnostic := Errors.Make (Errors.No_Error);
-      Object.Current_State := Initialized;
+      State_Arithmetic.Transition (Object.Current_State, Initialized);
       return Results.Success;
    end Initialize;
 
@@ -273,25 +297,25 @@ package body Giflib.Encoding is
       then
          return Invalid_Transition (Object);
       elsif Screen.Width > Object.Constraints.Max_Logical_Width then
-         return Fail
+         return Reject_Request
            (Object, Errors.Make (Errors.Limit_Exceeded,
                                  (Expected => Byte_Count (Object.Constraints.Max_Logical_Width),
                                   Actual => Byte_Count (Screen.Width),
                                   Limit => Logical_Width_Limit, others => <>)));
       elsif Screen.Height > Object.Constraints.Max_Logical_Height then
-         return Fail
+         return Reject_Request
            (Object, Errors.Make (Errors.Limit_Exceeded,
                                  (Expected => Byte_Count (Object.Constraints.Max_Logical_Height),
                                   Actual => Byte_Count (Screen.Height),
                                   Limit => Logical_Height_Limit, others => <>)));
       elsif Pixels > Byte_Count (Object.Constraints.Max_Canvas_Pixels) then
-         return Fail
+         return Reject_Request
            (Object, Errors.Make (Errors.Limit_Exceeded,
                                  (Expected => Byte_Count (Object.Constraints.Max_Canvas_Pixels),
                                   Actual => Pixels, Limit => Canvas_Pixel_Limit, others => <>)));
       end if;
       Object.Screen := Screen;
-      Object.Current_State := Screen_Defined;
+      State_Arithmetic.Transition (Object.Current_State, Screen_Defined);
       return Results.Success;
    end Define_Screen;
 
@@ -305,9 +329,11 @@ package body Giflib.Encoding is
       then
          return Invalid_Transition (Object);
       elsif Palette.Length < 2 then
-         return Fail (Object, Errors.Make (Errors.Missing_Color_Table));
+         return Reject_Request
+           (Object, Errors.Make (Errors.Missing_Color_Table));
       elsif not Palettes.Contains (Palette, Object.Screen.Background_Index) then
-         return Fail (Object, Errors.Make (Errors.Palette_Index_Out_Of_Range));
+         return Reject_Request
+           (Object, Errors.Make (Errors.Palette_Index_Out_Of_Range));
       end if;
       Object.Global_Palette := Palette;
       Object.Has_Global_Palette := True;
@@ -324,13 +350,15 @@ package body Giflib.Encoding is
       then
          return Invalid_Transition (Object);
       elsif Count > 65_535 then
-         return Fail (Object, Errors.Make (Errors.Integer_Overflow));
+         return Reject_Request
+           (Object, Errors.Make (Errors.Integer_Overflow));
       elsif Object.Options.Version = Force_GIF87a then
-         return Fail (Object, Errors.Make (Errors.Unsupported_Feature));
+         return Reject_Request
+           (Object, Errors.Make (Errors.Unsupported_Feature));
       elsif Object.Loop_Data.State = Animations.No_Loop_Extension
         and then not Has_Extension_Capacity (Object, 1)
       then
-         return Fail
+         return Reject_Request
            (Object,
             Errors.Make
               (Errors.Limit_Exceeded,
@@ -412,7 +440,8 @@ package body Giflib.Encoding is
       Conversion : constant Descriptor_Conversion := Descriptor_For (Info);
    begin
       if not Conversion.Supported then
-         return Fail (Object, Errors.Make (Errors.Unsupported_Feature));
+         return Reject_Request
+           (Object, Errors.Make (Errors.Unsupported_Feature));
       end if;
       return Add_Extension (Object, Conversion.Descriptor, Payload);
    end Add_Decoded_Extension;
@@ -426,7 +455,8 @@ package body Giflib.Encoding is
       Conversion : constant Descriptor_Conversion := Descriptor_For (Info);
    begin
       if not Conversion.Supported then
-         return Fail (Object, Errors.Make (Errors.Unsupported_Feature));
+         return Reject_Request
+           (Object, Errors.Make (Errors.Unsupported_Feature));
       end if;
       return Add_Extension_Exact
         (Object, Conversion.Descriptor, Payload, Chunk_Lengths);
@@ -462,7 +492,7 @@ package body Giflib.Encoding is
       if Errors.Is_Fatal (Flush_Error) then
          return Fail (Object, Flush_Error);
       end if;
-      Object.Current_State := Completed;
+      State_Arithmetic.Transition (Object.Current_State, Completed);
       return Results.Success;
    end Finish;
 
@@ -472,11 +502,11 @@ package body Giflib.Encoding is
          if Object.Current_State /= Cancelled then
             Resource_Management.Release (Object);
             if Object.Resources.Cleanup_Failed then
-               Object.Current_State := Failed;
+               State_Arithmetic.Transition (Object.Current_State, Failed);
                Object.Diagnostic := Errors.Make (Errors.Internal_Invariant_Failed);
                return Results.Failure (Object.Diagnostic);
             end if;
-            Object.Current_State := Cancelled;
+            State_Arithmetic.Transition (Object.Current_State, Cancelled);
             Object.Diagnostic := Errors.Make (Errors.Operation_Cancelled);
          end if;
          return Results.Success;
@@ -504,6 +534,6 @@ package body Giflib.Encoding is
       then
          Object.Diagnostic := Errors.Make (Errors.Internal_Invariant_Failed);
       end if;
-      Object.Current_State := Finalized;
+      State_Arithmetic.Transition (Object.Current_State, Finalized);
    end Finalize;
 end Giflib.Encoding;

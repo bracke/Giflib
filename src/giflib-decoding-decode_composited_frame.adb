@@ -41,7 +41,7 @@ begin
    if not Results.Succeeded (Outcome) then
       return Fail (Object, Outcome.First_Error);
    end if;
-   Object.Current_State := Decoding_Frame;
+   State_Arithmetic.Transition (Object.Current_State, Decoding_Frame);
    if Prepared.Control.Disposal > 3
      and then Object.Options.Strictness = Strict
    then

@@ -55,6 +55,7 @@ package Giflib.Internal.Ownership is
 
    function Storage_Bytes (Size_In_Bits : Natural) return Byte_Count;
    function Used (Budget : Byte_Budget) return Byte_Count;
+   function Healthy (Budget : Byte_Budget) return Boolean;
    function Attempted_Total
      (Budget : Byte_Budget;
       Amount : Byte_Count) return Byte_Count;
@@ -69,6 +70,11 @@ package Giflib.Internal.Ownership is
    --  Release never raises for a bookkeeping mismatch.  False leaves the
    --  ledger unchanged so resource owners can still deallocate their storage
    --  and retain a cleanup-failure diagnostic.
+   procedure Rollback
+     (Budget : in out Byte_Budget;
+      Amount : Byte_Count);
+   --  Used when a scope cannot return cleanup status. A bookkeeping mismatch
+   --  is retained in Healthy (Budget) and prevents later reservations.
 
    function Matches
      (Owner : Budget_Owner;
@@ -97,6 +103,7 @@ private
    type Byte_Budget is limited record
       Used_Bytes : Byte_Count := 0;
       Identity : Budget_Identity := Fresh_Identity;
+      Corrupted : Boolean := False;
    end record;
 
    type Budget_Owner is record

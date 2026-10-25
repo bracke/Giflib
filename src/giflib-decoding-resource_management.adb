@@ -2,6 +2,8 @@ with Giflib.Internal.Disposal;
 with Giflib.Internal.Diagnostics;
 with Giflib.Internal.Resource_Diagnostics;
 with Giflib.Internal.Geometry_Arithmetic;
+with Giflib.Internal.LZW;
+with Giflib.Internal.Owned_Buffers;
 with Giflib.Internal.Pixel_Arithmetic;
 with Giflib.Palettes;
 
@@ -10,37 +12,8 @@ package body Giflib.Decoding.Resource_Management is
    package Buffers renames Internal.Owned_Buffers;
 
    procedure Release (Resources : in out Decoder_Resources) is
-      Failed : Boolean := False;
-      function Release_Metadata return Boolean is
-        (Internal.Metadata_Store.Release
-           (Resources.Metadata_Storage, Resources.Allocation_Budget));
-      function Release_Canvas return Boolean is
-        (Buffers.Release (Resources.Canvas, Resources.Allocation_Budget));
-      function Release_Snapshot return Boolean is
-        (Buffers.Release (Resources.Snapshot, Resources.Allocation_Budget));
-      function Release_Frame_Scratch return Boolean is
-        (Buffers.Release
-           (Resources.Frame_Scratch, Resources.Allocation_Budget));
-      function Release_LZW return Boolean is
-        (Internal.LZW.Release
-           (Resources.LZW_Workspace, Resources.Allocation_Budget));
-      procedure Try_Metadata is new Internal.Ownership.Attempt_Release
-        (Release_Metadata);
-      procedure Try_Canvas is new Internal.Ownership.Attempt_Release
-        (Release_Canvas);
-      procedure Try_Snapshot is new Internal.Ownership.Attempt_Release
-        (Release_Snapshot);
-      procedure Try_Frame_Scratch is new Internal.Ownership.Attempt_Release
-        (Release_Frame_Scratch);
-      procedure Try_LZW is new Internal.Ownership.Attempt_Release
-        (Release_LZW);
    begin
-      Try_Metadata (Failed);
-      Try_Canvas (Failed);
-      Try_Snapshot (Failed);
-      Try_Frame_Scratch (Failed);
-      Try_LZW (Failed);
-      Resources.Cleanup_Failed := Resources.Cleanup_Failed or else Failed;
+      Internal.Decoder_Storage.Release (Resources);
    end Release;
 
    procedure Release (Object : in out Decoder) is

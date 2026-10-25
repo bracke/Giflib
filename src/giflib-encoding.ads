@@ -8,10 +8,8 @@ with Giflib.Palettes;
 with Giflib.Results;
 with Giflib.Streams;
 with Giflib.Quantization;
-private with Giflib.Internal.LZW_Encoding;
+private with Giflib.Internal.Encoder_Storage;
 private with Giflib.Internal.Ownership;
-private with Giflib.Internal.Owned_Buffers;
-private with Ada.Finalization;
 
 package Giflib.Encoding is
    pragma Preelaborate;
@@ -130,14 +128,7 @@ package Giflib.Encoding is
    procedure Finalize (Object : in out Encoder);
 
 private
-   type Encoder_Resources is new Ada.Finalization.Limited_Controlled with record
-      Truecolor_Pixels : Internal.Owned_Buffers.Handle;
-      Allocation_Budget : aliased Internal.Ownership.Byte_Budget;
-      Quantizer : Quantization.Workspace;
-      LZW_Workspace : Internal.LZW_Encoding.Workspace_Handle;
-      Cleanup_Failed : Boolean := False;
-   end record;
-   overriding procedure Finalize (Resources : in out Encoder_Resources);
+   subtype Encoder_Resources is Internal.Encoder_Storage.Resources;
 
    type Encoder
      (Output : not null access Streams.Destination'Class)
@@ -161,6 +152,12 @@ private
 
    function Fail
      (Object : in out Encoder;
+      Item : Errors.Error) return Results.Result;
+   function Reject_Request
+     (Object : Encoder;
+      Item : Errors.Error) return Results.Result;
+   function Reject_Frame_Request
+     (Object : Encoder;
       Item : Errors.Error) return Results.Result;
    function Invalid_Transition (Object : Encoder) return Results.Result;
    function Has_Extension_Capacity

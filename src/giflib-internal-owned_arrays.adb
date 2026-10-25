@@ -107,12 +107,7 @@ package body Giflib.Internal.Owned_Arrays is
          if Object.Pointer /= null then
             Old_Charge := Allocation_Bytes (Object.Pointer'Length);
             if not Ownership.Release (Budget, Old_Charge) then
-               declare
-                  Rolled_Back : constant Boolean :=
-                    Ownership.Release (Budget, New_Charge);
-               begin
-                  pragma Unreferenced (Rolled_Back);
-               end;
+               Ownership.Rollback (Budget, New_Charge);
                Free (New_Pointer);
                return
                  (Status => Ownership.Allocation_Owner_Error,

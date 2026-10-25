@@ -6,12 +6,9 @@ with Giflib.Metadata;
 with Giflib.Results;
 with Giflib.Streams;
 
-private with Giflib.Internal.Metadata_Store;
-private with Giflib.Internal.LZW;
+private with Giflib.Internal.Decoder_Storage;
 private with Giflib.Internal.Ownership;
-private with Giflib.Internal.Owned_Buffers;
 private with Giflib.Palettes;
-private with Ada.Finalization;
 
 package Giflib.Decoding is
    pragma Preelaborate;
@@ -144,17 +141,10 @@ private
       Control : Frames.Graphic_Control := Frames.Default_Control;
    end record;
 
-   type Warning_Array is array (Positive range 1 .. 256) of Errors.Warning;
-   type Decoder_Resources is new Ada.Finalization.Limited_Controlled with record
-      Metadata_Storage : Internal.Metadata_Store.Store;
-      Allocation_Budget : aliased Internal.Ownership.Byte_Budget;
-      Canvas : Internal.Owned_Buffers.Handle;
-      Snapshot : Internal.Owned_Buffers.Handle;
-      Frame_Scratch : Internal.Owned_Buffers.Handle;
-      LZW_Workspace : Internal.LZW.Workspace_Handle;
-      Cleanup_Failed : Boolean := False;
-   end record;
-   overriding procedure Finalize (Object : in out Decoder_Resources);
+   type Warning_Array is
+     array (Positive range 1 .. Limits.Maximum_Warning_Records)
+       of Errors.Warning;
+   subtype Decoder_Resources is Internal.Decoder_Storage.Resources;
 
    type Decoder
      (Input : not null access Streams.Source'Class)
@@ -178,7 +168,7 @@ private
       Previous_Control : Frames.Graphic_Control := Frames.Default_Control;
       Has_Previous_Frame : Boolean := False;
       Warnings : Warning_Array;
-      Stored_Warnings : Natural range 0 .. 256 := 0;
+      Stored_Warnings : Limits.Warning_Record_Limit := 0;
       Diagnostic : Errors.Error := Errors.Make (Errors.No_Error);
       Allocation_Fault : Internal.Ownership.Fault_State;
    end record;

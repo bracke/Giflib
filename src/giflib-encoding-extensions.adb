@@ -40,7 +40,7 @@ package body Giflib.Encoding.Extensions is
          return Fail (Object, Final_Outcome.First_Error);
       end if;
       Object.Extensions_Written := Object.Extensions_Written + 1;
-      Object.Current_State := Accepting_Frames;
+      State_Arithmetic.Transition (Object.Current_State, Accepting_Frames);
       return Results.Success;
    end Complete_Extension;
 
@@ -76,7 +76,7 @@ package body Giflib.Encoding.Extensions is
    end Write_Prefix;
 
    function Validate
-     (Object : in out Encoder;
+     (Object : Encoder;
       Descriptor : Extension_Descriptor;
       Payload : Streams.Byte_Array;
       Fixed_Length : out Natural) return Results.Result
@@ -92,13 +92,12 @@ package body Giflib.Encoding.Extensions is
       then
          return Invalid_Transition (Object);
       elsif Object.Options.Version = Force_GIF87a then
-         return Fail (Object, Errors.Make (Errors.Unsupported_Feature));
+         return Results.Failure (Errors.Make (Errors.Unsupported_Feature));
       elsif not Has_Extension_Capacity
         (Object, Additional_Extensions)
       then
-         return Fail
-           (Object,
-            Errors.Make
+         return Results.Failure
+           (Errors.Make
               (Errors.Limit_Exceeded,
                (Expected => Byte_Count (Object.Constraints.Max_Extensions),
                 Actual => Byte_Count (Object.Extensions_Written)
@@ -108,8 +107,8 @@ package body Giflib.Encoding.Extensions is
       elsif Byte_Count (Payload'Length)
         > Object.Constraints.Max_Per_Extension_Bytes
       then
-         return Fail
-           (Object, Errors.Make
+         return Results.Failure
+           (Errors.Make
               (Errors.Limit_Exceeded,
                (Expected => Object.Constraints.Max_Per_Extension_Bytes,
                 Actual => Byte_Count (Payload'Length),
@@ -125,11 +124,12 @@ package body Giflib.Encoding.Extensions is
          when Unknown_Extension =>
             if Metadata.Kind_Of (Descriptor.Label) /= Metadata.Unknown_Extension
             then
-               return Fail (Object, Errors.Make (Errors.Invalid_Extension));
+               return Results.Failure
+                 (Errors.Make (Errors.Invalid_Extension));
             end if;
       end case;
       if Payload'Length < Fixed_Length then
-         return Fail (Object, Errors.Make (Errors.Invalid_Extension));
+         return Results.Failure (Errors.Make (Errors.Invalid_Extension));
       end if;
       return Results.Success;
    end Validate;
@@ -146,7 +146,7 @@ package body Giflib.Encoding.Extensions is
    begin
       Outcome := Validate (Object, Descriptor, Payload, Fixed_Length);
       if not Results.Succeeded (Outcome) then
-         return Outcome;
+         return Reject_Request (Object, Outcome.First_Error);
       end if;
       Outcome := Write_Header (Object);
       if Results.Succeeded (Outcome) then
@@ -174,7 +174,7 @@ package body Giflib.Encoding.Extensions is
    begin
       Outcome := Validate (Object, Descriptor, Payload, Fixed_Length);
       if not Results.Succeeded (Outcome) then
-         return Outcome;
+         return Reject_Request (Object, Outcome.First_Error);
       end if;
       if Chunk_Lengths'Length > Payload'Length
         or else (Fixed_Length > 0
@@ -182,16 +182,19 @@ package body Giflib.Encoding.Extensions is
                            or else Chunk_Lengths (Chunk_Lengths'First)
                              /= Fixed_Length))
       then
-         return Fail (Object, Errors.Make (Errors.Invalid_Extension));
+         return Reject_Request
+           (Object, Errors.Make (Errors.Invalid_Extension));
       end if;
       for Length of Chunk_Lengths loop
          if Byte_Count (Length) > Byte_Count (Payload'Length) - Sum then
-            return Fail (Object, Errors.Make (Errors.Invalid_Extension));
+            return Reject_Request
+              (Object, Errors.Make (Errors.Invalid_Extension));
          end if;
          Sum := Sum + Byte_Count (Length);
       end loop;
       if Sum /= Byte_Count (Payload'Length) then
-         return Fail (Object, Errors.Make (Errors.Invalid_Extension));
+         return Reject_Request
+           (Object, Errors.Make (Errors.Invalid_Extension));
       end if;
       Outcome := Write_Header (Object);
       if Results.Succeeded (Outcome) then

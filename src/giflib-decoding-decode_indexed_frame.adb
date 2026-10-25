@@ -32,7 +32,7 @@ begin
    if not Results.Succeeded (Outcome) then
       return Outcome;
    end if;
-   Object.Current_State := Decoding_Frame;
+   State_Arithmetic.Transition (Object.Current_State, Decoding_Frame);
    Outcome := Resource_Management.Ensure_LZW_Workspace (Object);
    if not Results.Succeeded (Outcome) then
       return Fail (Object, Outcome.First_Error);

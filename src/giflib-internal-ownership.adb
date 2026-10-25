@@ -47,6 +47,11 @@ package body Giflib.Internal.Ownership is
       Reserved : Boolean;
    begin
       pragma Assert (not Ticket.Active);
+      if not Healthy (Ticket.Budget.all) then
+         return
+           (Status => Allocation_Owner_Error,
+            Attempted => Attempted);
+      end if;
       Try_Reserve (Ticket.Budget.all, Maximum, Amount, Reserved);
       if not Reserved then
          return (Status => Allocation_Limit, Attempted => Attempted);
@@ -115,11 +120,11 @@ package body Giflib.Internal.Ownership is
    end Cancel;
 
    overriding procedure Finalize (Ticket : in out Reservation) is
-      Released : Boolean;
    begin
       if Ticket.Active then
-         Released := Release (Ticket.Budget.all, Ticket.Amount);
-         pragma Unreferenced (Released);
+         --  Release records a sticky ledger fault when rollback is impossible;
+         --  the owning resource set observes it during explicit cleanup.
+         Rollback (Ticket.Budget.all, Ticket.Amount);
          Ticket.Active := False;
       end if;
    end Finalize;
@@ -131,6 +136,9 @@ package body Giflib.Internal.Ownership is
 
    function Used (Budget : Byte_Budget) return Byte_Count is
      (Budget.Used_Bytes);
+
+   function Healthy (Budget : Byte_Budget) return Boolean is
+     (not Budget.Corrupted);
 
    function Attempted_Total
      (Budget : Byte_Budget;
@@ -148,6 +156,10 @@ package body Giflib.Internal.Ownership is
       Charge : constant Budget_Arithmetic.Charge_Result :=
         Budget_Arithmetic.Charge (Budget.Used_Bytes, Maximum, Amount);
    begin
+      if Budget.Corrupted then
+         Accepted := False;
+         return;
+      end if;
       Accepted := Charge.Accepted;
       if Accepted then
          Budget.Used_Bytes := Charge.Total;
@@ -160,11 +172,24 @@ package body Giflib.Internal.Ownership is
    is
    begin
       if Amount > Budget.Used_Bytes then
+         Budget.Corrupted := True;
          return False;
       end if;
       Budget.Used_Bytes := Budget.Used_Bytes - Amount;
       return True;
    end Release;
+
+   procedure Rollback
+     (Budget : in out Byte_Budget;
+      Amount : Byte_Count)
+   is
+   begin
+      if Amount > Budget.Used_Bytes then
+         Budget.Corrupted := True;
+      else
+         Budget.Used_Bytes := Budget.Used_Bytes - Amount;
+      end if;
+   end Rollback;
 
    function Matches
      (Owner : Budget_Owner;

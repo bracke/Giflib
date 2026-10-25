@@ -44,6 +44,8 @@ library project Giflib is
       "Giflib.Internal",
       "Giflib.Internal.Blocks",
       "Giflib.Internal.Budget_Arithmetic",
+      "Giflib.Internal.Decoder_Storage",
+      "Giflib.Internal.Encoder_Storage",
       "Giflib.Internal.LZW",
       "Giflib.Internal.LZW_Arithmetic",
       "Giflib.Internal.LZW_Encoding",
@@ -57,6 +59,7 @@ library project Giflib is
       "Giflib.Internal.Quantization_Buffer_Arithmetic",
       "Giflib.Internal.Quantization_Dithering",
       "Giflib.Internal.Quantization_Palette",
+      "Giflib.Internal.Quantization_Storage",
       "Giflib.Internal.Work_Budgets");
    for Create_Missing_Dirs use "True";
 

@@ -20,9 +20,9 @@ begin
    end if;
    Outcome := Validate_Frame_Request (Object, Info);
    if not Results.Succeeded (Outcome) then
-      return Fail_Frame (Object, Outcome.First_Error);
+      return Reject_Frame_Request (Object, Outcome.First_Error);
    elsif Byte_Count (Pixels'Length) /= Required_Pixels then
-      return Fail_Frame
+      return Reject_Frame_Request
         (Object, Errors.Make
            (Errors.Buffer_Size_Mismatch,
             (Expected => Required_Pixels,
@@ -33,14 +33,16 @@ begin
    elsif Object.Has_Global_Palette then
       Effective := Object.Global_Palette;
    else
-      return Fail_Frame (Object, Errors.Make (Errors.Missing_Color_Table));
+      return Reject_Frame_Request
+        (Object, Errors.Make (Errors.Missing_Color_Table));
    end if;
    if Effective.Length < 2 then
-      return Fail_Frame (Object, Errors.Make (Errors.Missing_Color_Table));
+      return Reject_Frame_Request
+        (Object, Errors.Make (Errors.Missing_Color_Table));
    elsif Info.Control.Has_Transparency
      and then not Palettes.Contains (Effective, Info.Control.Transparent_Index)
    then
-      return Fail_Frame
+      return Reject_Frame_Request
         (Object, Errors.Make (Errors.Palette_Index_Out_Of_Range));
    end if;
    Outcome := Resource_Management.Ensure_LZW_Workspace (Object);
@@ -107,6 +109,6 @@ begin
       return Fail_Frame (Object, Outcome.First_Error);
    end if;
    Object.Frames_Written := Object.Frames_Written + 1;
-   Object.Current_State := Accepting_Frames;
+   State_Arithmetic.Transition (Object.Current_State, Accepting_Frames);
    return Results.Success;
 end Add_Indexed_Frame;

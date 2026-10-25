@@ -4,12 +4,8 @@ with Giflib.Palettes;
 with Giflib.Results;
 with Giflib.Streams;
 
-private with Giflib.Internal.Quantization_Dithering;
-private with Giflib.Internal.Quantization_Palette;
 private with Giflib.Internal.Ownership;
-private with Giflib.Internal.Owned_Arrays;
-private with Giflib.Internal.Owned_Objects;
-private with Ada.Finalization;
+private with Giflib.Internal.Quantization_Storage;
 
 package Giflib.Quantization is
    pragma Preelaborate;
@@ -85,38 +81,8 @@ package Giflib.Quantization is
    procedure Finalize (Context : in out Workspace);
 
 private
-   subtype Histogram_State is
-     Internal.Quantization_Palette.Histogram_State;
-   package Histogram_Ownership is new Internal.Owned_Objects (Histogram_State);
-   subtype Histogram_State_Access is Histogram_Ownership.Element_Access;
-
-   Nearest_Cache_Size : constant := 4_096;
-   type Nearest_Cache_Entry is record
-      Used : Boolean := False;
-      Key : Natural range 0 .. 16#FF_FF_FF# := 0;
-      Value : Palette_Index := 0;
-   end record;
-   type Nearest_Cache_Array is
-     array (Natural range 0 .. Nearest_Cache_Size - 1) of Nearest_Cache_Entry;
-   package Nearest_Cache_Ownership is new Internal.Owned_Objects
-     (Nearest_Cache_Array);
-   subtype Nearest_Cache_Access is Nearest_Cache_Ownership.Element_Access;
-
-   subtype Error_Array is Internal.Quantization_Dithering.Error_Array;
-   package Error_Ownership is new Internal.Owned_Arrays
-     (Natural, Long_Integer, Error_Array, 0);
-   subtype Error_Array_Access is Error_Ownership.Element_Array_Access;
-   type Workspace_Resources is new Ada.Finalization.Limited_Controlled with record
-      Histogram : Histogram_Ownership.Handle;
-      Nearest_Cache : Nearest_Cache_Ownership.Handle;
-      Errors : Error_Ownership.Handle;
-      Allocation_Budget : aliased Internal.Ownership.Byte_Budget;
-      Cleanup_Failed : Boolean := False;
-   end record;
-   overriding procedure Finalize (Resources : in out Workspace_Resources);
-
    type Workspace is limited record
-      Resources : Workspace_Resources;
+      Resources : Internal.Quantization_Storage.Resources;
       Allocation_Fault : aliased Internal.Ownership.Fault_State;
    end record;
 

@@ -1,5 +1,7 @@
 with Giflib.Internal.Budget_Arithmetic;
 with Giflib.Internal.Diagnostics;
+with Giflib.Internal.LZW_Encoding;
+with Giflib.Internal.Owned_Buffers;
 with Giflib.Internal.Resource_Diagnostics;
 
 package body Giflib.Encoding.Resource_Management is
@@ -8,29 +10,8 @@ package body Giflib.Encoding.Resource_Management is
    package Buffers renames Internal.Owned_Buffers;
 
    procedure Release (Resources : in out Encoder_Resources) is
-      Failed : Boolean := False;
-      function Release_Buffer return Boolean is
-        (Buffers.Release
-           (Resources.Truecolor_Pixels, Resources.Allocation_Budget));
-      function Release_LZW return Boolean is
-        (Internal.LZW_Encoding.Release
-           (Resources.LZW_Workspace, Resources.Allocation_Budget));
-      function Release_Quantizer return Boolean is
-      begin
-         Quantization.Finalize (Resources.Quantizer);
-         return Quantization.Cleanup_Succeeded (Resources.Quantizer);
-      end Release_Quantizer;
-      procedure Try_Buffer is new Internal.Ownership.Attempt_Release
-        (Release_Buffer);
-      procedure Try_LZW is new Internal.Ownership.Attempt_Release
-        (Release_LZW);
-      procedure Try_Quantizer is new Internal.Ownership.Attempt_Release
-        (Release_Quantizer);
    begin
-      Try_Buffer (Failed);
-      Try_LZW (Failed);
-      Try_Quantizer (Failed);
-      Resources.Cleanup_Failed := Resources.Cleanup_Failed or else Failed;
+      Internal.Encoder_Storage.Release (Resources);
    end Release;
 
    procedure Release (Object : in out Encoder) is

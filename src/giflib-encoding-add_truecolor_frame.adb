@@ -16,7 +16,7 @@ begin
    if not State_Arithmetic.Can_Accept_Data (Object.Current_State) then
       return Invalid_Transition (Object);
    elsif Source.Width /= Info.Width or else Source.Height /= Info.Height then
-      return Fail_Frame
+      return Reject_Frame_Request
         (Object, Errors.Make
            (Errors.Invalid_Dimensions,
             (Expected => Total,
@@ -25,19 +25,19 @@ begin
    end if;
    Outcome := Images.Validate (Source);
    if not Results.Succeeded (Outcome) then
-      return Fail_Frame (Object, Outcome.First_Error);
+      return Reject_Frame_Request (Object, Outcome.First_Error);
    end if;
    Outcome := Validate_Frame_Request (Object, Info);
    if not Results.Succeeded (Outcome) then
-      return Fail_Frame (Object, Outcome.First_Error);
+      return Reject_Frame_Request (Object, Outcome.First_Error);
    elsif Total > Object.Constraints.Max_Allocation_Bytes then
-      return Fail_Frame
+      return Reject_Frame_Request
         (Object, Errors.Make
            (Errors.Limit_Exceeded,
             (Expected => Object.Constraints.Max_Allocation_Bytes,
              Actual => Total, Limit => Allocation_Byte_Limit, others => <>)));
    elsif Total > Byte_Count (Natural'Last) then
-      return Fail_Frame
+      return Reject_Frame_Request
         (Object, Errors.Make
            (Errors.Integer_Overflow,
             (Expected => Byte_Count (Natural'Last), Actual => Total,
@@ -45,7 +45,7 @@ begin
    end if;
    if Object.Options.Truecolor_Palettes = Use_Existing_Global then
       if not Object.Has_Global_Palette then
-         return Fail_Frame
+         return Reject_Frame_Request
            (Object, Errors.Make (Errors.Missing_Color_Table));
       end if;
       Quantize_Options.Palette :=

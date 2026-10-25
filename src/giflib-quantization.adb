@@ -4,6 +4,8 @@ with Giflib.Internal.Work_Budgets;
 with Giflib.Internal.Geometry_Arithmetic;
 with Giflib.Internal.Quantization_Arithmetic;
 with Giflib.Internal.Quantization_Buffer_Arithmetic;
+with Giflib.Internal.Quantization_Dithering;
+with Giflib.Internal.Quantization_Palette;
 with Giflib.Internal.Quantization_Pixels;
 
 package body Giflib.Quantization is
@@ -15,6 +17,14 @@ package body Giflib.Quantization is
    package Dithering renames Internal.Quantization_Dithering;
    package Palette_Builder renames Internal.Quantization_Palette;
    package Pixels renames Internal.Quantization_Pixels;
+   package Storage renames Internal.Quantization_Storage;
+   package Histogram_Ownership renames Storage.Histogram_Ownership;
+   package Nearest_Cache_Ownership renames Storage.Nearest_Cache_Ownership;
+   package Error_Ownership renames Storage.Error_Ownership;
+   subtype Histogram_State_Access is Storage.Histogram_State_Access;
+   subtype Nearest_Cache_Access is Storage.Nearest_Cache_Access;
+   subtype Error_Array_Access is Storage.Error_Array_Access;
+   Nearest_Cache_Size : constant := Storage.Nearest_Cache_Size;
    subtype Histogram_Index is Palette_Builder.Histogram_Index;
 
    subtype Work_Tracker is Internal.Work_Budgets.Meter;
@@ -39,39 +49,9 @@ package body Giflib.Quantization is
    function Cleanup_Succeeded (Context : Workspace) return Boolean is
      (not Context.Resources.Cleanup_Failed);
 
-   procedure Release_All
-     (Resources : in out Workspace_Resources;
-      Budget : aliased in out Internal.Ownership.Byte_Budget)
-   is
-      Failed : Boolean := False;
-      function Release_Histogram return Boolean is
-        (Histogram_Ownership.Release (Resources.Histogram, Budget));
-      function Release_Nearest_Cache return Boolean is
-        (Nearest_Cache_Ownership.Release (Resources.Nearest_Cache, Budget));
-      function Release_Error_Buffer return Boolean is
-        (Error_Ownership.Release (Resources.Errors, Budget));
-      procedure Try_Histogram is new Internal.Ownership.Attempt_Release
-        (Release_Histogram);
-      procedure Try_Nearest_Cache is new Internal.Ownership.Attempt_Release
-        (Release_Nearest_Cache);
-      procedure Try_Error_Buffer is new Internal.Ownership.Attempt_Release
-        (Release_Error_Buffer);
-   begin
-      Try_Histogram (Failed);
-      Try_Nearest_Cache (Failed);
-      Try_Error_Buffer (Failed);
-      Resources.Cleanup_Failed := Resources.Cleanup_Failed or else Failed;
-   end Release_All;
-
-   overriding procedure Finalize (Resources : in out Workspace_Resources) is
-   begin
-      Release_All (Resources, Resources.Allocation_Budget);
-   end Finalize;
-
    procedure Finalize (Context : in out Workspace) is
    begin
-      Release_All
-        (Context.Resources, Context.Resources.Allocation_Budget);
+      Storage.Release (Context.Resources);
    end Finalize;
 
    function Allocation_Result

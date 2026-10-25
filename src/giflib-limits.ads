@@ -1,6 +1,10 @@
 package Giflib.Limits is
    pragma Preelaborate;
 
+   Maximum_Warning_Records : constant := 256;
+   subtype Warning_Record_Limit is
+     Natural range 0 .. Maximum_Warning_Records;
+
    type Limit_Set is record
       Max_Logical_Width : Image_Width := 16_384;
       Max_Logical_Height : Image_Height := 16_384;
@@ -18,7 +22,7 @@ package Giflib.Limits is
       Max_LZW_Work : Byte_Count := 2 ** 34;
       Max_Quantization_Work : Byte_Count := 2 ** 36;
       Max_Optimization_Work : Byte_Count := 2 ** 34;
-      Max_Warning_Records : Natural := 256;
+      Max_Warning_Records : Warning_Record_Limit := Maximum_Warning_Records;
       Max_Compositor_Snapshot_Bytes : Byte_Count := 1_073_741_824;
    end record;
 

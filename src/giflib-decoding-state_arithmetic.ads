@@ -1,6 +1,16 @@
 private package Giflib.Decoding.State_Arithmetic
   with Preelaborate, SPARK_Mode
 is
+   function Can_Transition
+     (State : Decoder_State;
+      Target : Decoder_State) return Boolean;
+
+   procedure Transition
+     (State : in out Decoder_State;
+      Target : Decoder_State)
+     with Pre => Can_Transition (State, Target),
+          Post => State = Target;
+
    function Can_Initialize (State : Decoder_State) return Boolean
      with Post =>
        Can_Initialize'Result = (State in Uninitialized | Finalized);
