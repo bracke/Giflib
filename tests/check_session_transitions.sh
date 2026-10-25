@@ -21,12 +21,16 @@ session_fields() {
         next
       }
       inside && /^[[:space:]]*end[[:space:]]+record[[:space:]]*;/ { exit }
-      inside && /^[[:space:]]*[[:alpha:]][[:alnum:]_]*[[:space:]]*:/ {
-        field = $0
-        sub(/^[[:space:]]*/, "", field)
-        sub(/[[:space:]]*:.*/, "", field)
-        if (!(field in omit)) {
-          fields = fields (fields == "" ? "" : "|") field
+      inside && /^[[:space:]]*[[:alpha:]][[:alnum:]_]*([[:space:]]*,[[:space:]]*[[:alpha:]][[:alnum:]_]*)*[[:space:]]*:/ {
+        declaration = $0
+        sub(/:.*/, "", declaration)
+        count = split(declaration, declared, ",")
+        for (item = 1; item <= count; item++) {
+          field = declared[item]
+          gsub(/[[:space:]]/, "", field)
+          if (!(field in omit)) {
+            fields = fields (fields == "" ? "" : "|") field
+          }
         }
       }
       END { print fields }
@@ -71,13 +75,28 @@ scan_transition_file() {
           statement = substr(statement, stop + 1)
           gsub(/[[:space:]]+/, " ", clause)
           write_pattern = "[[:alnum:]_]+[.](" fields ")" \
-                          "([[:space:]]*[(][^)]*[)])?[[:space:]]*:="
+                          "([.][[:alnum:]_]+|" \
+                          "[[:space:]]*[(][^)]*[)])*[[:space:]]*:="
           rename_pattern = "renames[[:space:]]+[[:alnum:]_]+[.](" \
                            fields ")([^[:alnum:]_]|$)"
           call_pattern = "State_Arithmetic[.](" operations ")" \
                          "[[:space:]]*[(]"
+          arithmetic_rename = "renames[[:space:]]+" \
+                              "([[:alnum:]_]+[.])*State_Arithmetic" \
+                              "([^[:alnum:]_]|$)"
+          field_call = "^[[:space:]]*[[:alnum:]_.]+[[:space:]]*[(]" \
+                       "[[:space:]]*[[:alnum:]_]+[.](" fields ")" \
+                       "([.][[:alnum:]_]+|" \
+                       "[[:space:]]*[(][^)]*[)])*" \
+                       "[[:space:]]*([,)]|$)"
+          call_clause = clause
+          sub(/^.* (begin|then|else|loop) /, "", call_clause)
+          helper_mutation = call_clause ~ field_call && call_clause !~ /:=/ &&
+                            call_clause !~ \
+                              /^[[:space:]]*Session_Transitions[.]/
           if (clause ~ write_pattern || clause ~ rename_pattern ||
-              clause ~ call_pattern) print file ":" clause ";"
+              clause ~ call_pattern || clause ~ arithmetic_rename ||
+              helper_mutation) print file ":" clause ";"
         }
       }
     ' "$source_file"
@@ -88,7 +107,7 @@ check_session() {
     record_type=$2
     owner=$3
     fields=$(session_fields "$root/src/giflib-$prefix.ads" "$record_type" \
-      'Resources|Allocation_Fault')
+      'Resources|Quantizer_Data|Allocation_Fault')
     operations=$(state_mutators "$root/src/giflib-$prefix-state_arithmetic.ads")
     if [ -z "$fields" ] || [ -z "$operations" ]; then
         echo "$prefix transition manifest is empty" >&2
@@ -107,8 +126,9 @@ check_session() {
 
 cat >"$probe_dir/probe.ads" <<'EOF'
 type Probe is limited record
-   Current_State : Integer;
+   Current_State, Other_State : Integer;
    Resources : Integer;
+   Quantizer_Data : Integer;
    New_Field : Integer;
    Allocation_Fault : Integer;
 end record;
@@ -120,15 +140,18 @@ function Observe (State : Integer) return Boolean;
 EOF
 cat >"$probe_dir/probe.adb" <<'EOF'
 Object.New_Field := 1;
+Object.Other_State.Component := 1;
 State_Arithmetic.Newly_Added (Object.Current_State);
+package SA renames State_Arithmetic;
+Mutate (Object.Current_State);
 EOF
 probe_fields=$(session_fields "$probe_dir/probe.ads" Probe \
-  'Resources|Allocation_Fault')
+  'Resources|Quantizer_Data|Allocation_Fault')
 probe_operations=$(state_mutators "$probe_dir/state.ads")
-if [ "$probe_fields" != 'Current_State|New_Field' ] ||
+if [ "$probe_fields" != 'Current_State|Other_State|New_Field' ] ||
    [ "$probe_operations" != 'Existing|Newly_Added' ] ||
    [ "$(scan_transition_file "$probe_dir/probe.adb" "$probe_fields" \
-        "$probe_operations" | wc -l)" -ne 2 ]; then
+        "$probe_operations" | wc -l)" -ne 5 ]; then
     echo "session transition checker self-test failed" >&2
     exit 1
 fi
