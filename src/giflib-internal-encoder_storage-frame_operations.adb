@@ -52,8 +52,14 @@ package body Giflib.Internal.Encoder_Storage.Frame_Operations is
          return Results.Failure
            (Errors.Make (Errors.Internal_Invariant_Failed));
       end if;
-      return Encode_LZW
-        (Object, Destination,
+      if not LZW_Allocated (Object) then
+         Compressed_Bytes := 0;
+         Wire_Bytes := 0;
+         return Results.Failure
+           (Errors.Make (Errors.Internal_Invariant_Failed));
+      end if;
+      return LZW_Encoding.Encode
+        (Object.LZW_Data, Destination,
          Owned_Buffers.Value (Object.Truecolor_Buffer).all
            (1 .. Natural (Pixel_Count)),
          Minimum_Code_Size, Max_Work, Max_Compressed_Bytes, Max_Wire_Bytes,
