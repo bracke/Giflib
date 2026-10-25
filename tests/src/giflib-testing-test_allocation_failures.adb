@@ -17,6 +17,8 @@ with Giflib.Internal.Owned_Arrays;
 with Giflib.Internal.Owned_Buffers;
 with Giflib.Internal.Owned_Objects;
 with Giflib.Internal.Owned_Vectors;
+with Giflib.Internal.Quantization_Storage;
+with Giflib.Internal.Quantization_Storage.Operations;
 with Giflib.Internal.Metadata_Store;
 with Giflib.Metadata;
 with Giflib.Palettes;
@@ -33,6 +35,7 @@ package body Giflib.Testing.Test_Allocation_Failures is
    use type Giflib.Errors.Error_Code;
    use type Giflib.Internal.Ownership_Arithmetic.Injection_State;
    use type Giflib.Internal.Ownership.Allocation_Status;
+   use type Giflib.Internal.Quantization_Storage.Operations.Operation_Status;
 
    type Test_Array is array (Natural range <>) of Integer;
    package Test_Array_Ownership is new Giflib.Internal.Owned_Arrays
@@ -58,6 +61,12 @@ package body Giflib.Testing.Test_Allocation_Failures is
    procedure Owned_Resources_Reject_Foreign_Ledgers
      (T : in out AUnit.Test_Cases.Test_Case'Class);
    procedure Owned_Array_Ranges_Are_Structured
+     (T : in out AUnit.Test_Cases.Test_Case'Class);
+   procedure Owned_Array_Growth_Is_Transactional
+     (T : in out AUnit.Test_Cases.Test_Case'Class);
+   procedure Owned_Vector_Ownership_Is_Exact
+     (T : in out AUnit.Test_Cases.Test_Case'Class);
+   procedure Workspace_Failures_Are_Structured
      (T : in out AUnit.Test_Cases.Test_Case'Class);
    procedure Metadata_Store_Rejects_Foreign_Ledgers
      (T : in out AUnit.Test_Cases.Test_Case'Class);
@@ -93,6 +102,15 @@ package body Giflib.Testing.Test_Allocation_Failures is
         (T, Owned_Array_Ranges_Are_Structured'Access,
          "allocation_failures.array_range");
       Register_Routine
+        (T, Owned_Array_Growth_Is_Transactional'Access,
+         "allocation_failures.array_growth");
+      Register_Routine
+        (T, Owned_Vector_Ownership_Is_Exact'Access,
+         "allocation_failures.vector_ownership");
+      Register_Routine
+        (T, Workspace_Failures_Are_Structured'Access,
+         "allocation_failures.workspace_status");
+      Register_Routine
         (T, Metadata_Store_Rejects_Foreign_Ledgers'Access,
          "allocation_failures.metadata_owner_identity");
    end Register_Tests;
@@ -114,6 +132,8 @@ package body Giflib.Testing.Test_Allocation_Failures is
       Work_Context : Giflib.Errors.Diagnostic_Context;
       Cleanup_Budget : aliased Giflib.Internal.Ownership.Byte_Budget;
       Cleanup_Failed : aliased Boolean := False;
+      Residual_Budget : aliased Giflib.Internal.Ownership.Byte_Budget;
+      Residual_Failed : aliased Boolean := False;
       function Raising_Release return Boolean is
       begin
          raise Program_Error;
@@ -215,6 +235,21 @@ package body Giflib.Testing.Test_Allocation_Failures is
       Assert
         (Cleanup_Failed,
          "scope-bound cleanup did not retain a release exception");
+      Giflib.Internal.Ownership.Try_Reserve
+        (Residual_Budget, 1, 1, Reserved);
+      declare
+         Guard : Giflib.Internal.Resource_Cleanup.Guard
+           (Residual_Budget'Access, Residual_Failed'Access);
+         pragma Unreferenced (Guard);
+      begin
+         null;
+      end;
+      Assert
+        (Reserved and then Residual_Failed,
+         "cleanup guard accepted a healthy ledger with residual ownership");
+      Assert
+        (Giflib.Internal.Ownership.Release (Residual_Budget, 1),
+         "residual-ledger test cleanup failed");
    end Ownership_Transitions_Are_Exact;
 
    procedure Owned_Array_Ranges_Are_Structured
@@ -226,9 +261,6 @@ package body Giflib.Testing.Test_Allocation_Failures is
       Fault : Giflib.Internal.Ownership.Fault_State;
       Outcome : Giflib.Internal.Ownership.Allocation_Outcome;
       Item : Giflib.Errors.Error;
-      Before : Giflib.Byte_Count;
-      Vector : Test_Vector.Handle;
-      Foreign_Budget : aliased Giflib.Internal.Ownership.Byte_Budget;
    begin
       Outcome := Test_Array_Ownership.Ensure
         (Object,
@@ -247,7 +279,18 @@ package body Giflib.Testing.Test_Allocation_Failures is
       Assert
         (Item.Code = Giflib.Errors.Integer_Overflow,
          "array range failure was translated incorrectly");
+   end Owned_Array_Ranges_Are_Structured;
 
+   procedure Owned_Array_Growth_Is_Transactional
+     (T : in out AUnit.Test_Cases.Test_Case'Class)
+   is
+      pragma Unreferenced (T);
+      Object : Test_Array_Ownership.Handle;
+      Budget : aliased Giflib.Internal.Ownership.Byte_Budget;
+      Fault : Giflib.Internal.Ownership.Fault_State;
+      Outcome : Giflib.Internal.Ownership.Allocation_Outcome;
+      Before : Giflib.Byte_Count;
+   begin
       Outcome := Test_Array_Ownership.Ensure
         (Object, Budget, Fault, First => 0, Last => 1, Maximum => 64);
       Assert
@@ -278,7 +321,18 @@ package body Giflib.Testing.Test_Allocation_Failures is
       Assert
         (Test_Array_Ownership.Release (Object, Budget),
          "owned-array initialized-capacity cleanup failed");
+   end Owned_Array_Growth_Is_Transactional;
 
+   procedure Owned_Vector_Ownership_Is_Exact
+     (T : in out AUnit.Test_Cases.Test_Case'Class)
+   is
+      pragma Unreferenced (T);
+      Budget : aliased Giflib.Internal.Ownership.Byte_Budget;
+      Foreign_Budget : aliased Giflib.Internal.Ownership.Byte_Budget;
+      Fault : Giflib.Internal.Ownership.Fault_State;
+      Outcome : Giflib.Internal.Ownership.Allocation_Outcome;
+      Vector : Test_Vector.Handle;
+   begin
       Outcome := Test_Vector.Ensure_Append
         (Vector, Budget, Fault, Maximum => 64);
       Assert
@@ -318,7 +372,41 @@ package body Giflib.Testing.Test_Allocation_Failures is
         (Test_Vector.Release (Vector, Budget)
          and then Test_Vector.Length (Vector) = 0,
          "owned vector cleanup did not reset logical length");
-   end Owned_Array_Ranges_Are_Structured;
+   end Owned_Vector_Ownership_Is_Exact;
+
+   procedure Workspace_Failures_Are_Structured
+     (T : in out AUnit.Test_Cases.Test_Case'Class)
+   is
+      pragma Unreferenced (T);
+      package Storage renames Giflib.Internal.Quantization_Storage;
+      package Operations renames Storage.Operations;
+      Object : Storage.Resources;
+      Fault : Giflib.Internal.Ownership.Fault_State;
+      Outcome : Giflib.Internal.Ownership.Allocation_Outcome;
+      Missing_Work : Giflib.Internal.Work_Budgets.Meter (100_000);
+      Exhausted_Work : Giflib.Internal.Work_Budgets.Meter (0);
+      Status : Operations.Operation_Status;
+   begin
+      Status := Operations.Reset_Histogram (Object, Missing_Work);
+      Assert
+        (Status = Operations.Operation_Invariant_Failure
+         and then not Giflib.Internal.Work_Budgets.Failed (Missing_Work),
+         "missing quantization storage was reported as work exhaustion");
+      Outcome := Storage.Ensure_Nearest_Cache
+        (Object, Fault, Giflib.Byte_Count'Last);
+      Assert
+        (Outcome.Status = Giflib.Internal.Ownership.Allocation_Ready,
+         "nearest-cache setup failed");
+      Status := Operations.Reset_Nearest_Cache (Object, Exhausted_Work);
+      Assert
+        (Status = Operations.Operation_Work_Limit
+         and then Giflib.Internal.Work_Budgets.Failed (Exhausted_Work),
+         "workspace work exhaustion was not recorded structurally");
+      Storage.Release (Object);
+      Assert
+        (Storage.Cleanup_Succeeded (Object),
+         "workspace status test cleanup failed");
+   end Workspace_Failures_Are_Structured;
 
    procedure Failure_Injection_Is_Object_Local
      (T : in out AUnit.Test_Cases.Test_Case'Class)
