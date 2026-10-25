@@ -7,6 +7,7 @@ function Quantize_With_Resources
    Options : Quantize_Options;
    Constraints : Limits.Limit_Set) return Results.Result
 is
+   use type Storage_Operations.Operation_Status;
    Pixel_Total : constant Byte_Count :=
      Internal.Geometry_Arithmetic.Area (Source.Width, Source.Height);
    Exact_Colors : Palettes.Color_Array := [others => (others => 0)];
@@ -31,6 +32,7 @@ is
    Pixel : Pixels.Source_Pixel;
    Found : Boolean;
    Bucket : Histogram_Index;
+   Status : Storage_Operations.Operation_Status;
 begin
    Outcome := Validate_Request
      (Context,
@@ -85,13 +87,16 @@ begin
       if not Results.Succeeded (Outcome) then
          return Outcome;
       end if;
-      if not Storage_Operations.Reset_Histogram
-        (Context.Resources, Tracker)
-      then
-         return Fail
-           (Giflib.Errors.Limit_Exceeded,
-            Internal.Resource_Diagnostics.With_Work_Limit
-              (Tracker, Quantization_Work_Limit));
+      Status := Storage_Operations.Reset_Histogram
+        (Context.Resources, Tracker);
+      if Status /= Storage_Operations.Operation_Ready then
+         return
+           (if Status = Storage_Operations.Operation_Work_Limit
+            then Fail
+              (Giflib.Errors.Limit_Exceeded,
+               Internal.Resource_Diagnostics.With_Work_Limit
+                 (Tracker, Quantization_Work_Limit))
+            else Fail (Giflib.Errors.Internal_Invariant_Failed));
       end if;
       for Y in 0 .. Natural (Source.Height) - 1 loop
          for X in 0 .. Natural (Source.Width) - 1 loop
@@ -113,8 +118,11 @@ begin
                Has_Transparency := True;
             else
                Bucket := Arithmetic.Histogram_Of (Pixel.Color);
-               Storage_Operations.Add_Histogram_Sample
+               Status := Storage_Operations.Add_Histogram_Sample
                  (Context.Resources, Bucket);
+               if Status /= Storage_Operations.Operation_Ready then
+                  return Fail (Giflib.Errors.Internal_Invariant_Failed);
+               end if;
                if not Exact_Overflow then
                   Found := False;
                   for I in 0 .. Exact_Count - 1 loop
