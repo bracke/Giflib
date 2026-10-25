@@ -23,7 +23,9 @@ usual spelling in documentation.
   status is derived from the single stored error so inconsistent status/error
   combinations are not representable.
 - `Giflib.Limits` provides caller-copyable safe defaults for every required
-  resource category.
+  resource category. Warning retention uses `Warning_Record_Limit`, from zero
+  through the public `Maximum_Warning_Records` bound (256), so an unsupported
+  warning capacity cannot be silently reduced.
 - `Giflib.Streams` defines forward-only limited interfaces and memory adapters.
 - `Giflib.Capabilities` is authoritative for implemented feature families.
 
@@ -69,6 +71,12 @@ entries match it. A caller wanting a generated global palette performs an
 explicit analysis pass with `Giflib.Quantization`, installs that palette, and
 then selects the existing-global strategy; no streaming API predicts colors in
 future frames.
+
+Encoder request preflight is non-destructive: invalid extension descriptors,
+palettes, frame geometry, image views, buffer sizes, and configured limits are
+reported before output and may be corrected and retried. Stream, allocation,
+compression, and other failures after processing begins make the session
+terminal and preserve its first fatal diagnostic.
 
 `Giflib.Optimization` is opt-in and conservative. It operates on equivalent-
 palette, opaque full-canvas indexed renderings and declines trimming/merging for

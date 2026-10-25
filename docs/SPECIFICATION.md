@@ -309,6 +309,13 @@ Finalize (Encoder);
 
 Required states: `Uninitialized`, `Initialized`, `Screen_Defined`, `Accepting_Frames`, `Completed`, `Cancelled`, `Failed`, `Finalized`. Once bytes are written to a nonseekable destination, error/cancel is not transactional; no promise to undo partial output. `Finish` writes the trailer and flushes; repeated successful `Finish` must not write duplicate trailers. `Finalize` frees resources without implicitly claiming successful completion. Output is either GIF89a by default or explicit GIF87a if all requested features are representable.
 
+Encoder request validation is completed before output or resource mutation.
+Caller-correctable descriptor, palette, geometry, image-view, buffer-size, and
+configured-limit failures reject only that request and leave the session state
+and first fatal diagnostic unchanged, so the caller may retry. A failure after
+wire output or resource processing begins aborts the session and preserves the
+first fatal diagnostic.
+
 `Frame_Palette` is discriminated by global or local selection. The global
 variant carries no palette value; the local variant carries the required
 palette. Encoder byte accounting includes every byte accepted by the
@@ -378,7 +385,7 @@ Offer `Discard_All`, `Parse_Known_Without_Retention`, `Retain_Selected`, `Retain
 
 ## 10. Resource limits and security
 
-`Giflib.Limits.Limit_Set` shall include at minimum: maximum logical width/height, maximum canvas pixels/bytes, maximum frames, maximum per-frame pixels, maximum total decoded frame pixels, maximum compressed bytes, maximum extension count, maximum retained metadata bytes, maximum per-extension bytes, maximum allocation bytes, maximum output bytes, maximum LZW work (e.g. output pixels + code operations), maximum retained warning records, and maximum compositor snapshot bytes. Reasonable safe defaults must be documented and caller-adjustable; limits of the wire format are not memory-allocation permissions.
+`Giflib.Limits.Limit_Set` shall include at minimum: maximum logical width/height, maximum canvas pixels/bytes, maximum frames, maximum per-frame pixels, maximum total decoded frame pixels, maximum compressed bytes, maximum extension count, maximum retained metadata bytes, maximum per-extension bytes, maximum allocation bytes, maximum output bytes, maximum LZW work (e.g. output pixels + code operations), maximum retained warning records, and maximum compositor snapshot bytes. Warning retention is caller-adjustable from zero through the public `Maximum_Warning_Records` storage bound; values beyond that bound are rejected by the Ada subtype rather than silently reduced. Reasonable safe defaults must be documented and caller-adjustable within their declared ranges; limits of the wire format are not memory-allocation permissions.
 
 Reject overflow before allocating or multiplying geometry; bounds-check every palette lookup, bit shift, code-table reference, sub-block length, row/stride calculation and decoded output count. No unbounded recursion. Do not process untrusted lengths into unconstrained stack arrays. Dictionary reset must clear necessary state. Fuzz malformed GCE, misordered extensions, endless zero-progress streams, invalid widths, oversized chunk chains, truncated compressed data, dictionary exhaustion, invalid transparent index, undefined disposal, and compressed decompression bombs. Deterministic failures (no unhandled exceptions) for all malformed inputs under default limits.
 

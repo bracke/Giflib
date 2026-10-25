@@ -70,6 +70,10 @@ alr exec -- gnatprove -P giflib.gpr \
 `Owned_Objects` are runtime-checked Ada. They provide scoped reservation
 rollback and ledger-identity-checked ownership, but are outside the SPARK
 subset because they manage controlled types and heap allocation.
+Decoder, encoder, and quantizer resource representations are consolidated in
+their respective `Internal.*_Storage` packages. The tooling check requires
+those semantic-closure units in `Library_Interface` and rejects direct owned-
+container dependencies from the three public subsystem specifications.
 
 The test crate declares only `unit_tests.gpr` and `giflib_tests` as its default
 Alire project and executable inventory, so the root test action regenerates its
@@ -82,8 +86,10 @@ are not versioned repository inputs.
 `giflib_whitebox.gpr` compiles the workspace sources for internal tests without
 weakening the production library's supported `Library_Interface` boundary;
 only `unit_tests.gpr` imports that project. Repository tools import the
-production `giflib.gpr`, so tool and unit-test builds never share library
-artifacts and the tools continuously exercise the supported interface.
+production `giflib.gpr` and expose only `tests/src/mains` as a source directory;
+their build cannot resolve the white-box children under `tests/src`. Tool and
+unit-test builds therefore never share library artifacts or source visibility,
+and the tools continuously exercise the supported interface.
 The white-box suite is a `Giflib.Testing` descendant hierarchy, which is allowed
 to test the private `Giflib.Internal` child without making it public. A separate
 consumer built through `public_api.gpr` compiles against the production project,
@@ -93,7 +99,7 @@ switches from `giflib_build.gpr`.
 Separate actions ensure that a compilation or test failure makes `alr test`
 fail, and selecting an exact executable prevents stale binaries for other
 profiles from making execution ambiguous. Repository workflow tools are
- isolated in `tools.gpr` and are built explicitly by the release gate rather than
+isolated in `tools.gpr` and are built explicitly by the release gate rather than
 every unit-test invocation.
 The stream tests inject exceptions from every callback family (`Read`, `Skip`,
 `Write`, `Offset`, and `Flush`) and require structured, non-raising outcomes.
