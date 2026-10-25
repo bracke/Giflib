@@ -10,6 +10,35 @@ package body Giflib.Internal.Container is
    function Truncated
      (Outcome : Results.Result;
       Object : Streams.Source'Class;
+      Block : Block_Kind) return Results.Result;
+
+   function Read_Color_Table
+     (Object : in out Streams.Source'Class;
+      Length : Positive;
+      Block : Block_Kind;
+      Palette : out Palettes.Palette) return Results.Result
+   is
+      Raw : Streams.Byte_Array (1 .. Length * 3);
+      Outcome : Results.Result;
+   begin
+      Palette := (others => <>);
+      Outcome := Streams.Read_Exact (Object, Raw);
+      if not Results.Succeeded (Outcome) then
+         return Truncated (Outcome, Object, Block);
+      end if;
+      Palette.Length := Length;
+      for I in 0 .. Length - 1 loop
+         Palette.Colors (Palette_Index (I)) :=
+           (Red => Raw (Raw'First + I * 3),
+            Green => Raw (Raw'First + I * 3 + 1),
+            Blue => Raw (Raw'First + I * 3 + 2));
+      end loop;
+      return Results.Success;
+   end Read_Color_Table;
+
+   function Truncated
+     (Outcome : Results.Result;
+      Object : Streams.Source'Class;
       Block : Block_Kind) return Results.Result
    is
       use type Errors.Error_Code;
@@ -132,21 +161,12 @@ package body Giflib.Internal.Container is
 
       if Header.Has_Global_Palette then
          Palette_Length := Packed_Fields.Palette_Length;
-         Header.Global_Palette.Length := Palette_Length;
-         declare
-            Raw : Streams.Byte_Array (1 .. Palette_Length * 3);
-         begin
-            Outcome := Streams.Read_Exact (Object, Raw);
-            if not Results.Succeeded (Outcome) then
-               return Truncated (Outcome, Object, Global_Color_Table_Block);
-            end if;
-            for I in 0 .. Palette_Length - 1 loop
-               Header.Global_Palette.Colors (Palette_Index (I)) :=
-                 (Red => Raw (Raw'First + I * 3),
-                  Green => Raw (Raw'First + I * 3 + 1),
-                  Blue => Raw (Raw'First + I * 3 + 2));
-            end loop;
-         end;
+         Outcome := Read_Color_Table
+           (Object, Palette_Length, Global_Color_Table_Block,
+            Header.Global_Palette);
+         if not Results.Succeeded (Outcome) then
+            return Outcome;
+         end if;
          if not Palettes.Contains (Header.Global_Palette, Header.Background_Index) then
             return Results.Failure
               (Errors.Make
@@ -288,21 +308,12 @@ package body Giflib.Internal.Container is
 
       if Descriptor.Has_Local_Palette then
          Palette_Length := Packed_Fields.Palette_Length;
-         Effective_Palette.Length := Palette_Length;
-         declare
-            Palette_Bytes : Streams.Byte_Array (1 .. Palette_Length * 3);
-         begin
-            Outcome := Streams.Read_Exact (Object, Palette_Bytes);
-            if not Results.Succeeded (Outcome) then
-               return Truncated (Outcome, Object, Local_Color_Table_Block);
-            end if;
-            for I in 0 .. Palette_Length - 1 loop
-               Effective_Palette.Colors (Palette_Index (I)) :=
-                 (Red => Palette_Bytes (Palette_Bytes'First + I * 3),
-                  Green => Palette_Bytes (Palette_Bytes'First + I * 3 + 1),
-                  Blue => Palette_Bytes (Palette_Bytes'First + I * 3 + 2));
-            end loop;
-         end;
+         Outcome := Read_Color_Table
+           (Object, Palette_Length, Local_Color_Table_Block,
+            Effective_Palette);
+         if not Results.Succeeded (Outcome) then
+            return Outcome;
+         end if;
       elsif Header.Has_Global_Palette then
          Effective_Palette := Header.Global_Palette;
       else

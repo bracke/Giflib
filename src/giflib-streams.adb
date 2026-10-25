@@ -1,161 +1,27 @@
 with Giflib.Internal.Stream_Arithmetic;
+with Giflib.Internal.Stream_Dispatch;
+with Giflib.Internal.Stream_Transfers;
 
 package body Giflib.Streams is
-   use type Errors.Position_State;
    package Arithmetic renames Giflib.Internal.Stream_Arithmetic;
 
-   function Source_Context
-     (Position : Source_Position_Result) return Errors.Source_Position_Context is
-     (if Position.Available
-      then Errors.Source_Position_At (Position.Value)
-      else (State => Errors.Position_Unavailable));
-
-   function Destination_Context
-     (Position : Destination_Position_Result)
-      return Errors.Destination_Position_Context is
-     (if Position.Available
-      then Errors.Destination_Position_At (Position.Value)
-      else (State => Errors.Position_Unavailable));
-
-   function At_Source
-     (Item : Errors.Error;
-      Position : Source_Position_Result) return Errors.Error
-   is
-      Enriched : Errors.Error := Item;
-   begin
-      if Enriched.Context.Source_Position.State = Errors.Position_Not_Checked then
-         Enriched.Context.Source_Position := Source_Context (Position);
-      end if;
-      return Enriched;
-   end At_Source;
-
-   function At_Destination
-     (Item : Errors.Error;
-      Position : Destination_Position_Result) return Errors.Error
-   is
-      Enriched : Errors.Error := Item;
-   begin
-      if Enriched.Context.Destination_Position.State = Errors.Position_Not_Checked
-      then
-         Enriched.Context.Destination_Position := Destination_Context (Position);
-      end if;
-      return Enriched;
-   end At_Destination;
-
    function Position (Object : Source'Class) return Source_Position_Result is
-   begin
-      return (Available => True, Value => Object.Offset);
-   exception
-      when others =>
-         return (Available => False);
-   end Position;
+     (Internal.Stream_Dispatch.Position (Object));
 
    function Position
      (Object : Source'Class;
       Rewind : Source_Offset) return Source_Position_Result
-   is
-      Current : constant Source_Position_Result := Position (Object);
-   begin
-      if not Current.Available or else Current.Value < Rewind then
-         return (Available => False);
-      end if;
-      return (Available => True, Value => Current.Value - Rewind);
-   end Position;
+   is (Internal.Stream_Dispatch.Position (Object, Rewind));
 
    function Position
      (Object : Destination'Class) return Destination_Position_Result
-   is
-   begin
-      return (Available => True, Value => Object.Offset);
-   exception
-      when others =>
-         return (Available => False);
-   end Position;
-
-   generic
-      with function Invoke return Source_Result;
-   function Invoke_Source
-     (Object : in out Source'Class;
-      Start : out Source_Position_Result) return Source_Result;
-
-   function Invoke_Source
-     (Object : in out Source'Class;
-      Start : out Source_Position_Result) return Source_Result
-   is
-      Result : Source_Result;
-   begin
-      Start := Position (Object);
-      Result := Invoke;
-      if Errors.Is_Fatal (Result.Error) then
-         Result.Error := At_Source (Result.Error, Start);
-      end if;
-      return Result;
-   exception
-      when others =>
-         return
-           (Error => At_Source (Errors.Make (Errors.Source_Read_Failed), Start),
-            Count => 0,
-            End_Of_Input => False);
-   end Invoke_Source;
-
-   generic
-      with function Invoke return Destination_Result;
-   function Invoke_Destination
-     (Object : in out Destination'Class;
-      Start : out Destination_Position_Result) return Destination_Result;
-
-   function Invoke_Destination
-     (Object : in out Destination'Class;
-      Start : out Destination_Position_Result) return Destination_Result
-   is
-      Result : Destination_Result;
-   begin
-      Start := Position (Object);
-      Result := Invoke;
-      if Errors.Is_Fatal (Result.Error) then
-         Result.Error := At_Destination (Result.Error, Start);
-      end if;
-      return Result;
-   exception
-      when others =>
-         return
-           (Error => At_Destination
-              (Errors.Make (Errors.Destination_Write_Failed), Start),
-            Count => 0);
-   end Invoke_Destination;
-
-   generic
-      with function Invoke return Errors.Error;
-   function Invoke_Flush
-     (Object : in out Destination'Class) return Errors.Error;
-
-   function Invoke_Flush
-     (Object : in out Destination'Class) return Errors.Error
-   is
-      Start : constant Destination_Position_Result := Position (Object);
-      Result : Errors.Error;
-   begin
-      Result := Invoke;
-      if Errors.Is_Fatal (Result) then
-         Result := At_Destination (Result, Start);
-      end if;
-      return Result;
-   exception
-      when others =>
-         return At_Destination
-           (Errors.Make (Errors.Destination_Write_Failed), Start);
-   end Invoke_Flush;
+   is (Internal.Stream_Dispatch.Position (Object));
 
    function Read_Some_At
      (Object : in out Source'Class;
       Buffer : out Byte_Array;
       Start : out Source_Position_Result) return Source_Result
-   is
-      function Read return Source_Result is (Object.Read (Buffer));
-      function Call is new Invoke_Source (Read);
-   begin
-      return Call (Object, Start);
-   end Read_Some_At;
+   is (Internal.Stream_Dispatch.Read_Some (Object, Buffer, Start));
 
    function Read_Some
      (Object : in out Source'Class;
@@ -170,12 +36,7 @@ package body Giflib.Streams is
      (Object : in out Source'Class;
       Count : Byte_Count;
       Start : out Source_Position_Result) return Source_Result
-   is
-      function Skip return Source_Result is (Object.Skip (Count));
-      function Call is new Invoke_Source (Skip);
-   begin
-      return Call (Object, Start);
-   end Skip_Some_At;
+   is (Internal.Stream_Dispatch.Skip_Some (Object, Count, Start));
 
    function Skip_Some
      (Object : in out Source'Class;
@@ -190,12 +51,7 @@ package body Giflib.Streams is
      (Object : in out Destination'Class;
       Buffer : Byte_Array;
       Start : out Destination_Position_Result) return Destination_Result
-   is
-      function Write return Destination_Result is (Object.Write (Buffer));
-      function Call is new Invoke_Destination (Write);
-   begin
-      return Call (Object, Start);
-   end Write_Some_At;
+   is (Internal.Stream_Dispatch.Write_Some (Object, Buffer, Start));
 
    function Write_Some
      (Object : in out Destination'Class;
@@ -208,159 +64,23 @@ package body Giflib.Streams is
 
    function Flush_Safely
      (Object : in out Destination'Class) return Errors.Error
-   is
-      function Flush return Errors.Error is (Object.Flush);
-      function Call is new Invoke_Flush (Flush);
-   begin
-      return Call (Object);
-   end Flush_Safely;
+   is (Internal.Stream_Dispatch.Flush (Object));
 
-   function Read_Exact (Object : in out Source'Class; Buffer : out Byte_Array) return Results.Result is
-      Completed : Natural := 0;
-   begin
-      while Completed < Buffer'Length loop
-         declare
-            Step : Source_Result;
-            Remaining : constant Natural := Buffer'Length - Completed;
-            Current : Source_Position_Result;
-         begin
-            Step := Read_Some_At
-              (Object,
-               Buffer (Buffer'First + Completed .. Buffer'Last),
-               Current);
-            if Errors.Is_Fatal (Step.Error) then
-               return Results.Failure (Step.Error);
-            elsif not Arithmetic.Fits_Natural_Remaining
-              (Completed, Buffer'Length, Step.Count)
-            then
-               return Results.Failure
-                 (Errors.Make
-                    (Errors.Internal_Invariant_Failed,
-                     (Source_Position => Source_Context (Current),
-                      Expected => Byte_Count (Remaining),
-                      Actual => Step.Count,
-                      others => <>)));
-            elsif Step.Count = 0 then
-               if Step.End_Of_Input then
-                  return Results.Failure
-                    (Errors.Make
-                       (Errors.Source_Unexpected_End,
-                        (Source_Position => Source_Context (Current),
-                         Expected => Byte_Count (Buffer'Length),
-                         Actual => Byte_Count (Completed),
-                         others => <>)));
-               else
-                  return Results.Failure
-                    (Errors.Make
-                       (Errors.Source_Zero_Progress,
-                        (Source_Position => Source_Context (Current),
-                         others => <>)));
-               end if;
-            else
-               Completed := Arithmetic.Advance_Natural
-                 (Completed, Buffer'Length, Step.Count);
-            end if;
-         end;
-      end loop;
-      return Results.Success;
-   end Read_Exact;
+   function Read_Exact
+     (Object : in out Source'Class;
+      Buffer : out Byte_Array) return Results.Result
+   is (Internal.Stream_Transfers.Read_Exact (Object, Buffer));
 
-   function Skip_Exact (Object : in out Source'Class; Count : Byte_Count) return Results.Result is
-      Completed : Byte_Count := 0;
-   begin
-      while Completed < Count loop
-         declare
-            Remaining : constant Byte_Count := Count - Completed;
-            Step : Source_Result;
-            Current : Source_Position_Result;
-         begin
-            Step := Skip_Some_At (Object, Remaining, Current);
-            if Errors.Is_Fatal (Step.Error) then
-               return Results.Failure (Step.Error);
-            elsif not Arithmetic.Fits_Count_Remaining
-              (Completed, Count, Step.Count)
-            then
-               return Results.Failure
-                 (Errors.Make
-                    (Errors.Internal_Invariant_Failed,
-                     (Source_Position => Source_Context (Current),
-                      Expected => Remaining,
-                      Actual => Step.Count,
-                      others => <>)));
-            elsif Step.Count = 0 then
-               if Step.End_Of_Input then
-                  return Results.Failure
-                    (Errors.Make
-                       (Errors.Source_Unexpected_End,
-                        (Source_Position => Source_Context (Current),
-                         Expected => Count,
-                         Actual => Completed,
-                         others => <>)));
-               else
-                  return Results.Failure
-                    (Errors.Make
-                       (Errors.Source_Zero_Progress,
-                        (Source_Position => Source_Context (Current),
-                         others => <>)));
-               end if;
-            else
-               Completed := Arithmetic.Advance_Count
-                 (Completed, Count, Step.Count);
-            end if;
-         end;
-      end loop;
-      return Results.Success;
-   end Skip_Exact;
+   function Skip_Exact
+     (Object : in out Source'Class;
+      Count : Byte_Count) return Results.Result
+   is (Internal.Stream_Transfers.Skip_Exact (Object, Count));
 
    function Write_All
      (Object : in out Destination'Class;
       Buffer : Byte_Array;
       Count : out Byte_Count) return Results.Result
-   is
-      Completed : Natural := 0;
-   begin
-      Count := 0;
-      while Completed < Buffer'Length loop
-         declare
-            Step : Destination_Result;
-            Remaining : constant Natural := Buffer'Length - Completed;
-            Write_Position : Errors.Destination_Position_Context;
-            Current : Destination_Position_Result;
-         begin
-            Step := Write_Some_At
-              (Object,
-               Buffer (Buffer'First + Completed .. Buffer'Last),
-               Current);
-            Write_Position := Destination_Context (Current);
-            if not Arithmetic.Fits_Natural_Remaining
-              (Completed, Buffer'Length, Step.Count)
-            then
-               return Results.Failure
-                 (Errors.Make
-                    (Errors.Internal_Invariant_Failed,
-                     (Destination_Position => Write_Position,
-                      Expected => Byte_Count (Remaining),
-                      Actual => Step.Count,
-                      others => <>)));
-            end if;
-            if Step.Count > 0 then
-               Completed := Arithmetic.Advance_Natural
-                 (Completed, Buffer'Length, Step.Count);
-            end if;
-            Count := Byte_Count (Completed);
-            if Errors.Is_Fatal (Step.Error) then
-               return Results.Failure (Step.Error);
-            elsif Step.Count = 0 then
-               return Results.Failure
-                 (Errors.Make
-                    (Errors.Destination_Zero_Progress,
-                     (Destination_Position => Write_Position,
-                      others => <>)));
-            end if;
-         end;
-      end loop;
-      return Results.Success;
-   end Write_All;
+   is (Internal.Stream_Transfers.Write_All (Object, Buffer, Count));
 
    function Write_All
      (Object : in out Destination'Class;
