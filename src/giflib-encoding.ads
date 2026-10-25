@@ -179,6 +179,7 @@ private
       Compressed_Bytes_Written : Byte_Count := 0;
       Diagnostic : Errors.Error := Errors.Make (Errors.No_Error);
       Resources : Encoder_Resources;
+      Quantizer_Data : Quantization.Workspace;
       Allocation_Fault : aliased Internal.Ownership.Fault_State;
    end record;
 

@@ -192,23 +192,9 @@ package body Giflib.Encoding is
    function Initialize
      (Object : in out Encoder;
       Options : Encode_Options := Default_Options;
-      Constraints : Limits.Limit_Set := Limits.Default_Limits) return Results.Result
-   is
-   begin
-      if not State_Arithmetic.Can_Initialize
-        (Object.Current_State)
-      then
-         return Invalid_Transition (Object);
-      end if;
-      Resource_Management.Release (Object);
-      if not Internal.Encoder_Storage.Cleanup_Succeeded (Object.Resources) then
-         Session_Transitions.Fail_Session
-           (Object, Errors.Make (Errors.Internal_Invariant_Failed));
-         return Results.Failure (Object.Diagnostic);
-      end if;
-      Session_Transitions.Begin_Session (Object, Options, Constraints);
-      return Results.Success;
-   end Initialize;
+      Constraints : Limits.Limit_Set := Limits.Default_Limits)
+      return Results.Result
+   is separate;
 
    function Define_Screen (Object : in out Encoder; Screen : Screen_Info) return Results.Result is
       Pixels : constant Byte_Count := Geometry_Arithmetic.Area (Screen.Width, Screen.Height);
@@ -389,51 +375,11 @@ package body Giflib.Encoding is
       Options : Quantization.Quantize_Options := Quantization.Default_Options) return Results.Result
    is separate;
 
-   function Finish (Object : in out Encoder) return Results.Result is
-      Outcome : Results.Result;
-      Flush_Error : Errors.Error;
-   begin
-      if Object.Current_State = Completed then
-         return Results.Success;
-      elsif not State_Arithmetic.Can_Finish
-        (Object.Current_State)
-      then
-         return Invalid_Transition (Object);
-      end if;
-      Outcome := Write_Header (Object);
-      if Results.Succeeded (Outcome) then
-         Outcome := Write_Raw
-           (Object, [1 => Internal.Wire_Format.Trailer]);
-      end if;
-      if not Results.Succeeded (Outcome) then
-         return Fail (Object, Outcome.First_Error);
-      end if;
-      Flush_Error := Streams.Flush_Safely (Object.Output.all);
-      if Errors.Is_Fatal (Flush_Error) then
-         return Fail (Object, Flush_Error);
-      end if;
-      Session_Transitions.Complete_Session (Object);
-      return Results.Success;
-   end Finish;
+   function Finish (Object : in out Encoder) return Results.Result
+   is separate;
 
-   function Cancel (Object : in out Encoder) return Results.Result is
-   begin
-      if State_Arithmetic.Can_Cancel (Object.Current_State) then
-         if Object.Current_State /= Cancelled then
-            Resource_Management.Release (Object);
-            if not Internal.Encoder_Storage.Cleanup_Succeeded (Object.Resources) then
-               Session_Transitions.Fail_Session
-                 (Object, Errors.Make (Errors.Internal_Invariant_Failed));
-               return Results.Failure (Object.Diagnostic);
-            end if;
-            Session_Transitions.Cancel_Session (Object);
-         end if;
-         return Results.Success;
-      elsif Object.Current_State = Failed then
-         return Results.Failure (Object.Diagnostic);
-      end if;
-      return Invalid_Transition (Object);
-   end Cancel;
+   function Cancel (Object : in out Encoder) return Results.Result
+   is separate;
 
    function State (Object : Encoder) return Encoder_State is
    begin
@@ -445,15 +391,6 @@ package body Giflib.Encoding is
       return Object.Diagnostic;
    end First_Error;
 
-   procedure Finalize (Object : in out Encoder) is
-   begin
-      Resource_Management.Release (Object);
-      if not Internal.Encoder_Storage.Cleanup_Succeeded (Object.Resources)
-        and then Object.Diagnostic.Code = Errors.No_Error
-      then
-         Session_Transitions.Record_Diagnostic
-           (Object, Errors.Make (Errors.Internal_Invariant_Failed));
-      end if;
-      Session_Transitions.Finalize_Session (Object);
-   end Finalize;
+   procedure Finalize (Object : in out Encoder)
+   is separate;
 end Giflib.Encoding;

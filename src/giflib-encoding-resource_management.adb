@@ -12,9 +12,16 @@ package body Giflib.Encoding.Resource_Management is
    end Release;
 
    procedure Release (Object : in out Encoder) is
+      Status : constant Quantization.Cleanup_Status :=
+        Quantization.Release (Object.Quantizer_Data);
+      pragma Unreferenced (Status);
    begin
       Release (Object.Resources);
    end Release;
+
+   function Cleanup_Succeeded (Object : Encoder) return Boolean is
+     (Internal.Encoder_Storage.Cleanup_Succeeded (Object.Resources)
+      and then Quantization.Cleanup_Succeeded (Object.Quantizer_Data));
 
    function Combined_Amount
      (Left : Byte_Count;
@@ -24,7 +31,7 @@ package body Giflib.Encoding.Resource_Management is
         (Left, Byte_Count'Last, Right).Attempted);
 
    function Quantizer_Bytes (Object : Encoder) return Byte_Count is
-     (Internal.Encoder_Storage.Quantizer_Bytes (Object.Resources));
+     (Quantization.Allocated_Bytes (Object.Quantizer_Data));
 
    function Outer_Maximum (Object : Encoder) return Byte_Count is
       Reserved : constant Byte_Count := Quantizer_Bytes (Object);

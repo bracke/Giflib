@@ -3,7 +3,6 @@ with Giflib.Internal.Cleanup;
 with Giflib.Internal.LZW_Encoding;
 with Giflib.Internal.Owned_Buffers;
 with Giflib.Internal.Ownership;
-with Giflib.Quantization;
 
 package Giflib.Internal.Encoder_Storage is
    pragma Preelaborate;
@@ -34,7 +33,6 @@ package Giflib.Internal.Encoder_Storage is
    function Cleanup_Succeeded (Object : Resources) return Boolean;
    function Is_Released (Object : Resources) return Boolean;
    function Allocated_Bytes (Object : Resources) return Byte_Count;
-   function Quantizer_Bytes (Object : Resources) return Byte_Count;
 
    procedure Release (Object : in out Resources);
    overriding procedure Finalize (Object : in out Resources);
@@ -43,7 +41,6 @@ private
    type Resources is new Ada.Finalization.Limited_Controlled with record
       Truecolor_Buffer : Owned_Buffers.Handle;
       Allocation_Budget : aliased Ownership.Byte_Budget;
-      Quantizer_Data : Quantization.Workspace;
       LZW_Data : LZW_Encoding.Workspace_Handle;
       Cleanup_State : aliased Cleanup.Cleanup_Status :=
         Cleanup.Cleanup_Complete;

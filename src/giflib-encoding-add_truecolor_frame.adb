@@ -1,4 +1,4 @@
-with Giflib.Internal.Encoder_Storage.Quantization_Operations;
+with Giflib.Internal.Encoder_Storage.Buffer_Operations;
 
 separate (Giflib.Encoding)
 function Add_Truecolor_Frame
@@ -14,6 +14,18 @@ is
    Adjusted : Frame_Info := Info;
    Selection : Palette_Selection := Use_Local_Palette;
    Outcome : Results.Result;
+
+   function Quantize
+     (Pixels : in out Streams.Byte_Array) return Results.Result is
+   begin
+      return Quantization.Quantize
+        (Object.Quantizer_Data,
+         Source,
+         Pixels,
+         Quantized,
+         Quantize_Options,
+         Resource_Management.Quantization_Constraints (Object));
+   end Quantize;
 
 begin
    if not State_Arithmetic.Can_Accept_Data (Object.Current_State) then
@@ -61,9 +73,8 @@ begin
    if not Results.Succeeded (Outcome) then
       return Fail_Frame (Object, Outcome.First_Error);
    end if;
-   Outcome := Internal.Encoder_Storage.Quantization_Operations.Quantize
-     (Object.Resources, Source, Total, Quantized, Quantize_Options,
-      Resource_Management.Quantization_Constraints (Object));
+   Outcome := Internal.Encoder_Storage.Buffer_Operations.Update_Truecolor
+     (Object.Resources, Total, Quantize'Access);
    if not Results.Succeeded (Outcome) then
       return Fail_Frame
         (Object, Resource_Management.Normalize_Quantization_Error

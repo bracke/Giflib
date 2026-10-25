@@ -1,28 +1,20 @@
 with Giflib.Errors;
 with Giflib.Internal.Owned_Buffers.Result_Operations;
-with Giflib.Streams;
 
-package body Giflib.Internal.Encoder_Storage.Quantization_Operations is
+package body Giflib.Internal.Encoder_Storage.Buffer_Operations is
    package Buffer_Results renames Owned_Buffers.Result_Operations;
 
-   function Quantize
+   function Update_Truecolor
      (Object : in out Resources;
-      Source : Images.Image_View;
       Pixel_Count : Byte_Count;
-      Output : out Giflib.Quantization.Quantization_Result;
-      Options : Giflib.Quantization.Quantize_Options;
-      Constraints : Limits.Limit_Set) return Results.Result
+      Process : not null access function
+        (Pixels : in out Streams.Byte_Array) return Results.Result)
+      return Results.Result
    is
       function Run
         (Pixels : in out Streams.Byte_Array) return Results.Result is
       begin
-         return Giflib.Quantization.Quantize
-           (Object.Quantizer_Data,
-            Source,
-            Pixels (1 .. Natural (Pixel_Count)),
-            Output,
-            Options,
-            Constraints);
+         return Process (Pixels (1 .. Natural (Pixel_Count)));
       end Run;
    begin
       if Pixel_Count = 0
@@ -33,6 +25,6 @@ package body Giflib.Internal.Encoder_Storage.Quantization_Operations is
            (Errors.Make (Errors.Internal_Invariant_Failed));
       end if;
       return Buffer_Results.Update (Object.Truecolor_Buffer, Run'Access);
-   end Quantize;
+   end Update_Truecolor;
 
-end Giflib.Internal.Encoder_Storage.Quantization_Operations;
+end Giflib.Internal.Encoder_Storage.Buffer_Operations;

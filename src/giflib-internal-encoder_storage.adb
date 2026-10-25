@@ -28,13 +28,9 @@ package body Giflib.Internal.Encoder_Storage is
       and then Allocated_Bytes (Object) = 0);
    function Is_Released (Object : Resources) return Boolean is
      (not Owned_Buffers.Is_Allocated (Object.Truecolor_Buffer)
-      and then not LZW_Encoding.Is_Allocated (Object.LZW_Data)
-      and then Quantization.Allocated_Bytes (Object.Quantizer_Data) = 0);
+      and then not LZW_Encoding.Is_Allocated (Object.LZW_Data));
    function Allocated_Bytes (Object : Resources) return Byte_Count is
      (Ownership.Used (Object.Allocation_Budget));
-   function Quantizer_Bytes (Object : Resources) return Byte_Count is
-     (Quantization.Allocated_Bytes (Object.Quantizer_Data));
-
    procedure Release (Object : in out Resources) is
       Status : Resource_Cleanup.Guard
         (Object.Allocation_Budget'Access, Object.Cleanup_State'Access);
@@ -48,20 +44,11 @@ package body Giflib.Internal.Encoder_Storage is
          return LZW_Encoding.Release
            (Object.LZW_Data, Object.Allocation_Budget);
       end Release_LZW;
-      function Release_Quantizer return Cleanup.Cleanup_Outcome is
-         Status : constant Quantization.Cleanup_Status :=
-           Quantization.Release (Object.Quantizer_Data);
-      begin
-         return (Status => Status);
-      end Release_Quantizer;
       procedure Try_Buffer is new Resource_Cleanup.Attempt (Release_Buffer);
       procedure Try_LZW is new Resource_Cleanup.Attempt (Release_LZW);
-      procedure Try_Quantizer is new Resource_Cleanup.Attempt
-        (Release_Quantizer);
    begin
       Try_Buffer (Status);
       Try_LZW (Status);
-      Try_Quantizer (Status);
    end Release;
 
    overriding procedure Finalize (Object : in out Resources) is

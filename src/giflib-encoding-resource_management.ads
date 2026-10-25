@@ -3,6 +3,7 @@ private package Giflib.Encoding.Resource_Management is
 
    procedure Release (Resources : in out Encoder_Resources);
    procedure Release (Object : in out Encoder);
+   function Cleanup_Succeeded (Object : Encoder) return Boolean;
 
    function Ensure_Truecolor_Pixels
      (Object : in out Encoder;
