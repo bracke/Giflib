@@ -1,6 +1,10 @@
+with Giflib.Animations;
 with Giflib.Encoding.State_Arithmetic;
+with Giflib.Internal.Wire_Format;
 
 package body Giflib.Encoding.Extensions is
+   use type Animations.Loop_State;
+   use type Metadata.Extension_Kind;
    function Write_Chunk
      (Object : in out Encoder;
       Payload : Streams.Byte_Array;
@@ -42,7 +46,7 @@ package body Giflib.Encoding.Extensions is
 
    function Write_Prefix
      (Object : in out Encoder;
-      Info : Metadata.Extension_Info;
+      Descriptor : Extension_Descriptor;
       Payload : Streams.Byte_Array;
       Fixed_Length : Natural;
       Position : out Natural) return Results.Result
@@ -50,7 +54,10 @@ package body Giflib.Encoding.Extensions is
       Outcome : Results.Result;
    begin
       Position := 0;
-      Outcome := Write_Raw (Object, [16#21#, Info.Label]);
+      Outcome := Write_Raw
+        (Object,
+         [Internal.Wire_Format.Extension_Introducer,
+          Metadata.Label_Of (Descriptor)]);
       if not Results.Succeeded (Outcome) then
          return Outcome;
       end if;
@@ -70,10 +77,14 @@ package body Giflib.Encoding.Extensions is
 
    function Validate
      (Object : in out Encoder;
-      Info : Metadata.Extension_Info;
+      Descriptor : Extension_Descriptor;
       Payload : Streams.Byte_Array;
       Fixed_Length : out Natural) return Results.Result
    is
+      Additional_Extensions : constant Natural :=
+        (if Object.Loop_Data.State /= Animations.No_Loop_Extension
+             and then not Object.Header_Written
+         then 2 else 1);
    begin
       Fixed_Length := 0;
       if not State_Arithmetic.Can_Accept_Data
@@ -83,12 +94,17 @@ package body Giflib.Encoding.Extensions is
       elsif Object.Options.Version = Force_GIF87a then
          return Fail (Object, Errors.Make (Errors.Unsupported_Feature));
       elsif not Has_Extension_Capacity
-        (Object,
-         (if Object.Has_Loop and then not Object.Header_Written then 2 else 1))
+        (Object, Additional_Extensions)
       then
          return Fail
-           (Object, Errors.Make (Errors.Limit_Exceeded,
-                                 (Limit => Extension_Count_Limit, others => <>)));
+           (Object,
+            Errors.Make
+              (Errors.Limit_Exceeded,
+               (Expected => Byte_Count (Object.Constraints.Max_Extensions),
+                Actual => Byte_Count (Object.Extensions_Written)
+                  + Byte_Count (Additional_Extensions),
+                Limit => Extension_Count_Limit,
+                others => <>)));
       elsif Byte_Count (Payload'Length)
         > Object.Constraints.Max_Per_Extension_Bytes
       then
@@ -99,25 +115,16 @@ package body Giflib.Encoding.Extensions is
                 Actual => Byte_Count (Payload'Length),
                 Limit => Per_Extension_Byte_Limit, others => <>)));
       end if;
-      case Info.Kind is
-         when Metadata.Graphic_Control_Extension =>
-            return Fail (Object, Errors.Make (Errors.Unsupported_Feature));
-         when Metadata.Application_Extension =>
-            if Info.Label /= 16#FF# then
-               return Fail (Object, Errors.Make (Errors.Invalid_Extension));
-            end if;
+      case Descriptor.Kind is
+         when Application_Extension =>
             Fixed_Length := 11;
-         when Metadata.Plain_Text_Extension =>
-            if Info.Label /= 16#01# then
-               return Fail (Object, Errors.Make (Errors.Invalid_Extension));
-            end if;
+         when Plain_Text_Extension =>
             Fixed_Length := 12;
-         when Metadata.Comment_Extension =>
-            if Info.Label /= 16#FE# then
-               return Fail (Object, Errors.Make (Errors.Invalid_Extension));
-            end if;
-         when Metadata.Unknown_Extension =>
-            if Info.Label in 16#01# | 16#F9# | 16#FE# | 16#FF# then
+         when Comment_Extension =>
+            null;
+         when Unknown_Extension =>
+            if Metadata.Kind_Of (Descriptor.Label) /= Metadata.Unknown_Extension
+            then
                return Fail (Object, Errors.Make (Errors.Invalid_Extension));
             end if;
       end case;
@@ -129,7 +136,7 @@ package body Giflib.Encoding.Extensions is
 
    function Add
      (Object : in out Encoder;
-      Info : Metadata.Extension_Info;
+      Descriptor : Extension_Descriptor;
       Payload : Streams.Byte_Array) return Results.Result
    is
       Fixed_Length : Natural;
@@ -137,14 +144,14 @@ package body Giflib.Encoding.Extensions is
       Chunk : Natural;
       Outcome : Results.Result;
    begin
-      Outcome := Validate (Object, Info, Payload, Fixed_Length);
+      Outcome := Validate (Object, Descriptor, Payload, Fixed_Length);
       if not Results.Succeeded (Outcome) then
          return Outcome;
       end if;
       Outcome := Write_Header (Object);
       if Results.Succeeded (Outcome) then
          Outcome := Write_Prefix
-           (Object, Info, Payload, Fixed_Length, Position);
+           (Object, Descriptor, Payload, Fixed_Length, Position);
       end if;
       while Results.Succeeded (Outcome) and then Position < Payload'Length loop
          Chunk := Natural'Min (255, Payload'Length - Position);
@@ -156,7 +163,7 @@ package body Giflib.Encoding.Extensions is
 
    function Add_Exact
      (Object : in out Encoder;
-      Info : Metadata.Extension_Info;
+      Descriptor : Extension_Descriptor;
       Payload : Streams.Byte_Array;
       Chunk_Lengths : Chunk_Length_Array) return Results.Result
    is
@@ -165,7 +172,7 @@ package body Giflib.Encoding.Extensions is
       Sum : Byte_Count := 0;
       Outcome : Results.Result;
    begin
-      Outcome := Validate (Object, Info, Payload, Fixed_Length);
+      Outcome := Validate (Object, Descriptor, Payload, Fixed_Length);
       if not Results.Succeeded (Outcome) then
          return Outcome;
       end if;
@@ -188,7 +195,10 @@ package body Giflib.Encoding.Extensions is
       end if;
       Outcome := Write_Header (Object);
       if Results.Succeeded (Outcome) then
-         Outcome := Write_Raw (Object, [16#21#, Info.Label]);
+         Outcome := Write_Raw
+           (Object,
+            [Internal.Wire_Format.Extension_Introducer,
+             Metadata.Label_Of (Descriptor)]);
       end if;
       for Length of Chunk_Lengths loop
          exit when not Results.Succeeded (Outcome);

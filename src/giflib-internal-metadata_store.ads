@@ -1,8 +1,9 @@
 with Giflib.Metadata;
 with Giflib.Results;
 with Giflib.Streams;
+with Giflib.Internal.Owned_Arrays;
+with Giflib.Internal.Owned_Vectors;
 with Giflib.Internal.Ownership;
-with System;
 
 package Giflib.Internal.Metadata_Store is
    pragma Preelaborate;
@@ -12,6 +13,8 @@ package Giflib.Internal.Metadata_Store is
    function Release
      (Object : in out Store;
       Budget : aliased in out Ownership.Byte_Budget) return Boolean;
+   --  Always frees and clears Object.  False reports a ledger mismatch; a
+   --  foreign Budget is never debited.
 
    function Start
      (Object             : in out Store;
@@ -29,9 +32,9 @@ package Giflib.Internal.Metadata_Store is
       Budget             : aliased in out Ownership.Byte_Budget;
       Fault              : in out Ownership.Fault_State) return Results.Result;
 
-   procedure Finish
+   function Finish
      (Object : in out Store;
-      Info   : Metadata.Extension_Info);
+      Info   : Metadata.Extension_Info) return Results.Result;
 
    function Count (Object : Store) return Natural;
    function Is_Released (Object : Store) return Boolean;
@@ -66,24 +69,39 @@ private
    end record;
    type Payload_Chunk_Access is access Payload_Chunk;
    type Chunk_Index_Array is array (Positive range <>) of Payload_Chunk_Access;
-   type Chunk_Index_Access is access Chunk_Index_Array;
+   package Chunk_Index_Storage is new Owned_Arrays
+     (Positive, Payload_Chunk_Access, Chunk_Index_Array, null);
+   package Chunk_Indexes is new Owned_Vectors
+     (Element_Type => Payload_Chunk_Access,
+      Storage => Chunk_Index_Storage);
 
-   type Extension_Node is record
+   type Extension_Node is limited record
       Info : Metadata.Extension_Info;
-      Chunks : Chunk_Index_Access := null;
-      Chunk_Count : Natural := 0;
-      Chunk_Capacity : Natural := 0;
+      Chunks : Chunk_Indexes.Handle;
+      Retained_Length : Byte_Count := 0;
    end record;
    type Extension_Node_Access is access Extension_Node;
    type Extension_Index_Array is array (Positive range <>) of Extension_Node_Access;
-   type Extension_Index_Access is access Extension_Index_Array;
+   package Extension_Index_Storage is new Owned_Arrays
+     (Positive, Extension_Node_Access, Extension_Index_Array, null);
+   package Extension_Indexes is new Owned_Vectors
+     (Element_Type => Extension_Node_Access,
+      Storage => Extension_Index_Storage);
+
+   type Transaction_State is (Idle, Ignoring, Building);
+   type Pending_Extension (State : Transaction_State := Idle) is record
+      case State is
+         when Building =>
+            Index : Positive := 1;
+         when Idle | Ignoring =>
+            null;
+      end case;
+   end record;
 
    type Store is limited record
-      Entries : Extension_Index_Access := null;
-      Length : Natural := 0;
-      Capacity : Natural := 0;
+      Entries : Extension_Indexes.Handle;
       Retained_Bytes : Byte_Count := 0;
-      Pending_Index : Natural := 0;
-      Budget_Address : System.Address := System.Null_Address;
+      Pending : Pending_Extension;
+      Owner : Ownership.Budget_Owner;
    end record;
 end Giflib.Internal.Metadata_Store;

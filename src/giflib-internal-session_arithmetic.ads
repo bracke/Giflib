@@ -10,11 +10,10 @@ is
          (Current <= Maximum and then Additional <= Maximum - Current);
 
    function Warning_Capacity
-     (Maximum_Warnings : Natural;
-      Maximum_Diagnostics : Natural) return Natural
+     (Maximum_Warnings : Natural) return Natural
      with Post =>
        Warning_Capacity'Result =
-         Natural'Min (Natural'Min (Maximum_Warnings, Maximum_Diagnostics), 256)
+         Natural'Min (Maximum_Warnings, 256)
        and then Warning_Capacity'Result <= 256;
 
 end Giflib.Internal.Session_Arithmetic;

@@ -1,4 +1,5 @@
 with Giflib.Animations;
+with Giflib.Errors;
 with Giflib.Limits;
 with Giflib.Palettes;
 with Giflib.Results;
@@ -15,20 +16,16 @@ package Giflib.Internal.Container is
       Width : Image_Width := Image_Width'First;
       Height : Image_Height := Image_Height'First;
       Has_Local_Palette : Boolean := False;
-      Local_Palette : Palettes.Palette;
       Interlaced : Boolean := False;
       Local_Palette_Sorted : Boolean := False;
       Reserved_Bits : Byte := 0;
-      Has_Packed_Field_Offset : Boolean := False;
-      Packed_Field_Offset : Source_Offset := 0;
+      Packed_Field_Position : Errors.Source_Position_Context;
    end record;
 
    function Read_Header
      (Object : in out Streams.Source'Class;
       Constraints : Limits.Limit_Set;
       Header : out Header_Info) return Results.Result;
-
-   function Read_Trailer (Object : in out Streams.Source'Class) return Results.Result;
 
    function Read_Image_Descriptor
      (Object : in out Streams.Source'Class;

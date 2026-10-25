@@ -2,6 +2,7 @@ with Giflib.Errors;
 with Giflib.Internal.Block_Arithmetic;
 with Giflib.Internal.Budget_Arithmetic;
 with Giflib.Internal.Bytes;
+with Giflib.Internal.Diagnostics;
 
 package body Giflib.Internal.Blocks is
    use type Errors.Error_Code;
@@ -26,17 +27,13 @@ package body Giflib.Internal.Blocks is
       Reader : Sub_Block_Reader;
       Object : Streams.Source'Class) return Results.Result
    is
+      Item : Errors.Error := Outcome.First_Error;
    begin
       if Outcome.First_Error.Code = Errors.Source_Unexpected_End then
-         return Results.Failure
-           (Errors.Make
-              (Errors.Truncated_Block,
-               (Has_Source => Streams.Position (Object).Available,
-                Source => Streams.Position (Object).Value,
-                Block => Reader.Owner_Block,
-                Expected => Outcome.First_Error.Context.Expected,
-                Actual => Outcome.First_Error.Context.Actual,
-                others => <>)));
+         Item.Code := Errors.Truncated_Block;
+         Item.Context.Block := Reader.Owner_Block;
+         Item.Context := Diagnostics.At_Source (Object, Item.Context);
+         return Results.Failure (Item);
       end if;
       return Outcome;
    end As_Block_Error;
@@ -77,13 +74,13 @@ package body Giflib.Internal.Blocks is
             return Results.Failure
               (Errors.Make
                  (Errors.Limit_Exceeded,
-                  (Has_Source => Streams.Position (Object).Available,
-                   Source => Streams.Position (Object).Value,
-                   Block => Reader.Owner_Block,
-                   Expected => Reader.Maximum,
-                   Actual => Budget.Attempted,
-                   Limit => Reader.Applied_Limit,
-                   others => <>)));
+                  Diagnostics.At_Source
+                    (Object,
+                     (Block => Reader.Owner_Block,
+                      Expected => Reader.Maximum,
+                      Actual => Budget.Attempted,
+                      Limit => Reader.Applied_Limit,
+                      others => <>))));
          end if;
       end if;
 
@@ -133,6 +130,7 @@ package body Giflib.Internal.Blocks is
    is
       Length_Data : constant Streams.Byte_Array := [1 => Byte (Writer.Used)];
       Outcome : Results.Result;
+      Written : Byte_Count;
       Required : constant Byte_Count := Byte_Count (Writer.Used) + 1;
       Budget : constant Budget_Arithmetic.Charge_Result :=
         Budget_Arithmetic.Charge (Writer.Wire_Total, Writer.Maximum_Wire, Required);
@@ -143,19 +141,22 @@ package body Giflib.Internal.Blocks is
          return Results.Failure
            (Errors.Make
               (Errors.Limit_Exceeded,
-               (Has_Destination => Streams.Position (Object).Available,
-                Destination => Streams.Position (Object).Value,
-                Expected => Writer.Maximum_Wire,
-                Actual => Budget.Attempted,
-                Limit => Output_Byte_Limit,
-                others => <>)));
+               Diagnostics.At_Destination
+                 (Object,
+                  (Expected => Writer.Maximum_Wire,
+                   Actual => Budget.Attempted,
+                   Limit => Output_Byte_Limit,
+                   others => <>))));
       end if;
-      Outcome := Streams.Write_All (Object, Length_Data);
+      Outcome := Streams.Write_All (Object, Length_Data, Written);
+      Writer.Wire_Total := Writer.Wire_Total + Written;
       if Results.Succeeded (Outcome) then
-         Outcome := Streams.Write_All (Object, Writer.Buffer (1 .. Writer.Used));
+         Outcome := Streams.Write_All
+           (Object, Writer.Buffer (1 .. Writer.Used), Written);
+         Writer.Wire_Total := Writer.Wire_Total + Written;
+         Writer.Payload_Written := Writer.Payload_Written + Written;
       end if;
       if Results.Succeeded (Outcome) then
-         Writer.Wire_Total := Budget.Total;
          Writer.Used := 0;
       end if;
       return Outcome;
@@ -169,6 +170,7 @@ package body Giflib.Internal.Blocks is
    begin
       Writer.Used := 0;
       Writer.Payload_Total := 0;
+      Writer.Payload_Written := 0;
       Writer.Wire_Total := 0;
       Writer.Maximum_Payload := Max_Payload_Bytes;
       Writer.Maximum_Wire := Max_Wire_Bytes;
@@ -194,12 +196,12 @@ package body Giflib.Internal.Blocks is
          return Results.Failure
            (Errors.Make
               (Errors.Limit_Exceeded,
-               (Has_Destination => Streams.Position (Object).Available,
-                Destination => Streams.Position (Object).Value,
-                Expected => Writer.Maximum_Payload,
-                Actual => Budget.Attempted,
-                Limit => Compressed_Byte_Limit,
-                others => <>)));
+               Diagnostics.At_Destination
+                 (Object,
+                  (Expected => Writer.Maximum_Payload,
+                   Actual => Budget.Attempted,
+                   Limit => Compressed_Byte_Limit,
+                   others => <>))));
       end if;
       while Position < Data'Length loop
          Transfer := Block_Arithmetic.Plan_Write
@@ -228,6 +230,7 @@ package body Giflib.Internal.Blocks is
       Terminator : constant Streams.Byte_Array := [1 => 0];
       Outcome : Results.Result;
       Budget : Budget_Arithmetic.Charge_Result;
+      Written : Byte_Count;
    begin
       if Writer.Is_Finished then
          return Results.Success;
@@ -242,16 +245,16 @@ package body Giflib.Internal.Blocks is
          return Results.Failure
            (Errors.Make
               (Errors.Limit_Exceeded,
-               (Has_Destination => Streams.Position (Object).Available,
-                Destination => Streams.Position (Object).Value,
-                Expected => Writer.Maximum_Wire,
-                Actual => Budget.Attempted,
-                Limit => Output_Byte_Limit,
-                others => <>)));
+               Diagnostics.At_Destination
+                 (Object,
+                  (Expected => Writer.Maximum_Wire,
+                   Actual => Budget.Attempted,
+                   Limit => Output_Byte_Limit,
+                   others => <>))));
       end if;
-      Outcome := Streams.Write_All (Object, Terminator);
+      Outcome := Streams.Write_All (Object, Terminator, Written);
+      Writer.Wire_Total := Writer.Wire_Total + Written;
       if Results.Succeeded (Outcome) then
-         Writer.Wire_Total := Budget.Total;
          Writer.Is_Finished := True;
       end if;
       return Outcome;
@@ -261,6 +264,13 @@ package body Giflib.Internal.Blocks is
    begin
       return Writer.Payload_Total;
    end Total_Payload_Bytes;
+
+   function Total_Payload_Written
+     (Writer : Sub_Block_Writer) return Byte_Count
+   is
+   begin
+      return Writer.Payload_Written;
+   end Total_Payload_Written;
 
    function Total_Wire_Bytes (Writer : Sub_Block_Writer) return Byte_Count is
    begin

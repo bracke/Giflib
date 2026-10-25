@@ -35,8 +35,7 @@ begin
    Outcome := Giflib.Encoding.Add_Indexed_Frame
      (Encoder,
       (Width => 2, Height => 2, others => <>),
-      Giflib.Encoding.Use_Global_Palette,
-      (others => <>),
+      Giflib.Encoding.Global_Frame_Palette,
       [0, 1, 1, 0]);
    Require_Success;
    Outcome := Giflib.Encoding.Finish (Encoder);

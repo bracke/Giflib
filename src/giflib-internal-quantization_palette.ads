@@ -1,5 +1,6 @@
 with Giflib.Palettes;
 with Giflib.Results;
+with Giflib.Internal.Work_Budgets;
 
 package Giflib.Internal.Quantization_Palette is
    pragma Preelaborate;
@@ -18,7 +19,6 @@ package Giflib.Internal.Quantization_Palette is
      (Histogram       : in out Histogram_State;
       Generated_Start : Natural;
       Opaque_Capacity : Natural;
-      Work            : in out Byte_Count;
-      Maximum_Work    : Byte_Count;
+      Work            : in out Work_Budgets.Meter;
       Output_Palette  : in out Palettes.Palette) return Results.Result;
 end Giflib.Internal.Quantization_Palette;

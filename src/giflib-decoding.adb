@@ -2,19 +2,20 @@ with Giflib.Decoding.Extensions;
 with Giflib.Decoding.Resource_Management;
 with Giflib.Internal.Blocks;
 with Giflib.Internal.Bytes;
-with Giflib.Internal.Container;
 with Giflib.Internal.Diagnostics;
 with Giflib.Internal.Compositing;
+with Giflib.Internal.Container;
 with Giflib.Internal.Geometry_Arithmetic;
 with Giflib.Internal.Image_Data;
 with Giflib.Internal.Pixel_Arithmetic;
 with Giflib.Decoding.State_Arithmetic;
 with Giflib.Internal.Session_Arithmetic;
 with Giflib.Internal.Stream_Arithmetic;
-with Giflib.Palettes;
+with Giflib.Internal.Wire_Format;
 
 package body Giflib.Decoding is
    use type Errors.Error_Code;
+   use type Errors.Position_State;
    use type Errors.Warning_Code;
    use type Frames.Disposal_Method;
    package Session_Arithmetic renames Internal.Session_Arithmetic;
@@ -34,15 +35,14 @@ package body Giflib.Decoding is
    function Fail (Object : in out Decoder; Item : Errors.Error) return Results.Result is
       Enriched : Errors.Error := Item;
    begin
-      if not Enriched.Context.Has_Source then
+      if Enriched.Context.Source_Position.State = Errors.Position_Not_Checked then
          Enriched.Context := Internal.Diagnostics.At_Source
            (Object.Input.all, Enriched.Context);
       end if;
-      if not Enriched.Context.Has_Frame
+      if not Enriched.Context.Frame.Present
         and then Object.Current_State in Awaiting_Frame_Decision | Decoding_Frame
       then
-         Enriched.Context.Has_Frame := True;
-         Enriched.Context.Frame := Object.Frames_Seen;
+         Enriched.Context.Frame := Errors.Frame_At (Object.Frames_Seen);
       end if;
       if Object.Diagnostic.Code = Errors.No_Error then
          Object.Diagnostic := Enriched;
@@ -52,6 +52,67 @@ package body Giflib.Decoding is
       return Results.Failure (Object.Diagnostic);
    end Fail;
 
+   function Output_Variant_Error
+     (Object : Decoder;
+      Expected : Natural;
+      Actual : Natural) return Errors.Error
+   is
+   begin
+      return Errors.Make
+        (Errors.Output_Variant_Mismatch,
+         Internal.Diagnostics.At_Source
+           (Object.Input.all,
+            (Expected => Byte_Count (Expected),
+             Actual => Byte_Count (Actual),
+             others => <>)));
+   end Output_Variant_Error;
+
+   function Validate_Frame_Output
+     (Object : Decoder;
+      Target_Length : Byte_Count;
+      Expected_Length : Byte_Count;
+      Info_Is_Constrained : Boolean;
+      Info_Has_Local_Palette : Boolean) return Results.Result
+   is
+   begin
+      if Info_Is_Constrained
+        and then Info_Has_Local_Palette /= Object.Pending_Frame.Has_Local_Palette
+      then
+         return Results.Failure
+           (Output_Variant_Error
+              (Object,
+               Boolean'Pos (Info_Has_Local_Palette),
+               Boolean'Pos (Object.Pending_Frame.Has_Local_Palette)));
+      elsif Target_Length /= Expected_Length then
+         return Results.Failure
+           (Errors.Make
+              (Errors.Buffer_Size_Mismatch,
+               Internal.Diagnostics.At_Source
+                 (Object.Input.all,
+                  (Frame => Errors.Frame_At (Object.Frames_Seen),
+                   Expected => Expected_Length,
+                   Actual => Target_Length,
+                   others => <>))));
+      end if;
+      return Results.Success;
+   end Validate_Frame_Output;
+
+   function Deliver_Event
+     (Object : in out Decoder;
+      Event : out Decode_Event;
+      Value : Decode_Event) return Results.Result
+   is
+   begin
+      if Event'Constrained and then Event.Kind /= Value.Kind then
+         return Fail
+           (Object,
+            Output_Variant_Error
+              (Object, Event_Kind'Pos (Event.Kind), Event_Kind'Pos (Value.Kind)));
+      end if;
+      Event := Value;
+      return Results.Success;
+   end Deliver_Event;
+
    procedure Add_Warning
      (Object : in out Decoder;
       Code : Errors.Warning_Code;
@@ -59,11 +120,10 @@ package body Giflib.Decoding is
       Context : Errors.Diagnostic_Context := (others => <>))
    is
       Capacity : constant Natural := Session_Arithmetic.Warning_Capacity
-        (Object.Constraints.Max_Warning_Records,
-         Object.Constraints.Max_Diagnostic_Events);
+        (Object.Constraints.Max_Warning_Records);
       Enriched : Errors.Diagnostic_Context := Context;
    begin
-      if not Enriched.Has_Source then
+      if Enriched.Source_Position.State = Errors.Position_Not_Checked then
          Enriched := Internal.Diagnostics.At_Source (Object.Input.all, Enriched);
       end if;
       if Capacity = 0 then
@@ -84,7 +144,10 @@ package body Giflib.Decoding is
       Step : Streams.Source_Result;
       Position : constant Streams.Source_Position_Result :=
         Input_Position (Object);
-      Offset : constant Source_Offset := Position.Value;
+      Source_Context : constant Errors.Source_Position_Context :=
+        (if Position.Available
+         then Errors.Source_Position_At (Position.Value)
+         else (State => Errors.Position_Unavailable));
    begin
       Step := Streams.Read_Some (Object.Input.all, Buffer);
       if Errors.Is_Fatal (Step.Error) then
@@ -95,8 +158,7 @@ package body Giflib.Decoding is
          return Results.Failure
            (Errors.Make
               (Errors.Internal_Invariant_Failed,
-               (Has_Source => Position.Available,
-                Source => Offset,
+               (Source_Position => Source_Context,
                 Expected => Byte_Count (Buffer'Length),
                 Actual => Step.Count,
                 others => <>)));
@@ -106,14 +168,13 @@ package body Giflib.Decoding is
          return Results.Failure
            (Errors.Make
               (Errors.Source_Zero_Progress,
-               (Has_Source => Position.Available,
-                Source => Offset,
+               (Source_Position => Source_Context,
                 others => <>)));
       elsif Object.Options.Strictness = Strict then
          return Results.Failure
            (Errors.Make
               (Errors.Trailing_Data,
-               (Has_Source => Position.Available, Source => Offset,
+               (Source_Position => Source_Context,
                 Block => Trailing_Data_Block,
                 Expected => 0,
                 Actual => Step.Count,
@@ -123,8 +184,7 @@ package body Giflib.Decoding is
         (Object,
          Errors.Trailing_Data_Ignored,
          Errors.Compatibility,
-         (Has_Source => Position.Available,
-          Source => Offset,
+         (Source_Position => Source_Context,
           Block => Trailing_Data_Block,
           Actual => Step.Count,
           others => <>));
@@ -167,11 +227,15 @@ package body Giflib.Decoding is
       end if;
       Object.Pending_Control := Frames.Default_Control;
       Object.Has_Pending_Control := False;
+      Object.Has_Pending_Frame := False;
       Object.Loop_Data := Animations.No_Loop;
       Object.Stored_Warnings := 0;
       Object.Diagnostic := Errors.Make (Errors.No_Error);
       if not Input_Position (Object).Available then
-         Object.Diagnostic := Errors.Make (Errors.Source_Read_Failed);
+         Object.Diagnostic := Errors.Make
+           (Errors.Source_Read_Failed,
+            (Source_Position => (State => Errors.Position_Unavailable),
+             others => <>));
          Object.Current_State := Failed;
          return Results.Failure (Object.Diagnostic);
       end if;
@@ -197,7 +261,6 @@ package body Giflib.Decoding is
       Parsed : Internal.Container.Header_Info;
       Outcome : Results.Result;
    begin
-      Header := (others => <>);
       if not State_Arithmetic.Can_Read_Header
         (Object.Current_State)
       then
@@ -207,8 +270,18 @@ package body Giflib.Decoding is
       if not Results.Succeeded (Outcome) then
          return Fail (Object, Outcome.First_Error);
       end if;
+      if Header'Constrained
+        and then Header.Has_Global_Palette /= Parsed.Has_Global_Palette
+      then
+         return Fail
+           (Object,
+            Output_Variant_Error
+              (Object,
+               Boolean'Pos (Header.Has_Global_Palette),
+               Boolean'Pos (Parsed.Has_Global_Palette)));
+      end if;
       Header := Parsed;
-      Object.Header_Data := Header;
+      Object.Header_Data := Parsed;
       if Object.Options.Mode = Composited_RGBA then
          Outcome := Resource_Management.Setup_Canvas (Object);
          if not Results.Succeeded (Outcome) then
@@ -218,6 +291,9 @@ package body Giflib.Decoding is
       Object.Current_State := Header_Ready;
       return Results.Success;
    end Read_Header;
+
+   function Prepare_Frame
+     (Object : in out Decoder) return Results.Result;
 
    function Next_Event
      (Object : in out Decoder;
@@ -229,15 +305,20 @@ package body Giflib.Decoding is
       Extension_Info : Metadata.Extension_Info;
       Outcome : Results.Result;
       Position : Streams.Source_Position_Result;
+      Pixels : Byte_Count;
    begin
-      Event := (others => <>);
       if Object.Current_State = Completed then
          Position := Input_Position (Object);
          if not Position.Available then
-            return Fail (Object, Errors.Make (Errors.Source_Read_Failed));
+            return Fail
+              (Object,
+               Errors.Make
+                 (Errors.Source_Read_Failed,
+                  (Source_Position => (State => Errors.Position_Unavailable),
+                   others => <>)));
          end if;
-         Event := (Kind => End_Event, Offset => Position.Value, others => <>);
-         return Results.Success;
+         return Deliver_Event
+           (Object, Event, (Kind => End_Event, Offset => Position.Value));
       elsif not State_Arithmetic.Can_Read_Event
         (Object.Current_State)
       then
@@ -246,7 +327,12 @@ package body Giflib.Decoding is
 
       Position := Input_Position (Object);
       if not Position.Available then
-         return Fail (Object, Errors.Make (Errors.Source_Read_Failed));
+         return Fail
+           (Object,
+            Errors.Make
+              (Errors.Source_Read_Failed,
+               (Source_Position => (State => Errors.Position_Unavailable),
+                others => <>)));
       end if;
       Marker_Offset := Position.Value;
       Outcome := Internal.Bytes.Read_Byte (Object.Input.all, Marker);
@@ -255,20 +341,25 @@ package body Giflib.Decoding is
             if Object.Options.Strictness = Recover_When_Safe and then Object.Frames_Seen > 0 then
                Position := Input_Position (Object);
                if not Position.Available then
-                  return Fail (Object, Errors.Make (Errors.Source_Read_Failed));
+                  return Fail
+                    (Object,
+                     Errors.Make
+                       (Errors.Source_Read_Failed,
+                        (Source_Position => (State => Errors.Position_Unavailable),
+                         others => <>)));
                end if;
                Add_Warning
                  (Object,
                   Errors.Recovery_Applied,
                   Errors.Recovery,
-                  (Has_Source => True, Source => Position.Value,
+                  (Source_Position => Errors.Source_Position_At (Position.Value),
                    Block => Trailer_Block,
                    Expected => 1,
                    Actual => 0,
                    others => <>));
-               Event := (Kind => End_Event, Offset => Position.Value, others => <>);
                Object.Current_State := Completed;
-               return Results.Success;
+               return Deliver_Event
+                 (Object, Event, (Kind => End_Event, Offset => Position.Value));
             end if;
             return Fail
               (Object,
@@ -284,38 +375,51 @@ package body Giflib.Decoding is
       end if;
 
       case Marker is
-         when 16#2C# =>
+         when Internal.Wire_Format.Image_Separator =>
             if Object.Frames_Seen >= Object.Constraints.Max_Frames then
                return Fail
                  (Object,
                   Errors.Make
                     (Errors.Limit_Exceeded,
-                     (Has_Source => True, Source => Marker_Offset,
+                     (Source_Position => Errors.Source_Position_At (Marker_Offset),
                       Block => Image_Descriptor_Block,
-                      Has_Frame => True,
-                      Frame => Object.Frames_Seen,
+                      Frame => Errors.Frame_At (Object.Frames_Seen),
                       Expected => Byte_Count (Object.Constraints.Max_Frames),
                       Actual => Byte_Count (Object.Frames_Seen) + 1,
                       Limit => Frame_Count_Limit,
                       others => <>)));
             end if;
-            Event :=
-              (Kind => Image_Event,
-               Offset => Marker_Offset,
-               Frame => Object.Frames_Seen,
-               Extension_Label => 0,
-               Extension => <>);
+            Object.Current_State := Decoding_Frame;
+            Outcome := Prepare_Frame (Object);
+            if not Results.Succeeded (Outcome) then
+               return Fail (Object, Outcome.First_Error);
+            end if;
+            Object.Has_Pending_Frame := True;
+            Pixels := Internal.Geometry_Arithmetic.Area
+              (Object.Pending_Frame.Width, Object.Pending_Frame.Height);
             Object.Current_State := Awaiting_Frame_Decision;
-            return Results.Success;
-         when 16#3B# =>
+            return Deliver_Event
+              (Object,
+               Event,
+               (Kind => Image_Event,
+                Offset => Marker_Offset,
+                Frame => Object.Frames_Seen,
+                Left => Object.Pending_Frame.Left,
+                Top => Object.Pending_Frame.Top,
+                Width => Object.Pending_Frame.Width,
+                Height => Object.Pending_Frame.Height,
+                Interlaced => Object.Pending_Frame.Interlaced,
+                Indexed_Bytes => Pixels,
+                Expanded_Bytes => Pixels * 4));
+         when Internal.Wire_Format.Trailer =>
             Outcome := Check_Trailing_Data (Object);
             if not Results.Succeeded (Outcome) then
                return Fail (Object, Outcome.First_Error);
             end if;
-            Event := (Kind => End_Event, Offset => Marker_Offset, others => <>);
             Object.Current_State := Completed;
-            return Results.Success;
-         when 16#21# =>
+            return Deliver_Event
+              (Object, Event, (Kind => End_Event, Offset => Marker_Offset));
+         when Internal.Wire_Format.Extension_Introducer =>
             Outcome := Internal.Bytes.Read_Byte (Object.Input.all, Label_Value);
             if not Results.Succeeded (Outcome) then
                return Fail (Object, Outcome.First_Error);
@@ -324,62 +428,60 @@ package body Giflib.Decoding is
             if not Results.Succeeded (Outcome) then
                return Fail (Object, Outcome.First_Error);
             end if;
-            Event :=
-              (Kind => Extension_Event,
-               Offset => Marker_Offset,
-               Frame => Object.Frames_Seen,
-               Extension_Label => Label_Value,
-               Extension => Extension_Info);
-            return Results.Success;
+            return Deliver_Event
+              (Object,
+               Event,
+               (Kind => Extension_Event,
+                Offset => Marker_Offset,
+                Extension => Extension_Info));
          when others =>
             return Fail
               (Object,
                Errors.Make
                  (Errors.Invalid_Block,
-                  (Has_Source => True, Source => Marker_Offset,
-                   Expected => 16#2C#,
+                  (Source_Position => Errors.Source_Position_At (Marker_Offset),
+                   Expected => Byte_Count (Internal.Wire_Format.Image_Separator),
                    Actual => Byte_Count (Marker),
                    others => <>)));
       end case;
    end Next_Event;
 
-   type Prepared_Frame is record
-      Descriptor : Internal.Container.Image_Descriptor;
-      Palette : Palettes.Palette;
-      Control : Frames.Graphic_Control := Frames.Default_Control;
-   end record;
-
    function Prepare_Frame
-     (Object : in out Decoder;
-      Prepared : out Prepared_Frame) return Results.Result
+     (Object : in out Decoder) return Results.Result
    is
+      Prepared : Prepared_Frame renames Object.Pending_Frame;
+      Descriptor : Internal.Container.Image_Descriptor;
       Outcome : Results.Result;
    begin
       Prepared := (others => <>);
-      Object.Current_State := Decoding_Frame;
       Outcome := Internal.Container.Read_Image_Descriptor
         (Object.Input.all,
          Object.Header_Data,
          Object.Constraints,
-         Prepared.Descriptor,
+         Descriptor,
          Prepared.Palette,
          Strictness => Object.Options.Strictness,
          Separator_Already_Read => True);
       if not Results.Succeeded (Outcome) then
          return Outcome;
       end if;
-      if Prepared.Descriptor.Reserved_Bits /= 0 then
+      Prepared.Left := Descriptor.Left;
+      Prepared.Top := Descriptor.Top;
+      Prepared.Width := Descriptor.Width;
+      Prepared.Height := Descriptor.Height;
+      Prepared.Has_Local_Palette := Descriptor.Has_Local_Palette;
+      Prepared.Interlaced := Descriptor.Interlaced;
+      Prepared.Local_Palette_Sorted := Descriptor.Local_Palette_Sorted;
+      if Descriptor.Reserved_Bits /= 0 then
          Add_Warning
            (Object,
             Errors.Reserved_Value_Accepted,
             Errors.Compatibility,
-            (Has_Source => Prepared.Descriptor.Has_Packed_Field_Offset,
-             Source => Prepared.Descriptor.Packed_Field_Offset,
+            (Source_Position => Descriptor.Packed_Field_Position,
              Block => Image_Descriptor_Block,
-             Has_Frame => True,
-             Frame => Object.Frames_Seen,
+             Frame => Errors.Frame_At (Object.Frames_Seen),
              Expected => 0,
-             Actual => Byte_Count (Prepared.Descriptor.Reserved_Bits),
+             Actual => Byte_Count (Descriptor.Reserved_Bits),
              others => <>));
       end if;
       Prepared.Control :=
@@ -396,8 +498,7 @@ package body Giflib.Decoding is
                Internal.Diagnostics.At_Source
                   (Object.Input.all,
                    (Block => Graphic_Control_Extension_Block,
-                    Has_Frame => True,
-                    Frame => Object.Frames_Seen,
+                    Frame => Errors.Frame_At (Object.Frames_Seen),
                     Expected => Byte_Count (Prepared.Palette.Length - 1),
                     Actual => Byte_Count (Prepared.Control.Transparent_Index),
                     others => <>))));
@@ -405,27 +506,42 @@ package body Giflib.Decoding is
       return Results.Success;
    end Prepare_Frame;
 
-   procedure Complete_Frame
+   function Complete_Frame
      (Object : in out Decoder;
-      Prepared : Prepared_Frame;
-      Info : out Frame_Info)
+      Info : out Frame_Info) return Results.Result
    is
+      Prepared : Prepared_Frame renames Object.Pending_Frame;
+      Produced : constant Frame_Info :=
+        (if Prepared.Has_Local_Palette
+         then
+           (Has_Local_Palette => True,
+            Ordinal => Object.Frames_Seen,
+            Left => Prepared.Left,
+            Top => Prepared.Top,
+            Width => Prepared.Width,
+            Height => Prepared.Height,
+            Interlaced => Prepared.Interlaced,
+            Effective_Palette => Prepared.Palette,
+            Control => Prepared.Control,
+            Local_Palette_Sorted => Prepared.Local_Palette_Sorted)
+         else
+           (Has_Local_Palette => False,
+            Ordinal => Object.Frames_Seen,
+            Left => Prepared.Left,
+            Top => Prepared.Top,
+            Width => Prepared.Width,
+            Height => Prepared.Height,
+            Interlaced => Prepared.Interlaced,
+            Effective_Palette => Prepared.Palette,
+            Control => Prepared.Control));
    begin
-      Info :=
-        (Ordinal => Object.Frames_Seen,
-         Left => Prepared.Descriptor.Left,
-         Top => Prepared.Descriptor.Top,
-         Width => Prepared.Descriptor.Width,
-         Height => Prepared.Descriptor.Height,
-         Interlaced => Prepared.Descriptor.Interlaced,
-         Has_Local_Palette => Prepared.Descriptor.Has_Local_Palette,
-         Local_Palette_Sorted => Prepared.Descriptor.Local_Palette_Sorted,
-         Effective_Palette => Prepared.Palette,
-         Control => Prepared.Control);
+      Info := Produced;
       Object.Pending_Control := Frames.Default_Control;
       Object.Has_Pending_Control := False;
+      Object.Has_Pending_Frame := False;
       Object.Frames_Seen := Object.Frames_Seen + 1;
       Object.Current_State := Header_Ready;
+      return Results.Success;
    end Complete_Frame;
 
    function Decode_Indexed_Frame
@@ -492,7 +608,7 @@ package body Giflib.Decoding is
    begin
       Item := Errors.Make_Warning (Errors.Generic_Warning, Errors.Informational);
       if Index > Object.Stored_Warnings then
-         return Results.Failure (Errors.Make (Errors.Invalid_State));
+         return Results.Failure (Errors.Make (Errors.Invalid_Index));
       end if;
       Item := Object.Warnings (Index);
       return Results.Success;

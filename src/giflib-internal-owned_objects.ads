@@ -1,5 +1,4 @@
 with Giflib.Internal.Ownership;
-with System;
 
 generic
    type Element_Type is limited private;
@@ -21,15 +20,17 @@ package Giflib.Internal.Owned_Objects is
    function Release
      (Object : in out Handle;
       Budget : aliased in out Ownership.Byte_Budget) return Boolean;
+   --  Always frees and clears Object.  False reports a ledger mismatch; a
+   --  foreign Budget is never debited.
 
    function Is_Allocated (Object : Handle) return Boolean;
    function Allocation_Bytes return Byte_Count;
-   function Value (Object : in out Handle) return Element_Access
+   function Value (Object : in out Handle) return not null Element_Access
      with Pre => Is_Allocated (Object);
 
 private
    type Handle is limited record
       Pointer : Element_Access := null;
-      Budget_Address : System.Address := System.Null_Address;
+      Owner : Ownership.Budget_Owner;
    end record;
 end Giflib.Internal.Owned_Objects;

@@ -1,6 +1,7 @@
 with Giflib.Errors;
 with Giflib.Internal.Blocks;
 with Giflib.Internal.Bytes;
+with Giflib.Internal.Diagnostics;
 with Giflib.Internal.Geometry_Arithmetic;
 
 package body Giflib.Internal.Image_Data is
@@ -9,7 +10,9 @@ package body Giflib.Internal.Image_Data is
    function Decode_Indices
      (Context : in out LZW.Workspace_Handle;
       Object : in out Streams.Source'Class;
-      Descriptor : Container.Image_Descriptor;
+      Width : Image_Width;
+      Height : Image_Height;
+      Interlaced : Boolean;
       Palette : Palettes.Palette;
       Constraints : Limits.Limit_Set;
       Total_Decoded_Pixels : in out Pixel_Count;
@@ -18,7 +21,7 @@ package body Giflib.Internal.Image_Data is
       Frame : Frame_Ordinal := 0) return Results.Result
    is
       Expected_Pixels : constant Byte_Count :=
-        Geometry_Arithmetic.Area (Descriptor.Width, Descriptor.Height);
+        Geometry_Arithmetic.Area (Width, Height);
       Minimum_Code_Size : Byte;
       Reader : Blocks.Sub_Block_Reader;
       Decoded : Byte_Count;
@@ -28,63 +31,62 @@ package body Giflib.Internal.Image_Data is
          return Results.Failure
            (Errors.Make
               (Errors.Missing_Color_Table,
-               (Has_Source => Streams.Position (Object).Available,
-                Source => Streams.Position (Object).Value,
-                Block => Image_Data_Block,
-                Has_Frame => True,
-                Frame => Frame,
-                others => <>)));
+               Diagnostics.At_Source
+                 (Object,
+                  (Block => Image_Data_Block,
+                   Frame => Errors.Frame_At (Frame),
+                   others => <>))));
       elsif Byte_Count (Total_Decoded_Pixels) > Byte_Count (Constraints.Max_Total_Decoded_Frame_Pixels)
         or else Total_Compressed_Bytes > Constraints.Max_Compressed_Bytes
       then
          return Results.Failure
            (Errors.Make
               (Errors.Internal_Invariant_Failed,
-               (Has_Source => Streams.Position (Object).Available,
-                Source => Streams.Position (Object).Value,
-                Block => Image_Data_Block,
-                Has_Frame => True,
-                Frame => Frame,
-                others => <>)));
+               Diagnostics.At_Source
+                 (Object,
+                  (Block => Image_Data_Block,
+                   Frame => Errors.Frame_At (Frame),
+                   others => <>))));
       elsif Byte_Count (Output'Length) /= Expected_Pixels then
          return Results.Failure
            (Errors.Make
-              (Errors.LZW_Output_Size_Mismatch,
-               (Has_Source => Streams.Position (Object).Available,
-                Source => Streams.Position (Object).Value,
-                Block => Image_Data_Block,
-                Has_Frame => True, Frame => Frame,
-                Expected => Expected_Pixels,
-                Actual => Byte_Count (Output'Length),
-                others => <>)));
+              (Errors.Buffer_Size_Mismatch,
+               Diagnostics.At_Source
+                 (Object,
+                  (Block => Image_Data_Block,
+                   Frame => Errors.Frame_At (Frame),
+                   Expected => Expected_Pixels,
+                   Actual => Byte_Count (Output'Length),
+                   others => <>))));
       elsif Expected_Pixels > Byte_Count (Constraints.Max_Total_Decoded_Frame_Pixels)
         - Byte_Count (Total_Decoded_Pixels)
       then
          return Results.Failure
            (Errors.Make
               (Errors.Limit_Exceeded,
-               (Has_Source => Streams.Position (Object).Available,
-                Source => Streams.Position (Object).Value,
-                Block => Image_Data_Block,
-                Has_Frame => True, Frame => Frame,
-                Expected => Byte_Count (Constraints.Max_Total_Decoded_Frame_Pixels),
-                Actual => Byte_Count (Total_Decoded_Pixels) + Expected_Pixels,
-                Limit => Total_Decoded_Pixel_Limit,
-                others => <>)));
+               Diagnostics.At_Source
+                 (Object,
+                  (Block => Image_Data_Block,
+                   Frame => Errors.Frame_At (Frame),
+                   Expected => Byte_Count
+                     (Constraints.Max_Total_Decoded_Frame_Pixels),
+                   Actual => Byte_Count (Total_Decoded_Pixels) + Expected_Pixels,
+                   Limit => Total_Decoded_Pixel_Limit,
+                   others => <>))));
       end if;
 
       Outcome := Bytes.Read_Byte (Object, Minimum_Code_Size, Image_Data_Block);
       if not Results.Succeeded (Outcome) then
          if Outcome.First_Error.Code = Errors.Source_Unexpected_End then
-            return Results.Failure
-              (Errors.Make
-                 (Errors.Truncated_Block,
-                  (Has_Source => Streams.Position (Object).Available,
-                   Source => Streams.Position (Object).Value,
-                   Block => Image_Data_Block,
-                   Has_Frame => True,
-                   Frame => Frame,
-                   others => <>)));
+            declare
+               Item : Errors.Error := Outcome.First_Error;
+            begin
+               Item.Code := Errors.Truncated_Block;
+               Item.Context.Block := Image_Data_Block;
+               Item.Context.Frame := Errors.Frame_At (Frame);
+               Item.Context := Diagnostics.At_Source (Object, Item.Context);
+               return Results.Failure (Item);
+            end;
          end if;
          return Outcome;
       end if;
@@ -104,8 +106,8 @@ package body Giflib.Internal.Image_Data is
          Constraints.Max_LZW_Work,
          Frame,
          Maximum_Index => Byte (Palette.Length - 1),
-         Interlace_Width => (if Descriptor.Interlaced then Natural (Descriptor.Width) else 0),
-         Interlace_Height => (if Descriptor.Interlaced then Natural (Descriptor.Height) else 0));
+         Interlace_Width => (if Interlaced then Natural (Width) else 0),
+         Interlace_Height => (if Interlaced then Natural (Height) else 0));
       Total_Compressed_Bytes := Total_Compressed_Bytes + Blocks.Total_Bytes (Reader);
       if not Results.Succeeded (Outcome) then
          return Outcome;

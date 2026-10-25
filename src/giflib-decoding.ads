@@ -10,6 +10,7 @@ private with Giflib.Internal.Metadata_Store;
 private with Giflib.Internal.LZW;
 private with Giflib.Internal.Ownership;
 private with Giflib.Internal.Owned_Buffers;
+private with Giflib.Palettes;
 private with Ada.Finalization;
 
 package Giflib.Decoding is
@@ -40,12 +41,23 @@ package Giflib.Decoding is
    subtype Frame_Info is Frames.Indexed_Frame_Info;
 
    type Event_Kind is (Image_Event, Extension_Event, End_Event);
-   type Decode_Event is record
-      Kind : Event_Kind := End_Event;
+   type Decode_Event (Kind : Event_Kind := End_Event) is record
       Offset : Source_Offset := 0;
-      Frame : Frame_Ordinal := 0;
-      Extension_Label : Byte := 0;
-      Extension : Metadata.Extension_Info;
+      case Kind is
+         when Image_Event =>
+            Frame : Frame_Ordinal := 0;
+            Left : Coordinate := 0;
+            Top : Coordinate := 0;
+            Width : Image_Width := Image_Width'First;
+            Height : Image_Height := Image_Height'First;
+            Interlaced : Boolean := False;
+            Indexed_Bytes : Byte_Count := 1;
+            Expanded_Bytes : Byte_Count := 4;
+         when Extension_Event =>
+            Extension : Metadata.Extension_Info;
+         when End_Event =>
+            null;
+      end case;
    end record;
 
    type Decoder
@@ -120,6 +132,18 @@ package Giflib.Decoding is
    procedure Finalize (Object : in out Decoder);
 
 private
+   type Prepared_Frame is record
+      Left : Coordinate := 0;
+      Top : Coordinate := 0;
+      Width : Image_Width := Image_Width'First;
+      Height : Image_Height := Image_Height'First;
+      Has_Local_Palette : Boolean := False;
+      Interlaced : Boolean := False;
+      Local_Palette_Sorted : Boolean := False;
+      Palette : Palettes.Palette;
+      Control : Frames.Graphic_Control := Frames.Default_Control;
+   end record;
+
    type Warning_Array is array (Positive range 1 .. 256) of Errors.Warning;
    type Decoder_Resources is new Ada.Finalization.Limited_Controlled with record
       Metadata_Storage : Internal.Metadata_Store.Store;
@@ -146,6 +170,8 @@ private
       Resources : Decoder_Resources;
       Pending_Control : Frames.Graphic_Control := Frames.Default_Control;
       Has_Pending_Control : Boolean := False;
+      Pending_Frame : Prepared_Frame;
+      Has_Pending_Frame : Boolean := False;
       Loop_Data : Animations.Loop_Info := Animations.No_Loop;
       Snapshot_Rectangle : Frames.Rectangle;
       Previous_Rectangle : Frames.Rectangle;

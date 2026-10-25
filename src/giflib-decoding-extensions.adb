@@ -1,6 +1,8 @@
 with Giflib.Internal.Budget_Arithmetic;
 with Giflib.Internal.Bytes;
+with Giflib.Internal.Diagnostics;
 with Giflib.Internal.Extension_Arithmetic;
+with Giflib.Internal.Loop_Extensions;
 with Giflib.Internal.Metadata_Arithmetic;
 
 package body Giflib.Decoding.Extensions is
@@ -46,17 +48,17 @@ package body Giflib.Decoding.Extensions is
       Item : Errors.Error := Outcome.First_Error;
    begin
       if Outcome.First_Error.Code = Errors.Source_Unexpected_End then
-         return Results.Failure
-           (Errors.Make
-              (Errors.Truncated_Block,
-               (Has_Source => Input_Position (Object).Available,
-                Source => Input_Position (Object).Value,
-                Block => Block,
-                Extension_Label => Info.Label,
-                others => <>)));
+         Item.Code := Errors.Truncated_Block;
+         Item.Context.Block := Block;
+         Item.Context.Extension_Label :=
+           Errors.Extension_Label_At (Metadata.Label_Of (Info));
+         Item.Context := Internal.Diagnostics.At_Source
+           (Object.Input.all, Item.Context);
+         return Results.Failure (Item);
       end if;
       Item.Context.Block := Block;
-      Item.Context.Extension_Label := Info.Label;
+      Item.Context.Extension_Label :=
+        Errors.Extension_Label_At (Metadata.Label_Of (Info));
       return Results.Failure (Item);
    end Truncated;
 
@@ -71,17 +73,60 @@ package body Giflib.Decoding.Extensions is
          return Results.Failure
            (Errors.Make
               (Errors.Limit_Exceeded,
-               (Has_Source => Input_Position (Object).Available,
-                Source => Input_Position (Object).Value,
-                Block => Block,
-                Extension_Label => Info.Label,
-                Expected => Object.Constraints.Max_Per_Extension_Bytes,
-                Actual => Byte_Count (Length),
-                Limit => Per_Extension_Byte_Limit,
-                others => <>)));
+               Internal.Diagnostics.At_Source
+                 (Object.Input.all,
+                  (Block => Block,
+                   Extension_Label =>
+                     Errors.Extension_Label_At (Metadata.Label_Of (Info)),
+                   Expected => Object.Constraints.Max_Per_Extension_Bytes,
+                   Actual => Byte_Count (Length),
+                   Limit => Per_Extension_Byte_Limit,
+                   others => <>))));
       end if;
       return Results.Success;
    end Check_Fixed_Payload;
+
+   function Read_Fixed_Block
+     (Object : in out Decoder;
+      Info : Metadata.Extension_Info;
+      Data : out Streams.Byte_Array) return Results.Result
+   is
+      Size_Byte : Byte;
+      Outcome : Results.Result;
+      Block : constant Block_Kind := Arithmetic.Block_For (Info.Kind);
+   begin
+      Outcome := Internal.Bytes.Read_Byte (Object.Input.all, Size_Byte, Block);
+      if not Results.Succeeded (Outcome) then
+         return Truncated (Object, Info, Outcome);
+      elsif Natural (Size_Byte) /= Data'Length then
+         declare
+            Prior : constant Streams.Source_Position_Result :=
+              Streams.Position (Object.Input.all, 1);
+         begin
+            return Results.Failure
+              (Errors.Make
+                 (Errors.Invalid_Extension,
+                  (Source_Position =>
+                     Internal.Diagnostics.With_Source
+                       ((others => <>), Prior).Source_Position,
+                   Block => Block,
+                   Extension_Label =>
+                     Errors.Extension_Label_At (Metadata.Label_Of (Info)),
+                   Expected => Byte_Count (Data'Length),
+                   Actual => Byte_Count (Size_Byte),
+                   others => <>)));
+         end;
+      end if;
+      Outcome := Check_Fixed_Payload (Object, Info, Data'Length, Block);
+      if not Results.Succeeded (Outcome) then
+         return Outcome;
+      end if;
+      Outcome := Streams.Read_Exact (Object.Input.all, Data);
+      if not Results.Succeeded (Outcome) then
+         return Truncated (Object, Info, Outcome);
+      end if;
+      return Results.Success;
+   end Read_Fixed_Block;
 
    function Read_Sub_Blocks
      (Object : in out Decoder;
@@ -113,17 +158,18 @@ package body Giflib.Decoding.Extensions is
             return Results.Failure
               (Errors.Make
                  (Errors.Limit_Exceeded,
-                  (Has_Source => Input_Position (Object).Available,
-                   Source => Input_Position (Object).Value,
-                   Block => Block,
-                   Extension_Label => Info.Label,
-                   Expected => Object.Constraints.Max_Per_Extension_Bytes,
-                   Actual => Internal.Budget_Arithmetic.Charge
-                     (Info.Payload_Length,
-                      Byte_Count'Last,
-                      Byte_Count (Length)).Attempted,
-                   Limit => Per_Extension_Byte_Limit,
-                   others => <>)));
+                  Internal.Diagnostics.At_Source
+                    (Object.Input.all,
+                     (Block => Block,
+                      Extension_Label =>
+                        Errors.Extension_Label_At (Metadata.Label_Of (Info)),
+                      Expected => Object.Constraints.Max_Per_Extension_Bytes,
+                      Actual => Internal.Budget_Arithmetic.Charge
+                        (Info.Payload_Length,
+                         Byte_Count'Last,
+                         Byte_Count (Length)).Attempted,
+                      Limit => Per_Extension_Byte_Limit,
+                      others => <>))));
          end if;
          Outcome := Streams.Read_Exact
            (Object.Input.all, Buffer (1 .. Length));
@@ -146,11 +192,12 @@ package body Giflib.Decoding.Extensions is
             return Results.Failure
               (Errors.Make
                  (Errors.Integer_Overflow,
-                  (Has_Source => Input_Position (Object).Available,
-                   Source => Input_Position (Object).Value,
-                   Block => Block,
-                   Extension_Label => Info.Label,
-                   others => <>)));
+                  Internal.Diagnostics.At_Source
+                    (Object.Input.all,
+                     (Block => Block,
+                      Extension_Label =>
+                        Errors.Extension_Label_At (Metadata.Label_Of (Info)),
+                      others => <>))));
          end if;
          Info.Sub_Block_Count := Arithmetic.Increment (Info.Sub_Block_Count);
       end loop;
@@ -185,19 +232,36 @@ package body Giflib.Decoding.Extensions is
    is
       Outcome : Results.Result;
    begin
-      Info :=
-        (Label => Label_Value,
-         Offset => Offset,
-         Before_Frame => Object.Frames_Seen,
-         others => <>);
-      Info.Kind := Arithmetic.Classify (Label_Value);
+      case Metadata.Kind_Of (Label_Value) is
+         when Metadata.Graphic_Control_Extension =>
+            Info := (Kind => Metadata.Graphic_Control_Extension,
+                     Offset => Offset, Before_Frame => Object.Frames_Seen,
+                     others => <>);
+         when Metadata.Comment_Extension =>
+            Info := (Kind => Metadata.Comment_Extension,
+                     Offset => Offset, Before_Frame => Object.Frames_Seen,
+                     others => <>);
+         when Metadata.Plain_Text_Extension =>
+            Info := (Kind => Metadata.Plain_Text_Extension,
+                     Offset => Offset, Before_Frame => Object.Frames_Seen,
+                     others => <>);
+         when Metadata.Application_Extension =>
+            Info := (Kind => Metadata.Application_Extension,
+                     Offset => Offset, Before_Frame => Object.Frames_Seen,
+                     others => <>);
+         when Metadata.Unknown_Extension =>
+            Info := (Kind => Metadata.Unknown_Extension,
+                     Offset => Offset, Before_Frame => Object.Frames_Seen,
+                     Label => Label_Value,
+                     others => <>);
+      end case;
 
       if Object.Extensions_Seen >= Object.Constraints.Max_Extensions then
          return Results.Failure
            (Errors.Make
               (Errors.Limit_Exceeded,
-               (Has_Source => True, Source => Offset,
-                Extension_Label => Label_Value,
+               (Source_Position => Errors.Source_Position_At (Offset),
+                Extension_Label => Errors.Extension_Label_At (Label_Value),
                 Expected => Byte_Count (Object.Constraints.Max_Extensions),
                 Actual => Byte_Count (Object.Extensions_Seen) + 1,
                 Limit => Extension_Count_Limit,
@@ -217,7 +281,7 @@ package body Giflib.Decoding.Extensions is
       end case;
 
       if Results.Succeeded (Outcome) then
-         Internal.Metadata_Store.Finish
+         Outcome := Internal.Metadata_Store.Finish
            (Object.Resources.Metadata_Storage, Info);
       end if;
       return Outcome;

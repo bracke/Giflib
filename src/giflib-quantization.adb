@@ -1,7 +1,6 @@
-with Ada.Unchecked_Deallocation;
-
 with Giflib.Errors;
-with Giflib.Internal.Budget_Arithmetic;
+with Giflib.Internal.Resource_Diagnostics;
+with Giflib.Internal.Work_Budgets;
 with Giflib.Internal.Geometry_Arithmetic;
 with Giflib.Internal.Quantization_Arithmetic;
 with Giflib.Internal.Quantization_Buffer_Arithmetic;
@@ -18,56 +17,19 @@ package body Giflib.Quantization is
    package Pixels renames Internal.Quantization_Pixels;
    subtype Histogram_Index is Palette_Builder.Histogram_Index;
 
-   type Work_Tracker is record
-      Total : Byte_Count := 0;
-      Failed : Boolean := False;
-      Attempted : Byte_Count := 0;
-   end record;
+   subtype Work_Tracker is Internal.Work_Budgets.Meter;
 
    function Charge
      (Tracker : in out Work_Tracker;
-      Maximum : Byte_Count;
       Amount : Byte_Count := 1) return Boolean
    is
-      Budget : constant Internal.Budget_Arithmetic.Charge_Result :=
-        Internal.Budget_Arithmetic.Charge
-          (Tracker.Total, Maximum, Amount);
+      Accepted : Boolean;
    begin
-      if not Budget.Accepted then
-         Tracker.Failed := True;
-         Tracker.Attempted := Budget.Attempted;
-         return False;
-      end if;
-      Tracker.Total := Budget.Total;
-      return True;
+      Internal.Work_Budgets.Try_Charge (Tracker, Amount, Accepted);
+      return Accepted;
    end Charge;
 
-   procedure Free_Histogram_State is new Ada.Unchecked_Deallocation
-     (Histogram_State, Histogram_State_Access);
-
    Nearest_Cache_Probe_Limit : constant := 8;
-   procedure Free_Nearest_Cache is new Ada.Unchecked_Deallocation
-     (Nearest_Cache_Array, Nearest_Cache_Access);
-
-   procedure Free_Errors is new Ada.Unchecked_Deallocation
-     (Error_Array, Error_Array_Access);
-
-   function Histogram_Charge return Byte_Count is
-     (Internal.Ownership.Storage_Bytes (Histogram_State'Object_Size));
-   function Nearest_Cache_Charge return Byte_Count is
-     (Internal.Ownership.Storage_Bytes (Nearest_Cache_Array'Object_Size));
-
-   function Error_Charge (Length : Natural) return Byte_Count is
-     (Byte_Count (Length)
-      * Internal.Ownership.Storage_Bytes (Long_Integer'Object_Size));
-
-   procedure Release
-     (Budget : in out Internal.Ownership.Byte_Budget;
-      Amount : Byte_Count)
-   is
-   begin
-      Internal.Ownership.Release (Budget, Amount);
-   end Release;
 
    function Allocated_Bytes (Context : Workspace) return Byte_Count is
    begin
@@ -79,69 +41,25 @@ package body Giflib.Quantization is
 
    procedure Release_All
      (Resources : in out Workspace_Resources;
-      Budget : in out Internal.Ownership.Byte_Budget)
+      Budget : aliased in out Internal.Ownership.Byte_Budget)
    is
       Failed : Boolean := False;
-
-      procedure Release_Histogram is
-      begin
-         if Resources.Histogram /= null then
-            begin
-               Release (Budget, Histogram_Charge);
-            exception
-               when others =>
-                  Failed := True;
-            end;
-            begin
-               Free_Histogram_State (Resources.Histogram);
-            exception
-               when others =>
-                  Failed := True;
-            end;
-         end if;
-      end Release_Histogram;
-
-      procedure Release_Nearest_Cache is
-      begin
-         if Resources.Nearest_Cache /= null then
-            begin
-               Release (Budget, Nearest_Cache_Charge);
-            exception
-               when others =>
-                  Failed := True;
-            end;
-            begin
-               Free_Nearest_Cache (Resources.Nearest_Cache);
-            exception
-               when others =>
-                  Failed := True;
-            end;
-         end if;
-      end Release_Nearest_Cache;
-
-      procedure Release_Error_Buffer is
-         Amount : Byte_Count := 0;
-      begin
-         if Resources.Errors /= null then
-            begin
-               Amount := Error_Charge (Resources.Errors'Length);
-               Release (Budget, Amount);
-            exception
-               when others =>
-                  Failed := True;
-            end;
-            begin
-               Free_Errors (Resources.Errors);
-            exception
-               when others =>
-                  Failed := True;
-            end;
-         end if;
-      end Release_Error_Buffer;
+      function Release_Histogram return Boolean is
+        (Histogram_Ownership.Release (Resources.Histogram, Budget));
+      function Release_Nearest_Cache return Boolean is
+        (Nearest_Cache_Ownership.Release (Resources.Nearest_Cache, Budget));
+      function Release_Error_Buffer return Boolean is
+        (Error_Ownership.Release (Resources.Errors, Budget));
+      procedure Try_Histogram is new Internal.Ownership.Attempt_Release
+        (Release_Histogram);
+      procedure Try_Nearest_Cache is new Internal.Ownership.Attempt_Release
+        (Release_Nearest_Cache);
+      procedure Try_Error_Buffer is new Internal.Ownership.Attempt_Release
+        (Release_Error_Buffer);
    begin
-      Release_Histogram;
-      Release_Nearest_Cache;
-      Release_Error_Buffer;
+      Try_Histogram (Failed);
+      Try_Nearest_Cache (Failed);
+      Try_Error_Buffer (Failed);
       Resources.Cleanup_Failed := Resources.Cleanup_Failed or else Failed;
    end Release_All;
 
@@ -156,51 +74,40 @@ package body Giflib.Quantization is
         (Context.Resources, Context.Resources.Allocation_Budget);
    end Finalize;
 
-   function Allocation_Failure
+   function Allocation_Result
      (Constraints : Limits.Limit_Set;
-      Attempted : Byte_Count) return Results.Result
+      Outcome : Internal.Ownership.Allocation_Outcome) return Results.Result
    is
    begin
       return Results.Failure
-        (Giflib.Errors.Make
-           (Giflib.Errors.Limit_Exceeded,
-            (Expected => Constraints.Max_Allocation_Bytes,
-             Actual => Attempted,
-             Limit => Allocation_Byte_Limit,
-             others => <>)));
-   end Allocation_Failure;
+        (Internal.Resource_Diagnostics.Allocation_Error
+           (Outcome,
+            Constraints.Max_Allocation_Bytes,
+            Outcome.Attempted));
+   end Allocation_Result;
 
    function Ensure_Nearest_Cache
      (Context : in out Workspace;
       Constraints : Limits.Limit_Set) return Results.Result
    is
-      Allocation : constant Byte_Count := Nearest_Cache_Charge;
       Outcome : Internal.Ownership.Allocation_Outcome;
       Budget : Internal.Ownership.Byte_Budget renames
         Context.Resources.Allocation_Budget;
       Fault : Internal.Ownership.Fault_State renames Context.Allocation_Fault;
 
    begin
-      if Context.Resources.Nearest_Cache /= null then
+      if Nearest_Cache_Ownership.Is_Allocated
+        (Context.Resources.Nearest_Cache)
+      then
          return Results.Success;
       end if;
-      declare
-         Ticket : Internal.Ownership.Reservation (Budget'Access);
-      begin
-         Outcome := Internal.Ownership.Reserve
-           (Ticket, Fault, Constraints.Max_Allocation_Bytes, Allocation);
-         if Outcome.Status = Internal.Ownership.Allocation_Ready then
-            begin
-               Context.Resources.Nearest_Cache := new Nearest_Cache_Array;
-               Internal.Ownership.Commit (Ticket);
-            exception
-               when Storage_Error =>
-                  Internal.Ownership.Cancel (Ticket, Outcome);
-            end;
-         end if;
-      end;
+      Outcome := Nearest_Cache_Ownership.Ensure
+        (Context.Resources.Nearest_Cache,
+         Budget,
+         Fault,
+         Constraints.Max_Allocation_Bytes);
       if Outcome.Status /= Internal.Ownership.Allocation_Ready then
-         return Allocation_Failure (Constraints, Outcome.Attempted);
+         return Allocation_Result (Constraints, Outcome);
       end if;
       return Results.Success;
    end Ensure_Nearest_Cache;
@@ -209,33 +116,22 @@ package body Giflib.Quantization is
      (Context : in out Workspace;
       Constraints : Limits.Limit_Set) return Results.Result
    is
-      Allocation : constant Byte_Count := Histogram_Charge;
       Outcome : Internal.Ownership.Allocation_Outcome;
       Budget : Internal.Ownership.Byte_Budget renames
         Context.Resources.Allocation_Budget;
       Fault : Internal.Ownership.Fault_State renames Context.Allocation_Fault;
 
    begin
-      if Context.Resources.Histogram /= null then
+      if Histogram_Ownership.Is_Allocated (Context.Resources.Histogram) then
          return Results.Success;
       end if;
-      declare
-         Ticket : Internal.Ownership.Reservation (Budget'Access);
-      begin
-         Outcome := Internal.Ownership.Reserve
-           (Ticket, Fault, Constraints.Max_Allocation_Bytes, Allocation);
-         if Outcome.Status = Internal.Ownership.Allocation_Ready then
-            begin
-               Context.Resources.Histogram := new Histogram_State;
-               Internal.Ownership.Commit (Ticket);
-            exception
-               when Storage_Error =>
-                  Internal.Ownership.Cancel (Ticket, Outcome);
-            end;
-         end if;
-      end;
+      Outcome := Histogram_Ownership.Ensure
+        (Context.Resources.Histogram,
+         Budget,
+         Fault,
+         Constraints.Max_Allocation_Bytes);
       if Outcome.Status /= Internal.Ownership.Allocation_Ready then
-         return Allocation_Failure (Constraints, Outcome.Attempted);
+         return Allocation_Result (Constraints, Outcome);
       end if;
       return Results.Success;
    end Ensure_Histogram;
@@ -245,45 +141,27 @@ package body Giflib.Quantization is
       Width : Image_Width;
       Constraints : Limits.Limit_Set) return Results.Result
    is
-      Allocation : constant Byte_Count :=
-        Buffer_Arithmetic.Allocation_Bytes
-          (Width,
-           Positive
-             (Internal.Ownership.Storage_Bytes
-                (Long_Integer'Object_Size)));
+      Required_Length : constant Positive :=
+        Buffer_Arithmetic.Error_Buffer_Length (Width);
       Outcome : Internal.Ownership.Allocation_Outcome;
       Budget : Internal.Ownership.Byte_Budget renames
         Context.Resources.Allocation_Budget;
       Fault : Internal.Ownership.Fault_State renames Context.Allocation_Fault;
 
    begin
-      if Context.Resources.Errors /= null
-        and then Error_Charge (Context.Resources.Errors'Length) >= Allocation
+      if Error_Ownership.Length (Context.Resources.Errors) >= Required_Length
       then
          return Results.Success;
       end if;
-      if Context.Resources.Errors /= null then
-         Release (Budget, Error_Charge (Context.Resources.Errors'Length));
-         Free_Errors (Context.Resources.Errors);
-      end if;
-      declare
-         Ticket : Internal.Ownership.Reservation (Budget'Access);
-      begin
-         Outcome := Internal.Ownership.Reserve
-           (Ticket, Fault, Constraints.Max_Allocation_Bytes, Allocation);
-         if Outcome.Status = Internal.Ownership.Allocation_Ready then
-            begin
-               Context.Resources.Errors := new Error_Array
-                 (0 .. Buffer_Arithmetic.Error_Buffer_Length (Width) - 1);
-               Internal.Ownership.Commit (Ticket);
-            exception
-               when Storage_Error =>
-                  Internal.Ownership.Cancel (Ticket, Outcome);
-            end;
-         end if;
-      end;
+      Outcome := Error_Ownership.Ensure
+        (Context.Resources.Errors,
+         Budget,
+         Fault,
+         First => 0,
+         Last => Required_Length - 1,
+         Maximum => Constraints.Max_Allocation_Bytes);
       if Outcome.Status /= Internal.Ownership.Allocation_Ready then
-         return Allocation_Failure (Constraints, Outcome.Attempted);
+         return Allocation_Result (Constraints, Outcome);
       end if;
       return Results.Success;
    end Ensure_Error_Buffer;
@@ -306,7 +184,7 @@ package body Giflib.Quantization is
       elsif Byte_Count (Indexed_Length) /= Pixel_Total then
          return Results.Failure
            (Giflib.Errors.Make
-              (Giflib.Errors.Invalid_Dimensions,
+              (Giflib.Errors.Buffer_Size_Mismatch,
                (Expected => Pixel_Total,
                 Actual => Byte_Count (Indexed_Length),
                 others => <>)));
@@ -318,8 +196,8 @@ package body Giflib.Quantization is
                 Actual => Pixel_Total,
                 Limit => Frame_Pixel_Limit,
                 others => <>)));
-      elsif Options.Strategy = Use_Fixed_Palette
-        and then Options.Fixed_Palette.Length < 2
+      elsif Options.Palette.Strategy = Use_Fixed_Palette
+        and then Options.Palette.Fixed_Palette.Length < 2
       then
          return Results.Failure
            (Giflib.Errors.Make (Giflib.Errors.Missing_Color_Table));
@@ -352,9 +230,7 @@ package body Giflib.Quantization is
      (Context : in out Workspace;
       Source : Images.Image_View;
       Indexed_Pixels : out Streams.Byte_Array;
-      Output_Palette : out Palettes.Palette;
-      Has_Transparency : out Boolean;
-      Transparent_Index : out Palette_Index;
+      Output : out Quantization_Result;
       Options : Quantize_Options;
       Constraints : Limits.Limit_Set) return Results.Result
    is separate;
@@ -363,31 +239,25 @@ package body Giflib.Quantization is
      (Context : in out Workspace;
       Source : Images.Image_View;
       Indexed_Pixels : out Streams.Byte_Array;
-      Output_Palette : out Palettes.Palette;
-      Has_Transparency : out Boolean;
-      Transparent_Index : out Palette_Index;
+      Output : out Quantization_Result;
       Options : Quantize_Options := Default_Options;
       Constraints : Limits.Limit_Set := Limits.Default_Limits) return Results.Result
    is
    begin
       return Quantize_With_Resources
-        (Context, Source, Indexed_Pixels, Output_Palette, Has_Transparency,
-         Transparent_Index, Options, Constraints);
+        (Context, Source, Indexed_Pixels, Output, Options, Constraints);
    end Quantize;
 
    function Quantize
      (Source : Images.Image_View;
       Indexed_Pixels : out Streams.Byte_Array;
-      Output_Palette : out Palettes.Palette;
-      Has_Transparency : out Boolean;
-      Transparent_Index : out Palette_Index;
+      Output : out Quantization_Result;
       Options : Quantize_Options := Default_Options;
       Constraints : Limits.Limit_Set := Limits.Default_Limits) return Results.Result
    is
       Context : Workspace;
    begin
       return Quantize
-        (Context, Source, Indexed_Pixels, Output_Palette, Has_Transparency,
-         Transparent_Index, Options, Constraints);
+        (Context, Source, Indexed_Pixels, Output, Options, Constraints);
    end Quantize;
 end Giflib.Quantization;

@@ -1,4 +1,3 @@
-with Giflib.Internal.Container;
 with Giflib.Internal.LZW;
 with Giflib.Limits;
 with Giflib.Palettes;
@@ -11,7 +10,9 @@ package Giflib.Internal.Image_Data is
    function Decode_Indices
      (Context : in out LZW.Workspace_Handle;
       Object : in out Streams.Source'Class;
-      Descriptor : Container.Image_Descriptor;
+      Width : Image_Width;
+      Height : Image_Height;
+      Interlaced : Boolean;
       Palette : Palettes.Palette;
       Constraints : Limits.Limit_Set;
       Total_Decoded_Pixels : in out Pixel_Count;

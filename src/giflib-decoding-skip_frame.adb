@@ -1,6 +1,5 @@
 separate (Giflib.Decoding)
 function Skip_Frame (Object : in out Decoder) return Results.Result is
-   Prepared : Prepared_Frame;
    Ignored_Info : Frame_Info;
    Minimum_Code_Size : Byte;
    Reader : Internal.Blocks.Sub_Block_Reader;
@@ -13,16 +12,15 @@ begin
       return Results.Failure
         (Errors.Make
            (Errors.Unsupported_Feature,
-            (Has_Source => Input_Position (Object).Available,
-             Source => Input_Position (Object).Value,
-             Has_Frame => True,
-             Frame => Object.Frames_Seen,
-             others => <>)));
+            Internal.Diagnostics.At_Source
+              (Object.Input.all,
+               (Frame => Errors.Frame_At (Object.Frames_Seen),
+                others => <>))));
    end if;
-   Outcome := Prepare_Frame (Object, Prepared);
-   if not Results.Succeeded (Outcome) then
-      return Fail (Object, Outcome.First_Error);
+   if not Object.Has_Pending_Frame then
+      return Fail (Object, Errors.Make (Errors.Internal_Invariant_Failed));
    end if;
+   Object.Current_State := Decoding_Frame;
    Outcome := Internal.Bytes.Read_Byte
      (Object.Input.all, Minimum_Code_Size, Image_Data_Block);
    if not Results.Succeeded (Outcome) then
@@ -36,11 +34,11 @@ begin
            (Object,
             Errors.Make
               (Errors.LZW_Invalid_Minimum_Code_Size,
-               (Has_Source => Position.Available,
-                Source => Position.Value,
+               (Source_Position =>
+                  Internal.Diagnostics.With_Source
+                    ((others => <>), Position).Source_Position,
                 Block => Image_Data_Block,
-                Has_Frame => True,
-                Frame => Object.Frames_Seen,
+                Frame => Errors.Frame_At (Object.Frames_Seen),
                 Actual => Byte_Count (Minimum_Code_Size),
                 others => <>)));
       end;
@@ -57,6 +55,5 @@ begin
    if not Results.Succeeded (Outcome) then
       return Fail (Object, Outcome.First_Error);
    end if;
-   Complete_Frame (Object, Prepared, Ignored_Info);
-   return Results.Success;
+   return Complete_Frame (Object, Ignored_Info);
 end Skip_Frame;

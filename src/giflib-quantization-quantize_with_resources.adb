@@ -3,21 +3,22 @@ function Quantize_With_Resources
   (Context : in out Workspace;
    Source : Images.Image_View;
    Indexed_Pixels : out Streams.Byte_Array;
-   Output_Palette : out Palettes.Palette;
-   Has_Transparency : out Boolean;
-   Transparent_Index : out Palette_Index;
+   Output : out Quantization_Result;
    Options : Quantize_Options;
    Constraints : Limits.Limit_Set) return Results.Result
 is
    Pixel_Total : constant Byte_Count :=
      Internal.Geometry_Arithmetic.Area (Source.Width, Source.Height);
-   Histogram : Histogram_State_Access renames Context.Resources.Histogram;
+   Histogram : Histogram_State_Access := null;
    Exact_Colors : Palettes.Color_Array := [others => (others => 0)];
    Exact_Count : Natural := 0;
    Exact_Overflow : Boolean := False;
-   Tracker : Work_Tracker;
+   Tracker : Work_Tracker (Constraints.Max_Quantization_Work);
    Generated_Start : Natural := 0;
    Opaque_Capacity : Natural;
+   Output_Palette : Palettes.Palette := (others => <>);
+   Has_Transparency : Boolean := False;
+   Transparent_Index : Palette_Index := 0;
 
    function Fail
      (Code : Giflib.Errors.Error_Code;
@@ -32,9 +33,6 @@ is
    Found : Boolean;
    Bucket : Histogram_Index;
 begin
-   Output_Palette := (others => <>);
-   Has_Transparency := False;
-   Transparent_Index := 0;
    Outcome := Validate_Request
      (Context,
       Source,
@@ -45,27 +43,26 @@ begin
    if not Results.Succeeded (Outcome) then
       return Outcome;
    end if;
-   if Options.Strategy = Use_Fixed_Palette then
-      if Options.Use_Transparency
+   if Options.Palette.Strategy = Use_Fixed_Palette then
+      if Options.Transparency.Enabled
         and then Source.Format in RGBA_32 | BGRA_32
       then
          for Y in 0 .. Natural (Source.Height) - 1 loop
             exit when Has_Transparency;
             for X in 0 .. Natural (Source.Width) - 1 loop
-               if not Charge
-                 (Tracker, Constraints.Max_Quantization_Work)
+               if not Charge (Tracker)
                then
                   return Fail
                     (Giflib.Errors.Limit_Exceeded,
-                     (Expected => Constraints.Max_Quantization_Work,
-                      Actual => Tracker.Attempted,
-                      Limit => Quantization_Work_Limit, others => <>));
+                     Internal.Resource_Diagnostics.With_Work_Limit
+                       (Tracker, Quantization_Work_Limit));
                end if;
                if Pixels.Is_Transparent
                  (Pixels.Pixel_At (Source, X, Y),
                   Source.Format,
-                  Options.Use_Transparency,
-                  Options.Alpha_Threshold)
+                  Options.Transparency.Enabled,
+                  (if Options.Transparency.Enabled
+                   then Options.Transparency.Alpha_Threshold else 0))
                then
                   Has_Transparency := True;
                   exit;
@@ -75,12 +72,13 @@ begin
       end if;
       if Has_Transparency
         and then not Palettes.Contains
-          (Options.Fixed_Palette, Options.Fixed_Transparent_Index)
+          (Options.Palette.Fixed_Palette,
+           Options.Palette.Fixed_Transparent_Index)
       then
          return Fail (Giflib.Errors.Palette_Index_Out_Of_Range);
       end if;
-      Output_Palette := Options.Fixed_Palette;
-      Transparent_Index := Options.Fixed_Transparent_Index;
+      Output_Palette := Options.Palette.Fixed_Palette;
+      Transparent_Index := Options.Palette.Fixed_Transparent_Index;
       Generated_Start := 0;
    else
       Outcome := Ensure_Histogram
@@ -88,38 +86,33 @@ begin
       if not Results.Succeeded (Outcome) then
          return Outcome;
       end if;
-      if not Charge
-        (Tracker,
-         Constraints.Max_Quantization_Work,
-         Byte_Count (Histogram.Counts'Length))
+      Histogram := Histogram_Ownership.Value (Context.Resources.Histogram);
+      if not Charge (Tracker, Byte_Count (Histogram.Counts'Length))
       then
          return Fail
            (Giflib.Errors.Limit_Exceeded,
-            (Expected => Constraints.Max_Quantization_Work,
-             Actual => Tracker.Attempted,
-             Limit => Quantization_Work_Limit,
-             others => <>));
+            Internal.Resource_Diagnostics.With_Work_Limit
+              (Tracker, Quantization_Work_Limit));
       end if;
       Histogram.Counts := [others => 0];
       Histogram.Occupied_Count := 0;
 
       for Y in 0 .. Natural (Source.Height) - 1 loop
          for X in 0 .. Natural (Source.Width) - 1 loop
-            if not Charge
-              (Tracker, Constraints.Max_Quantization_Work)
+            if not Charge (Tracker)
             then
                return Fail
                  (Giflib.Errors.Limit_Exceeded,
-                  (Expected => Constraints.Max_Quantization_Work,
-                   Actual => Tracker.Attempted,
-                   Limit => Quantization_Work_Limit, others => <>));
+                  Internal.Resource_Diagnostics.With_Work_Limit
+                    (Tracker, Quantization_Work_Limit));
             end if;
             Pixel := Pixels.Pixel_At (Source, X, Y);
             if Pixels.Is_Transparent
               (Pixel,
                Source.Format,
-               Options.Use_Transparency,
-               Options.Alpha_Threshold)
+               Options.Transparency.Enabled,
+               (if Options.Transparency.Enabled
+                then Options.Transparency.Alpha_Threshold else 0))
             then
                Has_Transparency := True;
             else
@@ -132,15 +125,12 @@ begin
                if not Exact_Overflow then
                   Found := False;
                   for I in 0 .. Exact_Count - 1 loop
-                     if not Charge
-                       (Tracker, Constraints.Max_Quantization_Work)
+                     if not Charge (Tracker)
                      then
                         return Fail
                           (Giflib.Errors.Limit_Exceeded,
-                           (Expected => Constraints.Max_Quantization_Work,
-                            Actual => Tracker.Attempted,
-                            Limit => Quantization_Work_Limit,
-                            others => <>));
+                           Internal.Resource_Diagnostics.With_Work_Limit
+                             (Tracker, Quantization_Work_Limit));
                      end if;
                      if Exact_Colors (Palette_Index (I)) = Pixel.Color then
                         Found := True;
@@ -164,7 +154,7 @@ begin
       else
          Generated_Start := 0;
       end if;
-      Opaque_Capacity := Options.Maximum_Colors - Generated_Start;
+      Opaque_Capacity := Options.Palette.Maximum_Colors - Generated_Start;
       if not Exact_Overflow and then Exact_Count <= Opaque_Capacity then
          for I in 0 .. Exact_Count - 1 loop
             Output_Palette.Colors (Palette_Index (Generated_Start + I)) :=
@@ -176,8 +166,7 @@ begin
            (Histogram.all,
             Generated_Start,
             Opaque_Capacity,
-            Tracker.Total,
-            Constraints.Max_Quantization_Work,
+            Tracker,
             Output_Palette);
          if not Results.Succeeded (Outcome) then
             return Outcome;
@@ -189,7 +178,9 @@ begin
       end if;
    end if;
 
-   if Has_Transparency and then Options.Strategy = Use_Fixed_Palette then
+   if Has_Transparency
+     and then Options.Palette.Strategy = Use_Fixed_Palette
+   then
       Generated_Start := 0;
    elsif Has_Transparency then
       Generated_Start := 1;
@@ -197,7 +188,7 @@ begin
       Generated_Start := 0;
    end if;
 
-   return Map_Pixels
+   Outcome := Map_Pixels
      (Context,
       Source,
       Indexed_Pixels,
@@ -208,5 +199,15 @@ begin
       Options,
       Constraints,
       Tracker);
+   if not Results.Succeeded (Outcome) then
+      return Outcome;
+   end if;
+   Output :=
+     (Palette => Output_Palette,
+      Transparency =>
+        (if Has_Transparency
+         then (Present => True, Index => Transparent_Index)
+         else (Present => False)));
+   return Results.Success;
 end Quantize_With_Resources;
 

@@ -1,27 +1,25 @@
 with Giflib.Encoding.Extensions;
 with Giflib.Encoding.Resource_Management;
-with Giflib.Internal.Descriptor_Arithmetic;
 with Giflib.Internal.Diagnostics;
 with Giflib.Internal.Budget_Arithmetic;
+with Giflib.Internal.Container_Writer;
 with Giflib.Internal.Encoding_Arithmetic;
 with Giflib.Encoding.State_Arithmetic;
-with Giflib.Internal.Extension_Arithmetic;
 with Giflib.Internal.Geometry_Arithmetic;
+with Giflib.Internal.Loop_Extensions;
 with Giflib.Internal.Session_Arithmetic;
+with Giflib.Internal.Wire_Format;
 
 package body Giflib.Encoding is
+   use type Animations.Loop_State;
    use type Errors.Error_Code;
+   use type Errors.Position_State;
    use type Frames.Graphic_Control;
-   package Descriptor_Arithmetic renames Internal.Descriptor_Arithmetic;
+   use type Metadata.Extension_Kind;
    package Buffers renames Internal.Owned_Buffers;
    package Encoding_Arithmetic renames Internal.Encoding_Arithmetic;
    package Geometry_Arithmetic renames Internal.Geometry_Arithmetic;
    package Session_Arithmetic renames Internal.Session_Arithmetic;
-
-   function Output_Position
-     (Object : Encoder) return Streams.Destination_Position_Result
-   is
-     (Streams.Position (Object.Output.all));
 
    overriding procedure Finalize (Resources : in out Encoder_Resources) is
    begin
@@ -39,7 +37,9 @@ package body Giflib.Encoding is
    function Fail (Object : in out Encoder; Item : Errors.Error) return Results.Result is
       Enriched : Errors.Error := Item;
    begin
-      if not Enriched.Context.Has_Destination then
+      if Enriched.Context.Destination_Position.State =
+        Errors.Position_Not_Checked
+      then
          Enriched.Context := Internal.Diagnostics.At_Destination
            (Object.Output.all, Enriched.Context);
       end if;
@@ -57,9 +57,8 @@ package body Giflib.Encoding is
    is
       Enriched : Errors.Error := Item;
    begin
-      if not Enriched.Context.Has_Frame then
-         Enriched.Context.Has_Frame := True;
-         Enriched.Context.Frame := Object.Frames_Written;
+      if not Enriched.Context.Frame.Present then
+         Enriched.Context.Frame := Errors.Frame_At (Object.Frames_Written);
       end if;
       return Fail (Object, Enriched);
    end Fail_Frame;
@@ -88,7 +87,9 @@ package body Giflib.Encoding is
            Object.Screen.Width,
            Object.Screen.Height);
       Additional_Extensions : constant Natural :=
-        (if Object.Has_Loop and then not Object.Header_Written then 1 else 0)
+        (if Object.Loop_Data.State /= Animations.No_Loop_Extension
+             and then not Object.Header_Written
+         then 1 else 0)
         + (if Info.Control /= Frames.Default_Control then 1 else 0);
    begin
       if Object.Frames_Written >= Object.Constraints.Max_Frames then
@@ -135,6 +136,7 @@ package body Giflib.Encoding is
       Data : Streams.Byte_Array) return Results.Result
    is
       Outcome : Results.Result;
+      Written : Byte_Count;
       Budget : constant Internal.Budget_Arithmetic.Charge_Result :=
         Internal.Budget_Arithmetic.Charge
           (Object.Bytes_Written,
@@ -145,27 +147,15 @@ package body Giflib.Encoding is
          return Results.Failure
            (Errors.Make
               (Errors.Limit_Exceeded,
-               (Has_Destination => Output_Position (Object).Available,
-                Destination => Output_Position (Object).Value,
-                Expected => Object.Constraints.Max_Output_Bytes,
-                Actual => Budget.Attempted,
-                Limit => Output_Byte_Limit,
-                others => <>)));
+               Internal.Diagnostics.At_Destination
+                 (Object.Output.all,
+                  (Expected => Object.Constraints.Max_Output_Bytes,
+                   Actual => Budget.Attempted,
+                   Limit => Output_Byte_Limit,
+                   others => <>))));
       end if;
-      begin
-         Outcome := Streams.Write_All (Object.Output.all, Data);
-      exception
-         when others =>
-            return Results.Failure
-              (Errors.Make
-                 (Errors.Destination_Write_Failed,
-                  (Has_Destination => Output_Position (Object).Available,
-                   Destination => Output_Position (Object).Value,
-                   others => <>)));
-      end;
-      if Results.Succeeded (Outcome) then
-         Object.Bytes_Written := Budget.Total;
-      end if;
+      Outcome := Streams.Write_All (Object.Output.all, Data, Written);
+      Object.Bytes_Written := Object.Bytes_Written + Written;
       return Outcome;
    end Write_Raw;
 
@@ -173,88 +163,65 @@ package body Giflib.Encoding is
      (Object : in out Encoder;
       Palette : Palettes.Palette) return Results.Result
    is
-      Length : constant Natural := Natural
-        (Encoding_Arithmetic.Encoded_Palette_Length
-           (Encoding_Arithmetic.Palette_Length (Palette.Length)));
-      Data : Streams.Byte_Array (1 .. Length * 3) := [others => 0];
    begin
-      for I in 0 .. Palette.Length - 1 loop
-         Data (I * 3 + 1) := Palette.Colors (Palette_Index (I)).Red;
-         Data (I * 3 + 2) := Palette.Colors (Palette_Index (I)).Green;
-         Data (I * 3 + 3) := Palette.Colors (Palette_Index (I)).Blue;
-      end loop;
-      return Write_Raw (Object, Data);
+      return Write_Raw
+        (Object, Internal.Container_Writer.Palette_Data (Palette));
    end Write_Palette;
 
    function Write_Header (Object : in out Encoder) return Results.Result is
-      Signature : Streams.Byte_Array (1 .. 6);
-      Descriptor : Streams.Byte_Array (1 .. 7);
       Outcome : Results.Result;
-      Palette_Length : Natural := 0;
-      Size_Code : Descriptor_Arithmetic.Palette_Size_Code := 0;
    begin
       if Object.Header_Written then
          return Results.Success;
       end if;
-      if Object.Options.Version = Force_GIF87a and then Object.Has_Loop then
+      if Object.Options.Version = Force_GIF87a
+        and then Object.Loop_Data.State /= Animations.No_Loop_Extension
+      then
          return Results.Failure (Errors.Make (Errors.Unsupported_Feature));
       end if;
-      Signature :=
-        (if Object.Options.Version = Force_GIF87a
-         then [71, 73, 70, 56, 55, 97]
-         else [71, 73, 70, 56, 57, 97]);
-      if Object.Has_Global_Palette then
-         Palette_Length := Natural
-           (Encoding_Arithmetic.Encoded_Palette_Length
-              (Encoding_Arithmetic.Palette_Length (Object.Global_Palette.Length)));
-         Size_Code := Descriptor_Arithmetic.Palette_Size_Code
-           (Encoding_Arithmetic.Size_Code
-              (Encoding_Arithmetic.Palette_Length (Palette_Length)));
-      end if;
-      Descriptor :=
-        [Internal.Extension_Arithmetic.Low_Byte (Natural (Object.Screen.Width)),
-         Internal.Extension_Arithmetic.High_Byte (Natural (Object.Screen.Width)),
-         Internal.Extension_Arithmetic.Low_Byte (Natural (Object.Screen.Height)),
-         Internal.Extension_Arithmetic.High_Byte (Natural (Object.Screen.Height)),
-         Descriptor_Arithmetic.Encode_Logical_Screen
-           (Descriptor_Arithmetic.Color_Resolution (Object.Screen.Color_Resolution),
-            Object.Has_Global_Palette,
-            False,
-            Size_Code),
-         Byte (Object.Screen.Background_Index),
-         Object.Screen.Pixel_Aspect_Ratio];
-      Outcome := Write_Raw (Object, Signature);
+      Outcome := Write_Raw
+        (Object,
+         Internal.Container_Writer.Signature
+           (if Object.Options.Version = Force_GIF87a
+            then GIF87a else GIF89a));
       if Results.Succeeded (Outcome) then
-         Outcome := Write_Raw (Object, Descriptor);
+         Outcome := Write_Raw
+           (Object,
+            Internal.Container_Writer.Logical_Screen
+              (Width => Object.Screen.Width,
+               Height => Object.Screen.Height,
+               Color_Resolution => Object.Screen.Color_Resolution,
+               Global_Palette =>
+                 (if Object.Has_Global_Palette
+                  then (Present => True,
+                        Length => Internal.Container_Writer.Palette_Length
+                          (Object.Global_Palette.Length),
+                        Sorted => False)
+                  else Internal.Container_Writer.No_Palette),
+               Background_Index => Object.Screen.Background_Index,
+               Pixel_Aspect_Ratio => Object.Screen.Pixel_Aspect_Ratio));
       end if;
       if Results.Succeeded (Outcome) and then Object.Has_Global_Palette then
          Outcome := Write_Palette (Object, Object.Global_Palette);
       end if;
-      if Results.Succeeded (Outcome) and then Object.Has_Loop then
+      if Results.Succeeded (Outcome)
+        and then Object.Loop_Data.State /= Animations.No_Loop_Extension
+      then
          if not Has_Extension_Capacity (Object, 1) then
             return Results.Failure
               (Errors.Make
                  (Errors.Limit_Exceeded,
-                  (Has_Destination => Output_Position (Object).Available,
-                   Destination => Output_Position (Object).Value,
-                   Expected => Byte_Count (Object.Constraints.Max_Extensions),
-                   Actual => Byte_Count (Object.Extensions_Written) + 1,
-                   Limit => Extension_Count_Limit,
-                   others => <>)));
+                  Internal.Diagnostics.At_Destination
+                    (Object.Output.all,
+                     (Expected => Byte_Count (Object.Constraints.Max_Extensions),
+                      Actual => Byte_Count (Object.Extensions_Written) + 1,
+                      Limit => Extension_Count_Limit,
+                      others => <>))));
          end if;
-         declare
-            Count : constant Internal.Extension_Arithmetic.Unsigned_16_Value :=
-              Internal.Extension_Arithmetic.Unsigned_16_Value (Object.Loop_Count);
-            Loop_Block : constant Streams.Byte_Array :=
-              [16#21#, 16#FF#, 11,
-               78, 69, 84, 83, 67, 65, 80, 69, 50, 46, 48,
-               3, 1,
-               Internal.Extension_Arithmetic.Low_Byte (Count),
-               Internal.Extension_Arithmetic.High_Byte (Count),
-               0];
-         begin
-            Outcome := Write_Raw (Object, Loop_Block);
-         end;
+         Outcome := Write_Raw
+           (Object,
+            Internal.Loop_Extensions.Encode_Netscape
+              (Animations.Raw_Count (Object.Loop_Data)));
          if Results.Succeeded (Outcome) then
             Object.Extensions_Written := Object.Extensions_Written + 1;
          end if;
@@ -287,21 +254,10 @@ package body Giflib.Encoding is
       Object.Screen := (others => <>);
       Object.Global_Palette := (others => <>);
       Object.Has_Global_Palette := False;
-      Object.Has_Loop := False;
-      Object.Loop_Count := 0;
+      Object.Loop_Data := Animations.No_Loop;
       Object.Header_Written := False;
       Object.Frames_Written := 0;
       Object.Extensions_Written := 0;
-      declare
-         Initial_Position : constant Streams.Destination_Position_Result :=
-           Streams.Position (Object.Output.all);
-      begin
-         if not Initial_Position.Available then
-            return Fail
-              (Object, Errors.Make (Errors.Destination_Write_Failed));
-         end if;
-         Object.Start_Offset := Initial_Position.Value;
-      end;
       Object.Bytes_Written := 0;
       Object.Compressed_Bytes_Written := 0;
       Object.Diagnostic := Errors.Make (Errors.No_Error);
@@ -371,7 +327,9 @@ package body Giflib.Encoding is
          return Fail (Object, Errors.Make (Errors.Integer_Overflow));
       elsif Object.Options.Version = Force_GIF87a then
          return Fail (Object, Errors.Make (Errors.Unsupported_Feature));
-      elsif not Object.Has_Loop and then not Has_Extension_Capacity (Object, 1) then
+      elsif Object.Loop_Data.State = Animations.No_Loop_Extension
+        and then not Has_Extension_Capacity (Object, 1)
+      then
          return Fail
            (Object,
             Errors.Make
@@ -381,37 +339,98 @@ package body Giflib.Encoding is
                 Limit => Extension_Count_Limit,
                 others => <>)));
       end if;
-      Object.Has_Loop := True;
-      Object.Loop_Count := Count;
+      Object.Loop_Data :=
+        (if Count = 0
+         then (State => Animations.Infinite_Looping)
+         else (State => Animations.Finite_Loop_Count, Count => Count));
       return Results.Success;
    end Set_Loop_Count;
 
    function Add_Indexed_Frame
      (Object : in out Encoder;
       Info : Frame_Info;
-      Selection : Palette_Selection;
-      Local_Palette : Palettes.Palette;
+      Palette : Frame_Palette;
       Pixels : Streams.Byte_Array) return Results.Result
    is separate;
 
    function Add_Extension
      (Object : in out Encoder;
-      Info : Metadata.Extension_Info;
+      Descriptor : Extension_Descriptor;
       Payload : Streams.Byte_Array) return Results.Result
    is
    begin
-      return Extensions.Add (Object, Info, Payload);
+      return Extensions.Add (Object, Descriptor, Payload);
    end Add_Extension;
 
    function Add_Extension_Exact
+     (Object : in out Encoder;
+      Descriptor : Extension_Descriptor;
+      Payload : Streams.Byte_Array;
+      Chunk_Lengths : Chunk_Length_Array) return Results.Result
+   is
+   begin
+      return Extensions.Add_Exact
+        (Object, Descriptor, Payload, Chunk_Lengths);
+   end Add_Extension_Exact;
+
+   type Descriptor_Conversion (Supported : Boolean := False) is record
+      case Supported is
+         when True =>
+            Descriptor : Extension_Descriptor;
+         when False =>
+            null;
+      end case;
+   end record;
+
+   function Descriptor_For
+     (Info : Metadata.Extension_Info) return Descriptor_Conversion
+   is
+   begin
+      return
+        (case Info.Kind is
+            when Metadata.Comment_Extension =>
+              (Supported => True,
+               Descriptor => (Kind => Comment_Extension)),
+            when Metadata.Plain_Text_Extension =>
+              (Supported => True,
+               Descriptor => (Kind => Plain_Text_Extension)),
+            when Metadata.Application_Extension =>
+              (Supported => True,
+               Descriptor => (Kind => Application_Extension)),
+            when Metadata.Unknown_Extension =>
+              (Supported => True,
+               Descriptor => (Kind => Unknown_Extension, Label => Info.Label)),
+            when Metadata.Graphic_Control_Extension =>
+              (Supported => False));
+   end Descriptor_For;
+
+   function Add_Decoded_Extension
+     (Object : in out Encoder;
+      Info : Metadata.Extension_Info;
+      Payload : Streams.Byte_Array) return Results.Result
+   is
+      Conversion : constant Descriptor_Conversion := Descriptor_For (Info);
+   begin
+      if not Conversion.Supported then
+         return Fail (Object, Errors.Make (Errors.Unsupported_Feature));
+      end if;
+      return Add_Extension (Object, Conversion.Descriptor, Payload);
+   end Add_Decoded_Extension;
+
+   function Add_Decoded_Extension_Exact
      (Object : in out Encoder;
       Info : Metadata.Extension_Info;
       Payload : Streams.Byte_Array;
       Chunk_Lengths : Chunk_Length_Array) return Results.Result
    is
+      Conversion : constant Descriptor_Conversion := Descriptor_For (Info);
    begin
-      return Extensions.Add_Exact (Object, Info, Payload, Chunk_Lengths);
-   end Add_Extension_Exact;
+      if not Conversion.Supported then
+         return Fail (Object, Errors.Make (Errors.Unsupported_Feature));
+      end if;
+      return Add_Extension_Exact
+        (Object, Conversion.Descriptor, Payload, Chunk_Lengths);
+   end Add_Decoded_Extension_Exact;
 
    function Add_Truecolor_Frame
      (Object : in out Encoder;
@@ -433,7 +452,8 @@ package body Giflib.Encoding is
       end if;
       Outcome := Write_Header (Object);
       if Results.Succeeded (Outcome) then
-         Outcome := Write_Raw (Object, [1 => 16#3B#]);
+         Outcome := Write_Raw
+           (Object, [1 => Internal.Wire_Format.Trailer]);
       end if;
       if not Results.Succeeded (Outcome) then
          return Fail (Object, Outcome.First_Error);

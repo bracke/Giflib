@@ -25,6 +25,9 @@ package Giflib.Errors is
       Reserved_Disposal_Method,
       Trailing_Data,
       Unsupported_Feature,
+      Invalid_Index,
+      Buffer_Size_Mismatch,
+      Output_Variant_Mismatch,
       Invalid_State,
       Integer_Overflow,
       Limit_Exceeded,
@@ -41,24 +44,107 @@ package Giflib.Errors is
 
    type Warning_Severity is (Informational, Compatibility, Recovery, Data_Loss);
 
+   type Position_State is
+     (Position_Not_Checked, Position_Unavailable, Position_Available);
+
+   type Source_Position_Context
+     (State : Position_State := Position_Not_Checked)
+   is record
+      case State is
+         when Position_Available =>
+            Value : Source_Offset := 0;
+         when Position_Not_Checked | Position_Unavailable =>
+            null;
+      end case;
+   end record;
+
+   type Destination_Position_Context
+     (State : Position_State := Position_Not_Checked)
+   is record
+      case State is
+         when Position_Available =>
+            Value : Destination_Offset := 0;
+         when Position_Not_Checked | Position_Unavailable =>
+            null;
+      end case;
+   end record;
+
+   function Source_Position_At
+     (Value : Source_Offset) return Source_Position_Context is
+     ((State => Position_Available, Value => Value));
+   function Destination_Position_At
+     (Value : Destination_Offset) return Destination_Position_Context is
+     ((State => Position_Available, Value => Value));
+
+   type Frame_Context (Present : Boolean := False) is record
+      case Present is
+         when True =>
+            Value : Frame_Ordinal := 0;
+         when False =>
+            null;
+      end case;
+   end record;
+
+   function Frame_At (Value : Frame_Ordinal) return Frame_Context is
+     ((Present => True, Value => Value));
+
+   type LZW_Context (Present : Boolean := False) is record
+      case Present is
+         when True =>
+            Code_Value : LZW_Code := 0;
+            Width : LZW_Code_Width := LZW_Code_Width'First;
+            Code_Ordinal : Byte_Count := 0;
+         when False =>
+            null;
+      end case;
+   end record;
+
+   function LZW_At
+     (Code_Value : LZW_Code;
+      Width : LZW_Code_Width;
+      Code_Ordinal : Byte_Count) return LZW_Context is
+     ((Present => True,
+       Code_Value => Code_Value,
+       Width => Width,
+       Code_Ordinal => Code_Ordinal));
+
+   type Underlying_Code_Context (Present : Boolean := False) is record
+      case Present is
+         when True =>
+            Value : Long_Long_Integer := 0;
+         when False =>
+            null;
+      end case;
+   end record;
+
+   function Underlying_Code_At
+     (Value : Long_Long_Integer) return Underlying_Code_Context is
+     ((Present => True, Value => Value));
+
+   type Extension_Label_Context (Present : Boolean := False) is record
+      case Present is
+         when True =>
+            Value : Byte := 0;
+         when False =>
+            null;
+      end case;
+   end record;
+
+   function Extension_Label_At
+     (Value : Byte) return Extension_Label_Context is
+     ((Present => True, Value => Value));
+
    type Diagnostic_Context is record
-      Has_Source : Boolean := False;
-      Source : Source_Offset := 0;
-      Has_Destination : Boolean := False;
-      Destination : Destination_Offset := 0;
+      Source_Position : Source_Position_Context;
+      Destination_Position : Destination_Position_Context;
       Block : Block_Kind := No_Block;
-      Extension_Label : Byte := 0;
-      Has_Frame : Boolean := False;
-      Frame : Frame_Ordinal := 0;
-      LZW_Code_Value : LZW_Code := 0;
-      LZW_Width : LZW_Code_Width := LZW_Code_Width'First;
-      LZW_Code_Ordinal : Byte_Count := 0;
-      Has_LZW_Context : Boolean := False;
+      Extension_Label : Extension_Label_Context;
+      Frame : Frame_Context;
+      LZW : LZW_Context;
       Expected : Byte_Count := 0;
       Actual : Byte_Count := 0;
       Limit : Limit_Kind := No_Limit;
-      Underlying_Code : Long_Long_Integer := 0;
-      Has_Underlying_Code : Boolean := False;
+      Underlying_Code : Underlying_Code_Context;
    end record;
 
    type Error is record

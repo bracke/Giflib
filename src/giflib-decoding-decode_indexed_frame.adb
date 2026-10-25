@@ -4,10 +4,9 @@ function Decode_Indexed_Frame
    Target : out Streams.Byte_Array;
    Info : out Frame_Info) return Results.Result
 is
-   Prepared : Prepared_Frame;
+   Prepared : Prepared_Frame renames Object.Pending_Frame;
    Outcome : Results.Result;
 begin
-   Info := (others => <>);
    if not State_Arithmetic.Can_Process_Frame (Object.Current_State)
    then
       return Invalid_Transition (Object);
@@ -15,16 +14,25 @@ begin
       return Results.Failure
         (Errors.Make
            (Errors.Unsupported_Feature,
-            (Has_Source => Input_Position (Object).Available,
-             Source => Input_Position (Object).Value,
-             Has_Frame => True,
-             Frame => Object.Frames_Seen,
-             others => <>)));
+            Internal.Diagnostics.At_Source
+              (Object.Input.all,
+               (Frame => Errors.Frame_At (Object.Frames_Seen),
+                others => <>))));
+   elsif not Object.Has_Pending_Frame then
+      return Fail (Object, Errors.Make (Errors.Internal_Invariant_Failed));
    end if;
-   Outcome := Prepare_Frame (Object, Prepared);
+   Outcome := Validate_Frame_Output
+     (Object,
+      Byte_Count (Target'Length),
+      Internal.Geometry_Arithmetic.Area (Prepared.Width, Prepared.Height),
+      Info'Constrained,
+      (if Info'Constrained
+       then Info.Has_Local_Palette
+       else Prepared.Has_Local_Palette));
    if not Results.Succeeded (Outcome) then
-      return Fail (Object, Outcome.First_Error);
+      return Outcome;
    end if;
+   Object.Current_State := Decoding_Frame;
    Outcome := Resource_Management.Ensure_LZW_Workspace (Object);
    if not Results.Succeeded (Outcome) then
       return Fail (Object, Outcome.First_Error);
@@ -32,7 +40,9 @@ begin
    Outcome := Internal.Image_Data.Decode_Indices
      (Object.Resources.LZW_Workspace,
       Object.Input.all,
-      Prepared.Descriptor,
+      Prepared.Width,
+      Prepared.Height,
+      Prepared.Interlaced,
       Prepared.Palette,
       Object.Constraints,
       Object.Total_Decoded_Pixels,
@@ -42,6 +52,5 @@ begin
    if not Results.Succeeded (Outcome) then
       return Fail (Object, Outcome.First_Error);
    end if;
-   Complete_Frame (Object, Prepared, Info);
-   return Results.Success;
+   return Complete_Frame (Object, Info);
 end Decode_Indexed_Frame;

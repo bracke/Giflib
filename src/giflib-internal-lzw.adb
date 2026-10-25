@@ -1,6 +1,8 @@
 with Interfaces;
 with Giflib.Errors;
-with Giflib.Internal.Budget_Arithmetic;
+with Giflib.Internal.Work_Budgets;
+with Giflib.Internal.Diagnostics;
+with Giflib.Internal.Resource_Diagnostics;
 with Giflib.Internal.Interlacing;
 with Giflib.Internal.LZW_Bit_Arithmetic;
 
@@ -47,7 +49,7 @@ package body Giflib.Internal.LZW is
       Initial_Clear_Seen : Boolean := False;
       First_Character : Byte := 0;
       Output_Position : Natural := 0;
-      Work : Byte_Count := 0;
+      Work : Work_Budgets.Meter (Max_Work);
       Code_Ordinal : Byte_Count := 0;
       Bit_Buffer : Interfaces.Unsigned_32 := 0;
       Bit_Count : Natural := 0;
@@ -60,37 +62,36 @@ package body Giflib.Internal.LZW is
          return Results.Failure
            (Errors.Make
               (Code,
-               (Has_Source => Streams.Position (Object).Available,
-                Source => Streams.Position (Object).Value,
-                Block => Image_Data_Block,
-                Has_Frame => True, Frame => Frame,
-                LZW_Code_Value => LZW_Code (Natural'Min (Value, 4_095)),
-                LZW_Width => LZW_Code_Width (Code_Width),
-                LZW_Code_Ordinal => Code_Ordinal,
-                Has_LZW_Context => True,
-                Expected => Byte_Count (Output'Length),
-                Actual => Byte_Count (Output_Position),
-                others => <>)));
+               Diagnostics.At_Source
+                 (Object,
+                  (Block => Image_Data_Block,
+                   Frame => Errors.Frame_At (Frame),
+                   LZW => Errors.LZW_At
+                     (LZW_Code (Natural'Min (Value, 4_095)),
+                      LZW_Code_Width (Code_Width),
+                      Code_Ordinal),
+                   Expected => Byte_Count (Output'Length),
+                   Actual => Byte_Count (Output_Position),
+                   others => <>))));
       end Failure;
 
       function Charge (Amount : Byte_Count) return Results.Result is
-         Budget : constant Budget_Arithmetic.Charge_Result :=
-           Budget_Arithmetic.Charge (Work, Max_Work, Amount);
+         Accepted : Boolean;
       begin
-         if not Budget.Accepted then
+         Work_Budgets.Try_Charge (Work, Amount, Accepted);
+         if not Accepted then
             return Results.Failure
               (Errors.Make
                  (Errors.Limit_Exceeded,
-                  (Has_Source => Streams.Position (Object).Available,
-                   Source => Streams.Position (Object).Value,
-                   Block => Image_Data_Block,
-                   Has_Frame => True, Frame => Frame,
-                   Expected => Max_Work,
-                   Actual => Budget.Attempted,
-                   Limit => LZW_Work_Limit,
-                   others => <>)));
+                  Diagnostics.At_Source
+                    (Object,
+                     Resource_Diagnostics.With_Work_Limit
+                       (Work,
+                        LZW_Work_Limit,
+                        (Block => Image_Data_Block,
+                         Frame => Errors.Frame_At (Frame),
+                         others => <>)))));
          end if;
-         Work := Budget.Total;
          return Results.Success;
       end Charge;
 
@@ -146,13 +147,13 @@ package body Giflib.Internal.LZW is
             return Results.Failure
               (Errors.Make
                  (Errors.Palette_Index_Out_Of_Range,
-                  (Has_Source => Streams.Position (Object).Available,
-                   Source => Streams.Position (Object).Value,
-                   Block => Image_Data_Block,
-                   Has_Frame => True, Frame => Frame,
-                   Expected => Byte_Count (Maximum_Index),
-                   Actual => Byte_Count (Value),
-                   others => <>)));
+                  Diagnostics.At_Source
+                    (Object,
+                     (Block => Image_Data_Block,
+                      Frame => Errors.Frame_At (Frame),
+                      Expected => Byte_Count (Maximum_Index),
+                      Actual => Byte_Count (Value),
+                      others => <>))));
          elsif Output_Position = Output'Length then
             return Failure (Errors.LZW_Output_Size_Mismatch);
          end if;
@@ -167,11 +168,11 @@ package body Giflib.Internal.LZW is
                   return Results.Failure
                     (Errors.Make
                        (Errors.Internal_Invariant_Failed,
-                        (Has_Source => Streams.Position (Object).Available,
-                         Source => Streams.Position (Object).Value,
-                         Block => Image_Data_Block,
-                         Has_Frame => True, Frame => Frame,
-                         others => <>)));
+                        Diagnostics.At_Source
+                          (Object,
+                           (Block => Image_Data_Block,
+                            Frame => Errors.Frame_At (Frame),
+                            others => <>))));
                end if;
                Target_Position := Image_Row * Interlace_Width + Column;
             end;
@@ -205,12 +206,11 @@ package body Giflib.Internal.LZW is
          return Results.Failure
            (Errors.Make
               (Errors.Internal_Invariant_Failed,
-               (Has_Source => Streams.Position (Object).Available,
-                Source => Streams.Position (Object).Value,
-                Block => Image_Data_Block,
-                Has_Frame => True,
-                Frame => Frame,
-                others => <>)));
+               Diagnostics.At_Source
+                 (Object,
+                  (Block => Image_Data_Block,
+                   Frame => Errors.Frame_At (Frame),
+                   others => <>))));
       end if;
 
       Minimum := Natural (Minimum_Code_Size);
@@ -237,17 +237,17 @@ package body Giflib.Internal.LZW is
             return Results.Failure
               (Errors.Make
                  (Errors.LZW_Invalid_Code,
-                  (Has_Source => Streams.Position (Object).Available,
-                   Source => Streams.Position (Object).Value,
-                   Block => Image_Data_Block,
-                   Has_Frame => True, Frame => Frame,
-                   LZW_Code_Value => LZW_Code (Code),
-                   LZW_Width => LZW_Code_Width (Code_Width),
-                   LZW_Code_Ordinal => Code_Ordinal,
-                   Has_LZW_Context => True,
-                   Expected => Byte_Count (Clear_Code),
-                   Actual => Byte_Count (Code),
-                   others => <>)));
+                  Diagnostics.At_Source
+                    (Object,
+                     (Block => Image_Data_Block,
+                      Frame => Errors.Frame_At (Frame),
+                      LZW => Errors.LZW_At
+                        (LZW_Code (Code),
+                         LZW_Code_Width (Code_Width),
+                         Code_Ordinal),
+                      Expected => Byte_Count (Clear_Code),
+                      Actual => Byte_Count (Code),
+                      others => <>))));
          elsif Code = Clear_Code then
             Initial_Clear_Seen := True;
             Next_Free_Code := First_New_Code;

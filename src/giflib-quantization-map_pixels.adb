@@ -11,8 +11,8 @@ function Map_Pixels
    Constraints : Limits.Limit_Set;
    Tracker : in out Work_Tracker) return Results.Result
 is
-   Nearest_Cache : Nearest_Cache_Access renames Context.Resources.Nearest_Cache;
-   Errors : Error_Array_Access renames Context.Resources.Errors;
+   Nearest_Cache : Nearest_Cache_Access := null;
+   Errors : Error_Array_Access := null;
    Use_Dither : constant Boolean := Options.Dither = Floyd_Steinberg;
    Outcome : Results.Result;
    Pixel : Pixels.Source_Pixel;
@@ -23,10 +23,8 @@ is
       return Results.Failure
         (Giflib.Errors.Make
            (Giflib.Errors.Limit_Exceeded,
-            (Expected => Constraints.Max_Quantization_Work,
-             Actual => Tracker.Attempted,
-             Limit => Quantization_Work_Limit,
-             others => <>)));
+            Internal.Resource_Diagnostics.With_Work_Limit
+              (Tracker, Quantization_Work_Limit)));
    end Work_Failure;
 
    function Nearest (Color : Palettes.RGB_Color) return Palette_Index is
@@ -48,30 +46,22 @@ is
             Store_Slot := Slot;
             exit;
          elsif Nearest_Cache (Slot).Key = Key then
-            if not Charge
-              (Tracker,
-               Constraints.Max_Quantization_Work,
-               Byte_Count (Probe_Count))
+            if not Charge (Tracker, Byte_Count (Probe_Count))
             then
                return Palette_Index (Best);
             end if;
             return Nearest_Cache (Slot).Value;
          end if;
       end loop;
-      if not Charge
-        (Tracker,
-         Constraints.Max_Quantization_Work,
-         Byte_Count (Probe_Count))
+      if not Charge (Tracker, Byte_Count (Probe_Count))
         or else not Charge
-          (Tracker,
-           Constraints.Max_Quantization_Work,
-           Byte_Count (Output_Palette.Length - First))
+          (Tracker, Byte_Count (Output_Palette.Length - First))
       then
          return Palette_Index (Best);
       end if;
       for I in First .. Output_Palette.Length - 1 loop
          if not (Has_Transparency
-                 and then Options.Strategy = Use_Fixed_Palette
+                 and then Options.Palette.Strategy = Use_Fixed_Palette
                  and then Palette_Index (I) = Transparent_Index)
          then
             Distance := Natural
@@ -92,10 +82,9 @@ begin
    if not Results.Succeeded (Outcome) then
       return Outcome;
    end if;
-   if not Charge
-     (Tracker,
-      Constraints.Max_Quantization_Work,
-      Byte_Count (Nearest_Cache'Length))
+   Nearest_Cache := Nearest_Cache_Ownership.Value
+     (Context.Resources.Nearest_Cache);
+   if not Charge (Tracker, Byte_Count (Nearest_Cache'Length))
    then
       return Work_Failure;
    end if;
@@ -106,11 +95,10 @@ begin
       if not Results.Succeeded (Outcome) then
          return Outcome;
       end if;
+      Errors := Error_Ownership.Value (Context.Resources.Errors);
       if not Charge
         (Tracker,
-         Constraints.Max_Quantization_Work,
-         Byte_Count
-           (Buffer_Arithmetic.Error_Buffer_Length (Source.Width)))
+         Byte_Count (Buffer_Arithmetic.Error_Buffer_Length (Source.Width)))
       then
          return Work_Failure;
       end if;
@@ -132,17 +120,14 @@ begin
       begin
          if Use_Dither then
             if not Charge
-              (Tracker,
-               Constraints.Max_Quantization_Work,
-               Byte_Count (3) * Byte_Count (Span))
+              (Tracker, Byte_Count (3) * Byte_Count (Span))
             then
                return Work_Failure;
             end if;
             Dithering.Clear_Next_Row (Errors.all, Next_Group, Span);
          end if;
          for X in 0 .. Natural (Source.Width) - 1 loop
-            if not Charge
-              (Tracker, Constraints.Max_Quantization_Work)
+            if not Charge (Tracker)
             then
                return Work_Failure;
             end if;
@@ -150,8 +135,9 @@ begin
             if Pixels.Is_Transparent
               (Pixel,
                Source.Format,
-               Options.Use_Transparency,
-               Options.Alpha_Threshold)
+               Options.Transparency.Enabled,
+               (if Options.Transparency.Enabled
+                then Options.Transparency.Alpha_Threshold else 0))
             then
                Indexed_Pixels (Indexed_Pixels'First + Index) :=
                  Byte (Transparent_Index);
@@ -169,7 +155,7 @@ begin
                        (Pixel.Color, Errors.all, Current_Group, X, Span);
                   end if;
                   Chosen := Nearest (Adjusted);
-                  if Tracker.Failed then
+                  if Internal.Work_Budgets.Failed (Tracker) then
                      return Work_Failure;
                   end if;
                   Indexed_Pixels (Indexed_Pixels'First + Index) :=

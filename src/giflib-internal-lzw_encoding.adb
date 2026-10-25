@@ -1,7 +1,9 @@
 with Interfaces;
 with Giflib.Errors;
 with Giflib.Internal.Blocks;
-with Giflib.Internal.Budget_Arithmetic;
+with Giflib.Internal.Work_Budgets;
+with Giflib.Internal.Diagnostics;
+with Giflib.Internal.Resource_Diagnostics;
 with Giflib.Internal.Interlacing;
 with Giflib.Internal.LZW_Bit_Arithmetic;
 
@@ -34,6 +36,7 @@ package body Giflib.Internal.LZW_Encoding is
       Max_Compressed_Bytes : Byte_Count;
       Max_Wire_Bytes : Byte_Count;
       Compressed_Bytes : out Byte_Count;
+      Wire_Bytes : out Byte_Count;
       Maximum_Index : Byte := 255;
       Interlace_Width : Natural := 0;
       Interlace_Height : Natural := 0) return Results.Result
@@ -45,26 +48,23 @@ package body Giflib.Internal.LZW_Encoding is
       Clear_Code : Natural;
       End_Code : Natural;
       Next_Free : Natural;
-      Work : Byte_Count := 0;
+      Work : Work_Budgets.Meter (Max_Work);
       Pending : Streams.Byte_Array (1 .. 255);
       Pending_Count : Natural range 0 .. 255 := 0;
 
       function Charge (Amount : Byte_Count) return Results.Result is
-         Budget : constant Budget_Arithmetic.Charge_Result :=
-           Budget_Arithmetic.Charge (Work, Max_Work, Amount);
+         Accepted : Boolean;
       begin
-         if not Budget.Accepted then
+         Work_Budgets.Try_Charge (Work, Amount, Accepted);
+         if not Accepted then
             return Results.Failure
               (Errors.Make
                  (Errors.Limit_Exceeded,
-                  (Has_Destination => Streams.Position (Object).Available,
-                   Destination => Streams.Position (Object).Value,
-                   Expected => Max_Work,
-                   Actual => Budget.Attempted,
-                   Limit => LZW_Work_Limit,
-                   others => <>)));
+                  Diagnostics.At_Destination
+                    (Object,
+                     Resource_Diagnostics.With_Work_Limit
+                       (Work, LZW_Work_Limit))));
          end if;
-         Work := Budget.Total;
          return Results.Success;
       end Charge;
 
@@ -178,12 +178,19 @@ package body Giflib.Internal.LZW_Encoding is
          return Results.Failure
            (Errors.Make
               (Errors.Palette_Index_Out_Of_Range,
-               (Has_Destination => Streams.Position (Object).Available,
-                Destination => Streams.Position (Object).Value,
-                Expected => Byte_Count (Maximum_Index),
-                Actual => Byte_Count (Value),
-                others => <>)));
+               Diagnostics.At_Destination
+                 (Object,
+                  (Expected => Byte_Count (Maximum_Index),
+                   Actual => Byte_Count (Value),
+                   others => <>))));
       end Invalid_Index;
+
+      function Accounted (Outcome : Results.Result) return Results.Result is
+      begin
+         Compressed_Bytes := Blocks.Total_Payload_Written (Writer);
+         Wire_Bytes := Blocks.Total_Wire_Bytes (Writer);
+         return Outcome;
+      end Accounted;
 
       Prefix : Natural;
       Suffix : Byte;
@@ -192,6 +199,7 @@ package body Giflib.Internal.LZW_Encoding is
       Outcome : Results.Result;
    begin
       Compressed_Bytes := 0;
+      Wire_Bytes := 0;
       if Minimum_Code_Size < 2 or else Minimum_Code_Size > 8 then
          return Results.Failure (Errors.Make (Errors.LZW_Invalid_Minimum_Code_Size));
       elsif Input'Length = 0 then
@@ -215,26 +223,26 @@ package body Giflib.Internal.LZW_Encoding is
       Clear_Dictionary;
       Prefix := Natural (Input_At (0));
       if Byte (Prefix) > Maximum_Index then
-         return Invalid_Index (Byte (Prefix));
+         return Accounted (Invalid_Index (Byte (Prefix)));
       end if;
       Outcome := Put_Code (Clear_Code);
       if not Results.Succeeded (Outcome) then
-         return Outcome;
+         return Accounted (Outcome);
       end if;
       for I in 1 .. Input'Length - 1 loop
          Suffix := Input_At (I);
          if Suffix > Maximum_Index then
-            return Invalid_Index (Suffix);
+            return Accounted (Invalid_Index (Suffix));
          end if;
          Outcome := Find (Prefix, Suffix, Found, Slot);
          if not Results.Succeeded (Outcome) then
-            return Outcome;
+            return Accounted (Outcome);
          elsif Found then
             Prefix := Context.Code_Value (Slot);
          else
             Outcome := Put_Code (Prefix);
             if not Results.Succeeded (Outcome) then
-               return Outcome;
+               return Accounted (Outcome);
             end if;
             if LZW_Arithmetic.Can_Insert
               (LZW_Arithmetic.Next_Code_Value (Next_Free))
@@ -253,11 +261,11 @@ package body Giflib.Internal.LZW_Encoding is
             else
                Outcome := Put_Code (Clear_Code);
                if not Results.Succeeded (Outcome) then
-                  return Outcome;
+                  return Accounted (Outcome);
                end if;
                Outcome := Charge (Hash_Size);
                if not Results.Succeeded (Outcome) then
-                  return Outcome;
+                  return Accounted (Outcome);
                end if;
                Clear_Dictionary;
             end if;
@@ -269,22 +277,71 @@ package body Giflib.Internal.LZW_Encoding is
          Outcome := Put_Code (End_Code);
       end if;
       if not Results.Succeeded (Outcome) then
-         return Outcome;
+         return Accounted (Outcome);
       end if;
       if Bit_Count > 0 then
          Outcome := Put_Byte (LZW_Bit_Arithmetic.First_Byte (Bits));
          if not Results.Succeeded (Outcome) then
-            return Outcome;
+            return Accounted (Outcome);
          end if;
       end if;
       Outcome := Flush_Pending;
       if not Results.Succeeded (Outcome) then
-         Compressed_Bytes := Blocks.Total_Payload_Bytes (Writer);
-         return Outcome;
+         return Accounted (Outcome);
       end if;
       Outcome := Blocks.Finish (Writer, Object);
-      Compressed_Bytes := Blocks.Total_Payload_Bytes (Writer);
-      return Outcome;
+      return Accounted (Outcome);
+   end Encode;
+
+   function Encode
+     (Context : in out Workspace;
+      Object : in out Streams.Destination'Class;
+      Input : Streams.Byte_Array;
+      Minimum_Code_Size : Byte;
+      Max_Work : Byte_Count;
+      Max_Compressed_Bytes : Byte_Count;
+      Max_Wire_Bytes : Byte_Count;
+      Compressed_Bytes : out Byte_Count;
+      Maximum_Index : Byte := 255;
+      Interlace_Width : Natural := 0;
+      Interlace_Height : Natural := 0) return Results.Result
+   is
+      Wire_Bytes : Byte_Count;
+   begin
+      return Encode
+        (Context, Object, Input, Minimum_Code_Size, Max_Work,
+         Max_Compressed_Bytes, Max_Wire_Bytes, Compressed_Bytes, Wire_Bytes,
+         Maximum_Index, Interlace_Width, Interlace_Height);
+   end Encode;
+
+   function Encode
+     (Context : in out Workspace_Handle;
+      Object : in out Streams.Destination'Class;
+      Input : Streams.Byte_Array;
+      Minimum_Code_Size : Byte;
+      Max_Work : Byte_Count;
+      Max_Compressed_Bytes : Byte_Count;
+      Max_Wire_Bytes : Byte_Count;
+      Compressed_Bytes : out Byte_Count;
+      Wire_Bytes : out Byte_Count;
+      Maximum_Index : Byte := 255;
+      Interlace_Width : Natural := 0;
+      Interlace_Height : Natural := 0) return Results.Result
+   is
+   begin
+      return Encode
+        (Workspace_Ownership.Value (Context.Owner).all,
+         Object,
+         Input,
+         Minimum_Code_Size,
+         Max_Work,
+         Max_Compressed_Bytes,
+         Max_Wire_Bytes,
+         Compressed_Bytes,
+         Wire_Bytes,
+         Maximum_Index,
+         Interlace_Width,
+         Interlace_Height);
    end Encode;
 
    function Encode
@@ -300,18 +357,11 @@ package body Giflib.Internal.LZW_Encoding is
       Interlace_Width : Natural := 0;
       Interlace_Height : Natural := 0) return Results.Result
    is
+      Wire_Bytes : Byte_Count;
    begin
       return Encode
-        (Workspace_Ownership.Value (Context.Owner).all,
-         Object,
-         Input,
-         Minimum_Code_Size,
-         Max_Work,
-         Max_Compressed_Bytes,
-         Max_Wire_Bytes,
-         Compressed_Bytes,
-         Maximum_Index,
-         Interlace_Width,
-         Interlace_Height);
+        (Context, Object, Input, Minimum_Code_Size, Max_Work,
+         Max_Compressed_Bytes, Max_Wire_Bytes, Compressed_Bytes, Wire_Bytes,
+         Maximum_Index, Interlace_Width, Interlace_Height);
    end Encode;
 end Giflib.Internal.LZW_Encoding;

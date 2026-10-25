@@ -33,8 +33,10 @@ package Giflib.Internal.Extension_Arithmetic with SPARK_Mode is
          Decode_U16_LE (Delay_Low, Delay_High)
        and then Decode_Graphic_Control'Result.Has_Transparency =
          (Natural (Packed) mod 2 = 1)
-       and then Decode_Graphic_Control'Result.Transparent_Index =
-         Palette_Index (Transparent_Index);
+       and then
+         (if Decode_Graphic_Control'Result.Has_Transparency
+          then Decode_Graphic_Control'Result.Transparent_Index =
+            Palette_Index (Transparent_Index));
 
    function Encode_Graphic_Control (Control : Frames.Graphic_Control) return Byte
      with Post =>

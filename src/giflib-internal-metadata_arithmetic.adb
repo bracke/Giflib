@@ -1,14 +1,6 @@
 package body Giflib.Internal.Metadata_Arithmetic
   with SPARK_Mode
 is
-   function Classify (Label : Byte) return Metadata.Extension_Kind is
-     (case Label is
-         when 16#F9# => Metadata.Graphic_Control_Extension,
-         when 16#FE# => Metadata.Comment_Extension,
-         when 16#01# => Metadata.Plain_Text_Extension,
-         when 16#FF# => Metadata.Application_Extension,
-         when others => Metadata.Unknown_Extension);
-
    function Block_For (Kind : Metadata.Extension_Kind) return Block_Kind is
      (case Kind is
          when Metadata.Graphic_Control_Extension => Graphic_Control_Extension_Block,

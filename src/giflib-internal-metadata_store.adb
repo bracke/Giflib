@@ -3,22 +3,17 @@ with Ada.Unchecked_Deallocation;
 with Giflib.Errors;
 with Giflib.Internal.Budget_Arithmetic;
 with Giflib.Internal.Metadata_Arithmetic;
+with Giflib.Internal.Resource_Diagnostics;
 
 package body Giflib.Internal.Metadata_Store is
    use type Ownership.Allocation_Status;
-   use type System.Address;
+   use type Metadata.Extension_Kind;
    package Arithmetic renames Giflib.Internal.Metadata_Arithmetic;
 
    procedure Free_Chunk is new Ada.Unchecked_Deallocation
      (Payload_Chunk, Payload_Chunk_Access);
-   procedure Free_Chunk_Index is new Ada.Unchecked_Deallocation
-     (Chunk_Index_Array, Chunk_Index_Access);
    procedure Free_Node is new Ada.Unchecked_Deallocation
      (Extension_Node, Extension_Node_Access);
-   procedure Free_Extension_Index is new Ada.Unchecked_Deallocation
-     (Extension_Index_Array, Extension_Index_Access);
-
-   Initial_Index_Capacity : constant := 16;
 
    function Node_Charge return Byte_Count is
      (Ownership.Storage_Bytes (Extension_Node'Object_Size));
@@ -26,148 +21,23 @@ package body Giflib.Internal.Metadata_Store is
    function Chunk_Charge return Byte_Count is
      (Ownership.Storage_Bytes (Payload_Chunk'Object_Size));
 
-   function Extension_Index_Charge (Capacity : Natural) return Byte_Count is
-     (Byte_Count (Capacity)
-      * Ownership.Storage_Bytes (Extension_Node_Access'Object_Size));
-
-   function Chunk_Index_Charge (Capacity : Natural) return Byte_Count is
-     (Byte_Count (Capacity)
-      * Ownership.Storage_Bytes (Payload_Chunk_Access'Object_Size));
-
-   function Next_Capacity
-     (Current  : Natural;
-      Required : Positive) return Positive
-   is
-      Result : Natural := Natural'Max (Current, Initial_Index_Capacity);
-   begin
-      while Result < Required loop
-         if Result > Natural'Last / 2 then
-            return Required;
-         end if;
-         Result := Result * 2;
-      end loop;
-      return Positive (Result);
-   end Next_Capacity;
-
    function Allocation_Error
-     (Info     : Metadata.Extension_Info;
-      Budget   : Ownership.Byte_Budget;
-      Maximum  : Byte_Count;
-      Amount   : Byte_Count) return Results.Result
+     (Info       : Metadata.Extension_Info;
+      Maximum    : Byte_Count;
+      Allocation : Ownership.Allocation_Outcome) return Results.Result
    is
    begin
       return Results.Failure
-        (Errors.Make
-           (Errors.Limit_Exceeded,
-            (Has_Source => True, Source => Info.Offset,
+        (Resource_Diagnostics.Allocation_Error
+           (Allocation,
+            Maximum,
+            Allocation.Attempted,
+            (Source_Position => Errors.Source_Position_At (Info.Offset),
              Block => Arithmetic.Block_For (Info.Kind),
-             Extension_Label => Info.Label,
-             Expected => Maximum,
-             Actual => Ownership.Attempted_Total (Budget, Amount),
-             Limit => Allocation_Byte_Limit,
+             Extension_Label =>
+               Errors.Extension_Label_At (Metadata.Label_Of (Info)),
              others => <>)));
    end Allocation_Error;
-
-   function Ensure_Extension_Capacity
-     (Object             : in out Store;
-      Required           : Positive;
-      Maximum_Allocation : Byte_Count;
-      Budget             : aliased in out Ownership.Byte_Budget;
-      Fault              : in out Ownership.Fault_State;
-      Info               : Metadata.Extension_Info) return Results.Result
-   is
-      New_Capacity : Positive;
-      New_Charge : Byte_Count;
-      Old_Charge : Byte_Count;
-      New_Entries : Extension_Index_Access;
-      Allocation : Ownership.Allocation_Outcome;
-
-   begin
-      if Object.Capacity >= Required then
-         return Results.Success;
-      end if;
-      New_Capacity := Next_Capacity (Object.Capacity, Required);
-      New_Charge := Extension_Index_Charge (New_Capacity);
-      declare
-         Ticket : Ownership.Reservation (Budget'Access);
-      begin
-         Allocation := Ownership.Reserve
-           (Ticket, Fault, Maximum_Allocation, New_Charge);
-         if Allocation.Status = Ownership.Allocation_Ready then
-            begin
-               New_Entries := new Extension_Index_Array (1 .. New_Capacity);
-               Ownership.Commit (Ticket);
-            exception
-               when Storage_Error =>
-                  Ownership.Cancel (Ticket, Allocation);
-            end;
-         end if;
-      end;
-      if Allocation.Status /= Ownership.Allocation_Ready then
-         return Allocation_Error
-           (Info, Budget, Maximum_Allocation, New_Charge);
-      end if;
-      New_Entries.all := [others => null];
-      if Object.Entries /= null then
-         New_Entries (1 .. Object.Length) := Object.Entries (1 .. Object.Length);
-         Old_Charge := Extension_Index_Charge (Object.Capacity);
-         Ownership.Release (Budget, Old_Charge);
-         Free_Extension_Index (Object.Entries);
-      end if;
-      Object.Entries := New_Entries;
-      Object.Capacity := New_Capacity;
-      return Results.Success;
-   end Ensure_Extension_Capacity;
-
-   function Ensure_Chunk_Capacity
-     (Node               : in out Extension_Node;
-      Required           : Positive;
-      Maximum_Allocation : Byte_Count;
-      Budget             : aliased in out Ownership.Byte_Budget;
-      Fault              : in out Ownership.Fault_State) return Results.Result
-   is
-      New_Capacity : Positive;
-      New_Charge : Byte_Count;
-      Old_Charge : Byte_Count;
-      New_Chunks : Chunk_Index_Access;
-      Allocation : Ownership.Allocation_Outcome;
-
-   begin
-      if Node.Chunk_Capacity >= Required then
-         return Results.Success;
-      end if;
-      New_Capacity := Next_Capacity (Node.Chunk_Capacity, Required);
-      New_Charge := Chunk_Index_Charge (New_Capacity);
-      declare
-         Ticket : Ownership.Reservation (Budget'Access);
-      begin
-         Allocation := Ownership.Reserve
-           (Ticket, Fault, Maximum_Allocation, New_Charge);
-         if Allocation.Status = Ownership.Allocation_Ready then
-            begin
-               New_Chunks := new Chunk_Index_Array (1 .. New_Capacity);
-               Ownership.Commit (Ticket);
-            exception
-               when Storage_Error =>
-                  Ownership.Cancel (Ticket, Allocation);
-            end;
-         end if;
-      end;
-      if Allocation.Status /= Ownership.Allocation_Ready then
-         return Allocation_Error
-           (Node.Info, Budget, Maximum_Allocation, New_Charge);
-      end if;
-      New_Chunks.all := [others => null];
-      if Node.Chunks /= null then
-         New_Chunks (1 .. Node.Chunk_Count) := Node.Chunks (1 .. Node.Chunk_Count);
-         Old_Charge := Chunk_Index_Charge (Node.Chunk_Capacity);
-         Ownership.Release (Budget, Old_Charge);
-         Free_Chunk_Index (Node.Chunks);
-      end if;
-      Node.Chunks := New_Chunks;
-      Node.Chunk_Capacity := New_Capacity;
-      return Results.Success;
-   end Ensure_Chunk_Capacity;
 
    function Release
      (Object : in out Store;
@@ -175,38 +45,39 @@ package body Giflib.Internal.Metadata_Store is
    is
       Node : Extension_Node_Access;
       Chunk : Payload_Chunk_Access;
+      Ledger_Released : Boolean;
+      Same_Owner : constant Boolean := Ownership.Matches (Object.Owner, Budget);
+      Released : Boolean := Same_Owner;
+
+      procedure Release_Charge (Amount : Byte_Count) is
+      begin
+         if Same_Owner then
+            Ledger_Released := Ownership.Release (Budget, Amount);
+            Released := Ledger_Released and Released;
+         else
+            Released := False;
+         end if;
+      end Release_Charge;
    begin
-      if Object.Budget_Address /= System.Null_Address
-        and then Object.Budget_Address /= Budget'Address
-      then
-         return False;
-      end if;
-      for Index in 1 .. Object.Length loop
-         Node := Object.Entries (Index);
-         for Chunk_Index in 1 .. Node.Chunk_Count loop
-            Chunk := Node.Chunks (Chunk_Index);
-            Ownership.Release (Budget, Chunk_Charge);
+      for Index in 1 .. Extension_Indexes.Length (Object.Entries) loop
+         Node := Extension_Indexes.Element (Object.Entries, Index);
+         for Chunk_Index in 1 .. Chunk_Indexes.Length (Node.Chunks) loop
+            Chunk := Chunk_Indexes.Element (Node.Chunks, Chunk_Index);
+            Release_Charge (Chunk_Charge);
             Free_Chunk (Chunk);
          end loop;
-         if Node.Chunks /= null then
-            Ownership.Release
-              (Budget, Chunk_Index_Charge (Node.Chunk_Capacity));
-            Free_Chunk_Index (Node.Chunks);
-         end if;
-         Ownership.Release (Budget, Node_Charge);
+         Ledger_Released := Chunk_Indexes.Release (Node.Chunks, Budget);
+         Released := Ledger_Released and Released;
+         Release_Charge (Node_Charge);
          Free_Node (Node);
       end loop;
-      if Object.Entries /= null then
-         Ownership.Release
-           (Budget, Extension_Index_Charge (Object.Capacity));
-         Free_Extension_Index (Object.Entries);
-      end if;
-      Object.Length := 0;
-      Object.Capacity := 0;
+      Ledger_Released := Extension_Indexes.Release (Object.Entries, Budget);
+      Released := Ledger_Released and Released;
       Object.Retained_Bytes := 0;
-      Object.Pending_Index := 0;
-      Object.Budget_Address := System.Null_Address;
-      return True;
+      Object.Pending := (State => Idle);
+      Ledger_Released := Ownership.Release_Owned (Object.Owner, Budget, 0);
+      Released := Ledger_Released and Released;
+      return Released;
    end Release;
 
    function Start
@@ -217,65 +88,54 @@ package body Giflib.Internal.Metadata_Store is
       Fault              : in out Ownership.Fault_State;
       Info               : Metadata.Extension_Info) return Results.Result
    is
-      Outcome : Results.Result;
       Node : Extension_Node_Access;
       Allocation : Ownership.Allocation_Outcome;
 
    begin
-      if Object.Pending_Index /= 0 then
+      if Object.Pending.State /= Idle then
          return Results.Failure
            (Errors.Make
-              (Errors.Internal_Invariant_Failed,
-               (Has_Source => True, Source => Info.Offset,
+              (Errors.Invalid_State,
+               (Source_Position => Errors.Source_Position_At (Info.Offset),
                 Block => Arithmetic.Block_For (Info.Kind),
-                Extension_Label => Info.Label,
+                Extension_Label =>
+                  Errors.Extension_Label_At (Metadata.Label_Of (Info)),
                 others => <>)));
       elsif not Arithmetic.Should_Retain (Retention, Info.Kind) then
+         Object.Pending := (State => Ignoring);
          return Results.Success;
-      elsif Object.Budget_Address /= System.Null_Address
-        and then Object.Budget_Address /= Budget'Address
-      then
+      elsif not Ownership.Matches (Object.Owner, Budget) then
          return Results.Failure
            (Errors.Make
               (Errors.Internal_Invariant_Failed,
-               (Has_Source => True, Source => Info.Offset,
+               (Source_Position => Errors.Source_Position_At (Info.Offset),
                 Block => Arithmetic.Block_For (Info.Kind),
-                Extension_Label => Info.Label,
+                Extension_Label =>
+                  Errors.Extension_Label_At (Metadata.Label_Of (Info)),
                 others => <>)));
       end if;
-      Outcome := Ensure_Extension_Capacity
-        (Object,
-         Object.Length + 1,
-         Maximum_Allocation,
-         Budget,
-         Fault,
-         Info);
-      if not Results.Succeeded (Outcome) then
-         return Outcome;
+      Allocation := Extension_Indexes.Ensure_Append
+        (Object.Entries, Budget, Fault, Maximum_Allocation);
+      if Allocation.Status /= Ownership.Allocation_Ready then
+         return Allocation_Error (Info, Maximum_Allocation, Allocation);
       end if;
-      Object.Budget_Address := Budget'Address;
+      Ownership.Bind (Object.Owner, Budget);
       declare
          Ticket : Ownership.Reservation (Budget'Access);
+         procedure Allocate is
+         begin
+            Node := new Extension_Node'(Info => Info, others => <>);
+         end Allocate;
+         procedure Perform is new Ownership.Reserve_And_Allocate (Allocate);
       begin
-         Allocation := Ownership.Reserve
-           (Ticket, Fault, Maximum_Allocation, Node_Charge);
-         if Allocation.Status = Ownership.Allocation_Ready then
-            begin
-               Node := new Extension_Node'(Info => Info, others => <>);
-               Ownership.Commit (Ticket);
-            exception
-               when Storage_Error =>
-                  Ownership.Cancel (Ticket, Allocation);
-            end;
-         end if;
+         Perform (Ticket, Fault, Maximum_Allocation, Node_Charge, Allocation);
       end;
       if Allocation.Status /= Ownership.Allocation_Ready then
-         return Allocation_Error
-           (Info, Budget, Maximum_Allocation, Node_Charge);
+         return Allocation_Error (Info, Maximum_Allocation, Allocation);
       end if;
-      Object.Length := Object.Length + 1;
-      Object.Entries (Object.Length) := Node;
-      Object.Pending_Index := Object.Length;
+      Extension_Indexes.Append (Object.Entries, Node);
+      Object.Pending :=
+        (State => Building, Index => Extension_Indexes.Length (Object.Entries));
       return Results.Success;
    end Start;
 
@@ -287,27 +147,29 @@ package body Giflib.Internal.Metadata_Store is
       Budget             : aliased in out Ownership.Byte_Budget;
       Fault              : in out Ownership.Fault_State) return Results.Result
    is
-      Outcome : Results.Result;
       Chunk : Payload_Chunk_Access;
       Node : Extension_Node_Access;
       Allocation : Ownership.Allocation_Outcome;
 
    begin
-      if Object.Pending_Index = 0 or else Data'Length = 0 then
+      if Object.Pending.State = Idle then
+         return Results.Failure (Errors.Make (Errors.Invalid_State));
+      elsif Object.Pending.State = Ignoring or else Data'Length = 0 then
          return Results.Success;
-      elsif Object.Budget_Address /= Budget'Address then
+      elsif not Ownership.Matches (Object.Owner, Budget) then
          return Results.Failure
            (Errors.Make (Errors.Internal_Invariant_Failed));
       end if;
-      Node := Object.Entries (Object.Pending_Index);
+      Node := Extension_Indexes.Element
+        (Object.Entries, Object.Pending.Index);
       if Data'Length > 255 then
          return Results.Failure
            (Errors.Make
               (Errors.Internal_Invariant_Failed,
-               (Has_Source => True,
-                Source => Node.Info.Offset,
+               (Source_Position => Errors.Source_Position_At (Node.Info.Offset),
                 Block => Arithmetic.Block_For (Node.Info.Kind),
-                Extension_Label => Node.Info.Label,
+                Extension_Label =>
+                  Errors.Extension_Label_At (Metadata.Label_Of (Node.Info)),
                 others => <>)));
       elsif not Arithmetic.Can_Append
         (Object.Retained_Bytes, Maximum_Retained, Data'Length)
@@ -315,9 +177,10 @@ package body Giflib.Internal.Metadata_Store is
          return Results.Failure
            (Errors.Make
               (Errors.Limit_Exceeded,
-               (Has_Source => True, Source => Node.Info.Offset,
+               (Source_Position => Errors.Source_Position_At (Node.Info.Offset),
                 Block => Arithmetic.Block_For (Node.Info.Kind),
-                Extension_Label => Node.Info.Label,
+                Extension_Label =>
+                  Errors.Extension_Label_At (Metadata.Label_Of (Node.Info)),
                 Expected => Maximum_Retained,
                 Actual => Budget_Arithmetic.Charge
                   (Object.Retained_Bytes,
@@ -326,54 +189,52 @@ package body Giflib.Internal.Metadata_Store is
                 Limit => Retained_Metadata_Byte_Limit,
                 others => <>)));
       end if;
-      Outcome := Ensure_Chunk_Capacity
-        (Node.all,
-         Node.Chunk_Count + 1,
-         Maximum_Allocation,
-         Budget,
-         Fault);
-      if not Results.Succeeded (Outcome) then
-         return Outcome;
+      Allocation := Chunk_Indexes.Ensure_Append
+        (Node.Chunks, Budget, Fault, Maximum_Allocation);
+      if Allocation.Status /= Ownership.Allocation_Ready then
+         return Allocation_Error (Node.Info, Maximum_Allocation, Allocation);
       end if;
       declare
          Ticket : Ownership.Reservation (Budget'Access);
+         procedure Allocate is
+         begin
+            Chunk := new Payload_Chunk;
+         end Allocate;
+         procedure Perform is new Ownership.Reserve_And_Allocate (Allocate);
       begin
-         Allocation := Ownership.Reserve
-           (Ticket, Fault, Maximum_Allocation, Chunk_Charge);
-         if Allocation.Status = Ownership.Allocation_Ready then
-            begin
-               Chunk := new Payload_Chunk;
-               Ownership.Commit (Ticket);
-            exception
-               when Storage_Error =>
-                  Ownership.Cancel (Ticket, Allocation);
-            end;
-         end if;
+         Perform (Ticket, Fault, Maximum_Allocation, Chunk_Charge, Allocation);
       end;
       if Allocation.Status /= Ownership.Allocation_Ready then
-         return Allocation_Error
-           (Node.Info, Budget, Maximum_Allocation, Chunk_Charge);
+         return Allocation_Error (Node.Info, Maximum_Allocation, Allocation);
       end if;
       Chunk.Length := Data'Length;
       for I in 0 .. Data'Length - 1 loop
          Chunk.Data (Chunk.Data'First + I) := Data (Data'First + I);
       end loop;
-      Node.Chunk_Count := Node.Chunk_Count + 1;
-      Node.Chunks (Node.Chunk_Count) := Chunk;
+      Chunk_Indexes.Append (Node.Chunks, Chunk);
+      Node.Retained_Length := Node.Retained_Length + Byte_Count (Data'Length);
       Object.Retained_Bytes := Arithmetic.Appended_Length
         (Object.Retained_Bytes, Maximum_Retained, Data'Length);
       return Results.Success;
    end Append;
 
-   procedure Finish
+   function Finish
      (Object : in out Store;
-      Info   : Metadata.Extension_Info)
+      Info   : Metadata.Extension_Info) return Results.Result
    is
+      Node : Extension_Node_Access;
    begin
-      if Object.Pending_Index /= 0 then
-         Object.Entries (Object.Pending_Index).Info := Info;
+      if Object.Pending.State = Idle then
+         return Results.Failure (Errors.Make (Errors.Invalid_State));
       end if;
-      Object.Pending_Index := 0;
+      if Object.Pending.State = Building then
+         Node := Extension_Indexes.Element
+           (Object.Entries, Object.Pending.Index);
+         Node.Info := Info;
+         Node.Info.Payload_Length := Node.Retained_Length;
+      end if;
+      Object.Pending := (State => Idle);
+      return Results.Success;
    end Finish;
 
    function Find
@@ -381,21 +242,20 @@ package body Giflib.Internal.Metadata_Store is
       Index  : Positive) return Extension_Node_Access
    is
    begin
-      if Index > Object.Length then
+      if Index > Extension_Indexes.Length (Object.Entries) then
          return null;
       end if;
-      return Object.Entries (Index);
+      return Extension_Indexes.Element (Object.Entries, Index);
    end Find;
 
-   function Count (Object : Store) return Natural is (Object.Length);
+   function Count (Object : Store) return Natural is
+     (Extension_Indexes.Length (Object.Entries));
 
    function Is_Released (Object : Store) return Boolean is
-     (Object.Entries = null
-      and then Object.Length = 0
-      and then Object.Capacity = 0
+     (not Extension_Indexes.Is_Allocated (Object.Entries)
       and then Object.Retained_Bytes = 0
-      and then Object.Pending_Index = 0
-      and then Object.Budget_Address = System.Null_Address);
+      and then Object.Pending.State = Idle
+      and then not Ownership.Is_Bound (Object.Owner));
 
    function Info_At
      (Object : Store;
@@ -404,9 +264,15 @@ package body Giflib.Internal.Metadata_Store is
    is
       Node : constant Extension_Node_Access := Find (Object, Index);
    begin
-      Info := (others => <>);
       if Node = null then
-         return Results.Failure (Errors.Make (Errors.Invalid_State));
+         return Results.Failure (Errors.Make (Errors.Invalid_Index));
+      elsif Info'Constrained and then Info.Kind /= Node.Info.Kind then
+         return Results.Failure
+           (Errors.Make
+              (Errors.Output_Variant_Mismatch,
+               (Expected => Byte_Count (Metadata.Extension_Kind'Pos (Info.Kind)),
+                Actual => Byte_Count (Metadata.Extension_Kind'Pos (Node.Info.Kind)),
+                others => <>)));
       end if;
       Info := Node.Info;
       return Results.Success;
@@ -423,19 +289,19 @@ package body Giflib.Internal.Metadata_Store is
    begin
       Count := 0;
       if Node = null then
-         return Results.Failure (Errors.Make (Errors.Invalid_State));
-      elsif Byte_Count (Target'Length) < Node.Info.Payload_Length then
+         return Results.Failure (Errors.Make (Errors.Invalid_Index));
+      elsif Byte_Count (Target'Length) < Node.Retained_Length then
          return Results.Failure
            (Errors.Make
-              (Errors.Limit_Exceeded,
-               (Expected => Node.Info.Payload_Length,
+              (Errors.Buffer_Size_Mismatch,
+               (Expected => Node.Retained_Length,
                 Actual => Byte_Count (Target'Length),
-                Limit => Output_Byte_Limit,
                 others => <>)));
       end if;
-      for Chunk_Index in 1 .. Node.Chunk_Count loop
+      for Chunk_Index in 1 .. Chunk_Indexes.Length (Node.Chunks) loop
          declare
-            Chunk : constant Payload_Chunk_Access := Node.Chunks (Chunk_Index);
+            Chunk : constant Payload_Chunk_Access :=
+              Chunk_Indexes.Element (Node.Chunks, Chunk_Index);
          begin
             for I in 0 .. Chunk.Length - 1 loop
                Target (Target'First + Position) :=
@@ -457,9 +323,9 @@ package body Giflib.Internal.Metadata_Store is
    begin
       Count := 0;
       if Node = null then
-         return Results.Failure (Errors.Make (Errors.Invalid_State));
+         return Results.Failure (Errors.Make (Errors.Invalid_Index));
       end if;
-      Count := Node.Chunk_Count;
+      Count := Chunk_Indexes.Length (Node.Chunks);
       return Results.Success;
    end Chunk_Count;
 
@@ -474,17 +340,18 @@ package body Giflib.Internal.Metadata_Store is
       Chunk : Payload_Chunk_Access;
    begin
       Count := 0;
-      if Node = null or else Chunk_Index > Node.Chunk_Count then
-         return Results.Failure (Errors.Make (Errors.Invalid_State));
+      if Node = null
+        or else Chunk_Index > Chunk_Indexes.Length (Node.Chunks)
+      then
+         return Results.Failure (Errors.Make (Errors.Invalid_Index));
       end if;
-      Chunk := Node.Chunks (Chunk_Index);
+      Chunk := Chunk_Indexes.Element (Node.Chunks, Chunk_Index);
       if Target'Length < Chunk.Length then
          return Results.Failure
            (Errors.Make
-              (Errors.Limit_Exceeded,
+              (Errors.Buffer_Size_Mismatch,
                (Expected => Byte_Count (Chunk.Length),
                 Actual => Byte_Count (Target'Length),
-                Limit => Output_Byte_Limit,
                 others => <>)));
       end if;
       for I in 0 .. Chunk.Length - 1 loop

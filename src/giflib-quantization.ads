@@ -7,6 +7,8 @@ with Giflib.Streams;
 private with Giflib.Internal.Quantization_Dithering;
 private with Giflib.Internal.Quantization_Palette;
 private with Giflib.Internal.Ownership;
+private with Giflib.Internal.Owned_Arrays;
+private with Giflib.Internal.Owned_Objects;
 private with Ada.Finalization;
 
 package Giflib.Quantization is
@@ -15,17 +17,47 @@ package Giflib.Quantization is
    type Dither_Mode is (No_Dither, Floyd_Steinberg);
    type Palette_Strategy is (Generate_Palette, Use_Fixed_Palette);
 
+   type Palette_Options
+     (Strategy : Palette_Strategy := Generate_Palette) is record
+      case Strategy is
+         when Generate_Palette =>
+            Maximum_Colors : Natural range 2 .. 256 := 256;
+         when Use_Fixed_Palette =>
+            Fixed_Palette : Palettes.Palette;
+            Fixed_Transparent_Index : Palette_Index := 0;
+      end case;
+   end record;
+
+   type Transparency_Options (Enabled : Boolean := True) is record
+      case Enabled is
+         when True =>
+            Alpha_Threshold : Byte := 127;
+         when False =>
+            null;
+      end case;
+   end record;
+
    type Quantize_Options is record
-      Maximum_Colors : Natural range 2 .. 256 := 256;
       Dither : Dither_Mode := No_Dither;
-      Strategy : Palette_Strategy := Generate_Palette;
-      Fixed_Palette : Palettes.Palette := (others => <>);
-      Use_Transparency : Boolean := True;
-      Alpha_Threshold : Byte := 127;
-      Fixed_Transparent_Index : Palette_Index := 0;
+      Palette : Palette_Options;
+      Transparency : Transparency_Options;
    end record;
 
    Default_Options : constant Quantize_Options := (others => <>);
+
+   type Transparency_Result (Present : Boolean := False) is record
+      case Present is
+         when True =>
+            Index : Palette_Index := 0;
+         when False =>
+            null;
+      end case;
+   end record;
+
+   type Quantization_Result is record
+      Palette : Palettes.Palette;
+      Transparency : Transparency_Result;
+   end record;
 
    type Workspace is limited private;
 
@@ -35,9 +67,7 @@ package Giflib.Quantization is
    function Quantize
      (Source : Images.Image_View;
       Indexed_Pixels : out Streams.Byte_Array;
-      Output_Palette : out Palettes.Palette;
-      Has_Transparency : out Boolean;
-      Transparent_Index : out Palette_Index;
+      Output : out Quantization_Result;
       Options : Quantize_Options := Default_Options;
       Constraints : Limits.Limit_Set := Limits.Default_Limits) return Results.Result;
 
@@ -46,9 +76,7 @@ package Giflib.Quantization is
      (Context : in out Workspace;
       Source : Images.Image_View;
       Indexed_Pixels : out Streams.Byte_Array;
-      Output_Palette : out Palettes.Palette;
-      Has_Transparency : out Boolean;
-      Transparent_Index : out Palette_Index;
+      Output : out Quantization_Result;
       Options : Quantize_Options := Default_Options;
       Constraints : Limits.Limit_Set := Limits.Default_Limits) return Results.Result;
 
@@ -59,7 +87,8 @@ package Giflib.Quantization is
 private
    subtype Histogram_State is
      Internal.Quantization_Palette.Histogram_State;
-   type Histogram_State_Access is access Histogram_State;
+   package Histogram_Ownership is new Internal.Owned_Objects (Histogram_State);
+   subtype Histogram_State_Access is Histogram_Ownership.Element_Access;
 
    Nearest_Cache_Size : constant := 4_096;
    type Nearest_Cache_Entry is record
@@ -69,14 +98,18 @@ private
    end record;
    type Nearest_Cache_Array is
      array (Natural range 0 .. Nearest_Cache_Size - 1) of Nearest_Cache_Entry;
-   type Nearest_Cache_Access is access Nearest_Cache_Array;
+   package Nearest_Cache_Ownership is new Internal.Owned_Objects
+     (Nearest_Cache_Array);
+   subtype Nearest_Cache_Access is Nearest_Cache_Ownership.Element_Access;
 
    subtype Error_Array is Internal.Quantization_Dithering.Error_Array;
-   type Error_Array_Access is access Error_Array;
+   package Error_Ownership is new Internal.Owned_Arrays
+     (Natural, Long_Integer, Error_Array, 0);
+   subtype Error_Array_Access is Error_Ownership.Element_Array_Access;
    type Workspace_Resources is new Ada.Finalization.Limited_Controlled with record
-      Histogram : Histogram_State_Access := null;
-      Nearest_Cache : Nearest_Cache_Access := null;
-      Errors : Error_Array_Access := null;
+      Histogram : Histogram_Ownership.Handle;
+      Nearest_Cache : Nearest_Cache_Ownership.Handle;
+      Errors : Error_Ownership.Handle;
       Allocation_Budget : aliased Internal.Ownership.Byte_Budget;
       Cleanup_Failed : Boolean := False;
    end record;
@@ -91,9 +124,7 @@ private
      (Context : in out Workspace;
       Source : Images.Image_View;
       Indexed_Pixels : out Streams.Byte_Array;
-      Output_Palette : out Palettes.Palette;
-      Has_Transparency : out Boolean;
-      Transparent_Index : out Palette_Index;
+      Output : out Quantization_Result;
       Options : Quantize_Options;
       Constraints : Limits.Limit_Set) return Results.Result;
 end Giflib.Quantization;

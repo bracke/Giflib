@@ -22,4 +22,20 @@ package body Giflib.Internal.Budget_Arithmetic with SPARK_Mode is
             Attempted => Current + Amount);
       end if;
    end Charge;
+
+   procedure Try_Charge
+     (Current : in out Byte_Count;
+      Maximum : Byte_Count;
+      Amount : Byte_Count;
+      Accepted : out Boolean;
+      Attempted : out Byte_Count)
+   is
+      Result : constant Charge_Result := Charge (Current, Maximum, Amount);
+   begin
+      Accepted := Result.Accepted;
+      Attempted := Result.Attempted;
+      if Accepted then
+         Current := Result.Total;
+      end if;
+   end Try_Charge;
 end Giflib.Internal.Budget_Arithmetic;

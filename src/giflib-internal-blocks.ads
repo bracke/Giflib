@@ -39,6 +39,7 @@ package Giflib.Internal.Blocks is
      (Writer : in out Sub_Block_Writer;
       Object : in out Streams.Destination'Class) return Results.Result;
    function Total_Payload_Bytes (Writer : Sub_Block_Writer) return Byte_Count;
+   function Total_Payload_Written (Writer : Sub_Block_Writer) return Byte_Count;
    function Total_Wire_Bytes (Writer : Sub_Block_Writer) return Byte_Count;
 
 private
@@ -55,6 +56,7 @@ private
       Buffer : Streams.Byte_Array (1 .. 255) := [others => 0];
       Used : Natural range 0 .. 255 := 0;
       Payload_Total : Byte_Count := 0;
+      Payload_Written : Byte_Count := 0;
       Wire_Total : Byte_Count := 0;
       Maximum_Payload : Byte_Count := 0;
       Maximum_Wire : Byte_Count := 0;

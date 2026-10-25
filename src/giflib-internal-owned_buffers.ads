@@ -1,11 +1,13 @@
 with Giflib.Internal.Ownership;
+with Giflib.Internal.Owned_Arrays;
 with Giflib.Streams;
-with System;
 
 package Giflib.Internal.Owned_Buffers is
    pragma Preelaborate;
 
-   type Byte_Array_Access is access all Streams.Byte_Array;
+   package Storage is new Owned_Arrays
+     (Positive, Byte, Streams.Byte_Array, 0);
+   subtype Byte_Array_Access is Storage.Element_Array_Access;
    type Handle is limited private;
    --  A successful Ensure binds the handle to Budget until Release.  The
    --  binding stores only the ledger identity; callers supply the ledger when
@@ -22,6 +24,8 @@ package Giflib.Internal.Owned_Buffers is
    function Release
      (Buffer : in out Handle;
       Budget : aliased in out Ownership.Byte_Budget) return Boolean;
+   --  Always frees and clears Buffer.  False reports a ledger mismatch; a
+   --  foreign Budget is never debited.
 
    function Is_Allocated (Buffer : Handle) return Boolean;
    function Length (Buffer : Handle) return Byte_Count;
@@ -31,7 +35,6 @@ package Giflib.Internal.Owned_Buffers is
 
 private
    type Handle is limited record
-      Pointer : Byte_Array_Access := null;
-      Budget_Address : System.Address := System.Null_Address;
+      Owner : Storage.Handle;
    end record;
 end Giflib.Internal.Owned_Buffers;

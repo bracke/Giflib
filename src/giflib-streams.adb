@@ -1,14 +1,53 @@
 with Giflib.Internal.Stream_Arithmetic;
 
 package body Giflib.Streams is
+   use type Errors.Position_State;
    package Arithmetic renames Giflib.Internal.Stream_Arithmetic;
+
+   function Source_Context
+     (Position : Source_Position_Result) return Errors.Source_Position_Context is
+     (if Position.Available
+      then Errors.Source_Position_At (Position.Value)
+      else (State => Errors.Position_Unavailable));
+
+   function Destination_Context
+     (Position : Destination_Position_Result)
+      return Errors.Destination_Position_Context is
+     (if Position.Available
+      then Errors.Destination_Position_At (Position.Value)
+      else (State => Errors.Position_Unavailable));
+
+   function At_Source
+     (Item : Errors.Error;
+      Position : Source_Position_Result) return Errors.Error
+   is
+      Enriched : Errors.Error := Item;
+   begin
+      if Enriched.Context.Source_Position.State = Errors.Position_Not_Checked then
+         Enriched.Context.Source_Position := Source_Context (Position);
+      end if;
+      return Enriched;
+   end At_Source;
+
+   function At_Destination
+     (Item : Errors.Error;
+      Position : Destination_Position_Result) return Errors.Error
+   is
+      Enriched : Errors.Error := Item;
+   begin
+      if Enriched.Context.Destination_Position.State = Errors.Position_Not_Checked
+      then
+         Enriched.Context.Destination_Position := Destination_Context (Position);
+      end if;
+      return Enriched;
+   end At_Destination;
 
    function Position (Object : Source'Class) return Source_Position_Result is
    begin
       return (Available => True, Value => Object.Offset);
    exception
       when others =>
-         return (Available => False, Value => 0);
+         return (Available => False);
    end Position;
 
    function Position
@@ -18,7 +57,7 @@ package body Giflib.Streams is
       Current : constant Source_Position_Result := Position (Object);
    begin
       if not Current.Available or else Current.Value < Rewind then
-         return (Available => False, Value => 0);
+         return (Available => False);
       end if;
       return (Available => True, Value => Current.Value - Rewind);
    end Position;
@@ -30,58 +69,114 @@ package body Giflib.Streams is
       return (Available => True, Value => Object.Offset);
    exception
       when others =>
-         return (Available => False, Value => 0);
+         return (Available => False);
    end Position;
+
+   function Read_Some_At
+     (Object : in out Source'Class;
+      Buffer : out Byte_Array;
+      Start : out Source_Position_Result) return Source_Result
+   is
+      Result : Source_Result;
+   begin
+      Start := Position (Object);
+      Result := Object.Read (Buffer);
+      if Errors.Is_Fatal (Result.Error) then
+         Result.Error := At_Source (Result.Error, Start);
+      end if;
+      return Result;
+   exception
+      when others =>
+         return
+           (Error => At_Source (Errors.Make (Errors.Source_Read_Failed), Start),
+            Count => 0,
+            End_Of_Input => False);
+   end Read_Some_At;
 
    function Read_Some
      (Object : in out Source'Class;
       Buffer : out Byte_Array) return Source_Result
    is
+      Start : Source_Position_Result;
    begin
-      return Object.Read (Buffer);
+      return Read_Some_At (Object, Buffer, Start);
+   end Read_Some;
+
+   function Skip_Some_At
+     (Object : in out Source'Class;
+      Count : Byte_Count;
+      Start : out Source_Position_Result) return Source_Result
+   is
+      Result : Source_Result;
+   begin
+      Start := Position (Object);
+      Result := Object.Skip (Count);
+      if Errors.Is_Fatal (Result.Error) then
+         Result.Error := At_Source (Result.Error, Start);
+      end if;
+      return Result;
    exception
       when others =>
          return
-           (Error => Errors.Make (Errors.Source_Read_Failed),
+           (Error => At_Source (Errors.Make (Errors.Source_Read_Failed), Start),
             Count => 0,
             End_Of_Input => False);
-   end Read_Some;
+   end Skip_Some_At;
 
    function Skip_Some
      (Object : in out Source'Class;
       Count : Byte_Count) return Source_Result
    is
+      Start : Source_Position_Result;
    begin
-      return Object.Skip (Count);
+      return Skip_Some_At (Object, Count, Start);
+   end Skip_Some;
+
+   function Write_Some_At
+     (Object : in out Destination'Class;
+      Buffer : Byte_Array;
+      Start : out Destination_Position_Result) return Destination_Result
+   is
+      Result : Destination_Result;
+   begin
+      Start := Position (Object);
+      Result := Object.Write (Buffer);
+      if Errors.Is_Fatal (Result.Error) then
+         Result.Error := At_Destination (Result.Error, Start);
+      end if;
+      return Result;
    exception
       when others =>
          return
-           (Error => Errors.Make (Errors.Source_Read_Failed),
-            Count => 0,
-            End_Of_Input => False);
-   end Skip_Some;
+           (Error => At_Destination
+              (Errors.Make (Errors.Destination_Write_Failed), Start),
+            Count => 0);
+   end Write_Some_At;
 
    function Write_Some
      (Object : in out Destination'Class;
       Buffer : Byte_Array) return Destination_Result
    is
+      Start : Destination_Position_Result;
    begin
-      return Object.Write (Buffer);
-   exception
-      when others =>
-         return
-           (Error => Errors.Make (Errors.Destination_Write_Failed),
-            Count => 0);
+      return Write_Some_At (Object, Buffer, Start);
    end Write_Some;
 
    function Flush_Safely
      (Object : in out Destination'Class) return Errors.Error
    is
+      Start : constant Destination_Position_Result := Position (Object);
+      Result : Errors.Error;
    begin
-      return Object.Flush;
+      Result := Object.Flush;
+      if Errors.Is_Fatal (Result) then
+         Result := At_Destination (Result, Start);
+      end if;
+      return Result;
    exception
       when others =>
-         return Errors.Make (Errors.Destination_Write_Failed);
+         return At_Destination
+           (Errors.Make (Errors.Destination_Write_Failed), Start);
    end Flush_Safely;
 
    function Read_Exact (Object : in out Source'Class; Buffer : out Byte_Array) return Results.Result is
@@ -89,12 +184,14 @@ package body Giflib.Streams is
    begin
       while Completed < Buffer'Length loop
          declare
-            Step : constant Source_Result :=
-              Read_Some
-                (Object, Buffer (Buffer'First + Completed .. Buffer'Last));
+            Step : Source_Result;
             Remaining : constant Natural := Buffer'Length - Completed;
-            Current : constant Source_Position_Result := Position (Object);
+            Current : Source_Position_Result;
          begin
+            Step := Read_Some_At
+              (Object,
+               Buffer (Buffer'First + Completed .. Buffer'Last),
+               Current);
             if Errors.Is_Fatal (Step.Error) then
                return Results.Failure (Step.Error);
             elsif not Arithmetic.Fits_Natural_Remaining
@@ -103,8 +200,7 @@ package body Giflib.Streams is
                return Results.Failure
                  (Errors.Make
                     (Errors.Internal_Invariant_Failed,
-                     (Has_Source => Current.Available,
-                      Source => Current.Value,
+                     (Source_Position => Source_Context (Current),
                       Expected => Byte_Count (Remaining),
                       Actual => Step.Count,
                       others => <>)));
@@ -113,8 +209,7 @@ package body Giflib.Streams is
                   return Results.Failure
                     (Errors.Make
                        (Errors.Source_Unexpected_End,
-                        (Has_Source => Current.Available,
-                         Source => Current.Value,
+                        (Source_Position => Source_Context (Current),
                          Expected => Byte_Count (Buffer'Length),
                          Actual => Byte_Count (Completed),
                          others => <>)));
@@ -122,8 +217,7 @@ package body Giflib.Streams is
                   return Results.Failure
                     (Errors.Make
                        (Errors.Source_Zero_Progress,
-                        (Has_Source => Current.Available,
-                         Source => Current.Value,
+                        (Source_Position => Source_Context (Current),
                          others => <>)));
                end if;
             else
@@ -141,9 +235,10 @@ package body Giflib.Streams is
       while Completed < Count loop
          declare
             Remaining : constant Byte_Count := Count - Completed;
-            Step : constant Source_Result := Skip_Some (Object, Remaining);
-            Current : constant Source_Position_Result := Position (Object);
+            Step : Source_Result;
+            Current : Source_Position_Result;
          begin
+            Step := Skip_Some_At (Object, Remaining, Current);
             if Errors.Is_Fatal (Step.Error) then
                return Results.Failure (Step.Error);
             elsif not Arithmetic.Fits_Count_Remaining
@@ -152,8 +247,7 @@ package body Giflib.Streams is
                return Results.Failure
                  (Errors.Make
                     (Errors.Internal_Invariant_Failed,
-                     (Has_Source => Current.Available,
-                      Source => Current.Value,
+                     (Source_Position => Source_Context (Current),
                       Expected => Remaining,
                       Actual => Step.Count,
                       others => <>)));
@@ -162,8 +256,7 @@ package body Giflib.Streams is
                   return Results.Failure
                     (Errors.Make
                        (Errors.Source_Unexpected_End,
-                        (Has_Source => Current.Available,
-                         Source => Current.Value,
+                        (Source_Position => Source_Context (Current),
                          Expected => Count,
                          Actual => Completed,
                          others => <>)));
@@ -171,8 +264,7 @@ package body Giflib.Streams is
                   return Results.Failure
                     (Errors.Make
                        (Errors.Source_Zero_Progress,
-                        (Has_Source => Current.Available,
-                         Source => Current.Value,
+                        (Source_Position => Source_Context (Current),
                          others => <>)));
                end if;
             else
@@ -184,51 +276,63 @@ package body Giflib.Streams is
       return Results.Success;
    end Skip_Exact;
 
-   function Write_All (Object : in out Destination'Class; Buffer : Byte_Array) return Results.Result is
+   function Write_All
+     (Object : in out Destination'Class;
+      Buffer : Byte_Array;
+      Count : out Byte_Count) return Results.Result
+   is
       Completed : Natural := 0;
    begin
+      Count := 0;
       while Completed < Buffer'Length loop
          declare
             Step : Destination_Result;
             Remaining : constant Natural := Buffer'Length - Completed;
-            Write_Offset : Destination_Offset := 0;
-            Has_Write_Offset : Boolean := False;
+            Write_Position : Errors.Destination_Position_Context;
+            Current : Destination_Position_Result;
          begin
-            declare
-               Current : constant Destination_Position_Result := Position (Object);
-            begin
-               Write_Offset := Current.Value;
-               Has_Write_Offset := Current.Available;
-            end;
-            Step := Write_Some
-              (Object, Buffer (Buffer'First + Completed .. Buffer'Last));
-            if Errors.Is_Fatal (Step.Error) then
-               return Results.Failure (Step.Error);
-            elsif not Arithmetic.Fits_Natural_Remaining
+            Step := Write_Some_At
+              (Object,
+               Buffer (Buffer'First + Completed .. Buffer'Last),
+               Current);
+            Write_Position := Destination_Context (Current);
+            if not Arithmetic.Fits_Natural_Remaining
               (Completed, Buffer'Length, Step.Count)
             then
                return Results.Failure
                  (Errors.Make
                     (Errors.Internal_Invariant_Failed,
-                     (Has_Destination => Has_Write_Offset,
-                      Destination => Write_Offset,
+                     (Destination_Position => Write_Position,
                       Expected => Byte_Count (Remaining),
                       Actual => Step.Count,
                       others => <>)));
+            end if;
+            if Step.Count > 0 then
+               Completed := Arithmetic.Advance_Natural
+                 (Completed, Buffer'Length, Step.Count);
+            end if;
+            Count := Byte_Count (Completed);
+            if Errors.Is_Fatal (Step.Error) then
+               return Results.Failure (Step.Error);
             elsif Step.Count = 0 then
                return Results.Failure
                  (Errors.Make
                     (Errors.Destination_Zero_Progress,
-                     (Has_Destination => Has_Write_Offset,
-                      Destination => Write_Offset,
+                     (Destination_Position => Write_Position,
                       others => <>)));
-            else
-               Completed := Arithmetic.Advance_Natural
-                 (Completed, Buffer'Length, Step.Count);
             end if;
          end;
       end loop;
       return Results.Success;
+   end Write_All;
+
+   function Write_All
+     (Object : in out Destination'Class;
+      Buffer : Byte_Array) return Results.Result
+   is
+      Count : Byte_Count;
+   begin
+      return Write_All (Object, Buffer, Count);
    end Write_All;
 
    procedure Open
@@ -313,7 +417,7 @@ package body Giflib.Streams is
          return
            (Error => Errors.Make
               (Errors.Limit_Exceeded,
-               (Has_Destination => True, Destination => Destination_Offset (Object.Position),
+               (Destination_Position => Errors.Destination_Position_At (Destination_Offset (Object.Position)),
                 Expected => Byte_Count (Buffer'Length),
                 Actual => Byte_Count (To_Copy),
                 Limit => Output_Byte_Limit,

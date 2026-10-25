@@ -25,6 +25,9 @@ package body Giflib.Errors is
          when Reserved_Disposal_Method      => return "gif.disposal.reserved";
          when Trailing_Data                 => return "gif.trailing_data";
          when Unsupported_Feature           => return "gif.feature.unsupported";
+         when Invalid_Index                 => return "gif.argument.index_out_of_range";
+         when Buffer_Size_Mismatch          => return "gif.argument.buffer_size_mismatch";
+         when Output_Variant_Mismatch       => return "gif.argument.output_variant_mismatch";
          when Invalid_State                 => return "gif.state.invalid";
          when Integer_Overflow              => return "gif.security.integer_overflow";
          when Limit_Exceeded                => return "gif.limit.exceeded";

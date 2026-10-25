@@ -19,7 +19,6 @@ package Giflib.Limits is
       Max_Quantization_Work : Byte_Count := 2 ** 36;
       Max_Optimization_Work : Byte_Count := 2 ** 34;
       Max_Warning_Records : Natural := 256;
-      Max_Diagnostic_Events : Natural := 4_096;
       Max_Compositor_Snapshot_Bytes : Byte_Count := 1_073_741_824;
    end record;
 

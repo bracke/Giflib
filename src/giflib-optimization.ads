@@ -16,14 +16,20 @@ package Giflib.Optimization is
 
    Default_Options : constant Optimization_Options := (others => <>);
 
-   type Frame_Analysis is record
-      Action : Optimization_Action := Keep_Full_Frame;
-      Left : Coordinate := 0;
-      Top : Coordinate := 0;
-      Width : Natural range 0 .. 65_535 := 0;
-      Height : Natural range 0 .. 65_535 := 0;
-      Requires_Transparency : Boolean := False;
-      Merged_Delay : Delay_Centiseconds := 0;
+   type Frame_Analysis (Action : Optimization_Action := Keep_Full_Frame) is record
+      case Action is
+         when Keep_Full_Frame =>
+            Full_Width : Image_Width := Image_Width'First;
+            Full_Height : Image_Height := Image_Height'First;
+         when Trim_To_Rectangle =>
+            Left : Coordinate := 0;
+            Top : Coordinate := 0;
+            Width : Image_Width := Image_Width'First;
+            Height : Image_Height := Image_Height'First;
+            Requires_Transparency : Boolean := False;
+         when Merge_With_Previous =>
+            Merged_Delay : Delay_Centiseconds := 0;
+      end case;
    end record;
 
    --  Previous and Current are full-canvas indexed renderings using equivalent

@@ -5,16 +5,6 @@ package Giflib.Internal.Metadata_Arithmetic
 is
    use type Metadata.Extension_Kind;
 
-   function Classify (Label : Byte) return Metadata.Extension_Kind
-     with Post =>
-       Classify'Result =
-         (case Label is
-             when 16#F9# => Metadata.Graphic_Control_Extension,
-             when 16#FE# => Metadata.Comment_Extension,
-             when 16#01# => Metadata.Plain_Text_Extension,
-             when 16#FF# => Metadata.Application_Extension,
-             when others => Metadata.Unknown_Extension);
-
    function Block_For (Kind : Metadata.Extension_Kind) return Block_Kind
      with Post =>
        Block_For'Result =

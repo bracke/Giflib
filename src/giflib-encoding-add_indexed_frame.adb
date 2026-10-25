@@ -2,20 +2,17 @@ separate (Giflib.Encoding)
 function Add_Indexed_Frame
   (Object : in out Encoder;
    Info : Frame_Info;
-   Selection : Palette_Selection;
-   Local_Palette : Palettes.Palette;
+   Palette : Frame_Palette;
    Pixels : Streams.Byte_Array) return Results.Result
 is
    Effective : Palettes.Palette;
    Palette_Length : Natural;
-   Size_Code : Descriptor_Arithmetic.Palette_Size_Code := 0;
-   Descriptor : Streams.Byte_Array (1 .. 10);
-   GCE : Streams.Byte_Array (1 .. 8);
    Outcome : Results.Result;
    Required_Pixels : constant Byte_Count :=
      Geometry_Arithmetic.Area (Info.Width, Info.Height);
    Remaining_Output : Byte_Count;
    Compressed : Byte_Count;
+   Wire_Bytes : Byte_Count;
    Minimum : Byte;
 begin
    if not State_Arithmetic.Can_Accept_Data (Object.Current_State) then
@@ -27,12 +24,12 @@ begin
    elsif Byte_Count (Pixels'Length) /= Required_Pixels then
       return Fail_Frame
         (Object, Errors.Make
-           (Errors.LZW_Output_Size_Mismatch,
+           (Errors.Buffer_Size_Mismatch,
             (Expected => Required_Pixels,
              Actual => Byte_Count (Pixels'Length), others => <>)));
    end if;
-   if Selection = Use_Local_Palette then
-      Effective := Local_Palette;
+   if Palette.Selection = Use_Local_Palette then
+      Effective := Palette.Value;
    elsif Object.Has_Global_Palette then
       Effective := Object.Global_Palette;
    else
@@ -55,13 +52,8 @@ begin
       return Fail_Frame (Object, Outcome.First_Error);
    end if;
    if Info.Control /= Frames.Default_Control then
-      GCE :=
-        [16#21#, 16#F9#, 4,
-         Internal.Extension_Arithmetic.Encode_Graphic_Control (Info.Control),
-         Internal.Extension_Arithmetic.Low_Byte (Natural (Info.Control.Delay_CS)),
-         Internal.Extension_Arithmetic.High_Byte (Natural (Info.Control.Delay_CS)),
-         Byte (Info.Control.Transparent_Index), 0];
-      Outcome := Write_Raw (Object, GCE);
+      Outcome := Write_Raw
+        (Object, Internal.Container_Writer.Graphic_Control (Info.Control));
       if not Results.Succeeded (Outcome) then
          return Fail_Frame (Object, Outcome.First_Error);
       end if;
@@ -70,25 +62,24 @@ begin
    Palette_Length := Natural
      (Encoding_Arithmetic.Encoded_Palette_Length
         (Encoding_Arithmetic.Palette_Length (Effective.Length)));
-   if Selection = Use_Local_Palette then
-      Size_Code := Descriptor_Arithmetic.Palette_Size_Code
-        (Encoding_Arithmetic.Size_Code
-           (Encoding_Arithmetic.Palette_Length (Palette_Length)));
-   end if;
-   Descriptor :=
-     [16#2C#,
-      Internal.Extension_Arithmetic.Low_Byte (Natural (Info.Left)),
-      Internal.Extension_Arithmetic.High_Byte (Natural (Info.Left)),
-      Internal.Extension_Arithmetic.Low_Byte (Natural (Info.Top)),
-      Internal.Extension_Arithmetic.High_Byte (Natural (Info.Top)),
-      Internal.Extension_Arithmetic.Low_Byte (Natural (Info.Width)),
-      Internal.Extension_Arithmetic.High_Byte (Natural (Info.Width)),
-      Internal.Extension_Arithmetic.Low_Byte (Natural (Info.Height)),
-      Internal.Extension_Arithmetic.High_Byte (Natural (Info.Height)),
-      Descriptor_Arithmetic.Encode_Image
-        (Selection = Use_Local_Palette, Info.Interlaced, False, Size_Code)];
-   Outcome := Write_Raw (Object, Descriptor);
-   if Results.Succeeded (Outcome) and then Selection = Use_Local_Palette then
+   Outcome := Write_Raw
+     (Object,
+      Internal.Container_Writer.Image_Descriptor
+        (Left => Info.Left,
+         Top => Info.Top,
+         Width => Info.Width,
+         Height => Info.Height,
+         Local_Palette =>
+           (if Palette.Selection = Use_Local_Palette
+            then (Present => True,
+                  Length => Internal.Container_Writer.Palette_Length
+                    (Effective.Length),
+                  Sorted => False)
+            else Internal.Container_Writer.No_Palette),
+         Interlaced => Info.Interlaced));
+   if Results.Succeeded (Outcome)
+     and then Palette.Selection = Use_Local_Palette
+   then
       Outcome := Write_Palette (Object, Effective);
    end if;
    if not Results.Succeeded (Outcome) then
@@ -106,24 +97,15 @@ begin
      (Object.Resources.LZW_Workspace, Object.Output.all, Pixels, Minimum,
       Object.Constraints.Max_LZW_Work,
       Object.Constraints.Max_Compressed_Bytes - Object.Compressed_Bytes_Written,
-      Remaining_Output, Compressed,
+      Remaining_Output, Compressed, Wire_Bytes,
       Maximum_Index => Byte (Effective.Length - 1),
       Interlace_Width => (if Info.Interlaced then Natural (Info.Width) else 0),
       Interlace_Height => (if Info.Interlaced then Natural (Info.Height) else 0));
-   declare
-      Current : constant Streams.Destination_Position_Result :=
-        Output_Position (Object);
-   begin
-      if not Current.Available or else Current.Value < Object.Start_Offset then
-         return Fail_Frame
-           (Object, Errors.Make (Errors.Internal_Invariant_Failed));
-      end if;
-      Object.Bytes_Written := Byte_Count (Current.Value - Object.Start_Offset);
-   end;
+   Object.Bytes_Written := Object.Bytes_Written + Wire_Bytes;
+   Object.Compressed_Bytes_Written := Object.Compressed_Bytes_Written + Compressed;
    if not Results.Succeeded (Outcome) then
       return Fail_Frame (Object, Outcome.First_Error);
    end if;
-   Object.Compressed_Bytes_Written := Object.Compressed_Bytes_Written + Compressed;
    Object.Frames_Written := Object.Frames_Written + 1;
    Object.Current_State := Accepting_Frames;
    return Results.Success;

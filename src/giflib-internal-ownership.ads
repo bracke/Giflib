@@ -1,17 +1,20 @@
 with Giflib.Internal.Ownership_Arithmetic;
 with Ada.Finalization;
+with Interfaces;
 
 package Giflib.Internal.Ownership is
    pragma Preelaborate;
 
    type Fault_State is limited private;
    type Byte_Budget is limited private;
+   type Budget_Owner is private;
    type Reservation (Budget : not null access Byte_Budget) is limited private;
 
    type Allocation_Status is
      (Allocation_Ready,
       Allocation_Limit,
       Allocation_Storage_Error,
+      Allocation_Size_Error,
       Allocation_Owner_Error);
    type Allocation_Outcome is record
       Status : Allocation_Status := Allocation_Ready;
@@ -34,12 +37,21 @@ package Giflib.Internal.Ownership is
 
    procedure Commit (Ticket : in out Reservation);
 
+   generic
+      with procedure Allocate;
+   procedure Reserve_And_Allocate
+     (Ticket : in out Reservation;
+      Fault : in out Fault_State;
+      Maximum : Byte_Count;
+      Amount : Byte_Count;
+      Outcome : out Allocation_Outcome);
+
    procedure Cancel
      (Ticket : in out Reservation;
       Outcome : in out Allocation_Outcome)
      with Pre =>
        Outcome.Status = Allocation_Ready,
-       Post => Outcome.Status = Allocation_Storage_Error;
+       Post => Outcome.Status in Allocation_Storage_Error | Allocation_Owner_Error;
 
    function Storage_Bytes (Size_In_Bits : Natural) return Byte_Count;
    function Used (Budget : Byte_Budget) return Byte_Count;
@@ -51,11 +63,32 @@ package Giflib.Internal.Ownership is
       Maximum : Byte_Count;
       Amount : Byte_Count;
       Accepted : out Boolean);
-   procedure Release
+   function Release
      (Budget : in out Byte_Budget;
-      Amount : Byte_Count)
-     with Pre => Amount <= Used (Budget);
+      Amount : Byte_Count) return Boolean;
+   --  Release never raises for a bookkeeping mismatch.  False leaves the
+   --  ledger unchanged so resource owners can still deallocate their storage
+   --  and retain a cleanup-failure diagnostic.
+
+   function Matches
+     (Owner : Budget_Owner;
+      Budget : aliased Byte_Budget) return Boolean;
+   function Is_Bound (Owner : Budget_Owner) return Boolean;
+   procedure Bind
+     (Owner : out Budget_Owner;
+      Budget : aliased Byte_Budget);
+   function Release_Owned
+     (Owner : in out Budget_Owner;
+      Budget : aliased in out Byte_Budget;
+      Amount : Byte_Count) return Boolean;
+
+   generic
+      with function Release_Operation return Boolean;
+   procedure Attempt_Release (Failed : in out Boolean);
 private
+   type Budget_Identity is new Interfaces.Unsigned_64;
+   function Fresh_Identity return Budget_Identity;
+
    type Fault_State is limited record
       Value : Ownership_Arithmetic.Injection_State :=
         Ownership_Arithmetic.Disabled;
@@ -63,6 +96,11 @@ private
 
    type Byte_Budget is limited record
       Used_Bytes : Byte_Count := 0;
+      Identity : Budget_Identity := Fresh_Identity;
+   end record;
+
+   type Budget_Owner is record
+      Identity : Budget_Identity := 0;
    end record;
 
    type Reservation (Budget : not null access Byte_Budget) is

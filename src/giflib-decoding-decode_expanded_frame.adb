@@ -4,14 +4,13 @@ function Decode_Expanded_Frame
    Target : out Streams.Byte_Array;
    Info : out Frame_Info) return Results.Result
 is
-   Prepared : Prepared_Frame;
+   Prepared : Prepared_Frame renames Object.Pending_Frame;
    Pixels : Byte_Count;
    Outcome : Results.Result;
    Source_Position, Target_Position : Natural;
    Index : Palette_Index;
    Color : Palettes.RGB_Color;
 begin
-   Info := (others => <>);
    if not State_Arithmetic.Can_Process_Frame (Object.Current_State)
    then
       return Invalid_Transition (Object);
@@ -19,29 +18,27 @@ begin
       return Results.Failure
         (Errors.Make
            (Errors.Unsupported_Feature,
-            (Has_Source => Input_Position (Object).Available,
-             Source => Input_Position (Object).Value,
-             Has_Frame => True,
-             Frame => Object.Frames_Seen,
-             others => <>)));
-   end if;
-   Outcome := Prepare_Frame (Object, Prepared);
-   if not Results.Succeeded (Outcome) then
-      return Fail (Object, Outcome.First_Error);
+            Internal.Diagnostics.At_Source
+              (Object.Input.all,
+               (Frame => Errors.Frame_At (Object.Frames_Seen),
+                others => <>))));
+   elsif not Object.Has_Pending_Frame then
+      return Fail (Object, Errors.Make (Errors.Internal_Invariant_Failed));
    end if;
    Pixels := Internal.Geometry_Arithmetic.Area
-     (Prepared.Descriptor.Width, Prepared.Descriptor.Height);
-   if Byte_Count (Target'Length) /= Pixels * 4 then
-      return Fail
-        (Object,
-         Errors.Make
-           (Errors.LZW_Output_Size_Mismatch,
-            (Has_Source => Input_Position (Object).Available,
-             Source => Input_Position (Object).Value,
-             Has_Frame => True, Frame => Object.Frames_Seen,
-             Expected => Pixels * 4,
-             Actual => Byte_Count (Target'Length), others => <>)));
+     (Prepared.Width, Prepared.Height);
+   Outcome := Validate_Frame_Output
+     (Object,
+      Byte_Count (Target'Length),
+      Pixels * 4,
+      Info'Constrained,
+      (if Info'Constrained
+       then Info.Has_Local_Palette
+       else Prepared.Has_Local_Palette));
+   if not Results.Succeeded (Outcome) then
+      return Outcome;
    end if;
+   Object.Current_State := Decoding_Frame;
    Outcome := Resource_Management.Ensure_LZW_Workspace (Object);
    if not Results.Succeeded (Outcome) then
       return Fail (Object, Outcome.First_Error);
@@ -49,7 +46,9 @@ begin
    Outcome := Internal.Image_Data.Decode_Indices
      (Object.Resources.LZW_Workspace,
       Object.Input.all,
-      Prepared.Descriptor,
+      Prepared.Width,
+      Prepared.Height,
+      Prepared.Interlaced,
       Prepared.Palette,
       Object.Constraints,
       Object.Total_Decoded_Pixels,
@@ -74,6 +73,5 @@ begin
          then 0
          else 255);
    end loop;
-   Complete_Frame (Object, Prepared, Info);
-   return Results.Success;
+   return Complete_Frame (Object, Info);
 end Decode_Expanded_Frame;

@@ -43,17 +43,21 @@ library project Giflib is
       --  is a private child.
       "Giflib.Internal",
       "Giflib.Internal.Blocks",
+      "Giflib.Internal.Budget_Arithmetic",
       "Giflib.Internal.LZW",
       "Giflib.Internal.LZW_Arithmetic",
       "Giflib.Internal.LZW_Encoding",
       "Giflib.Internal.Metadata_Store",
+      "Giflib.Internal.Owned_Arrays",
       "Giflib.Internal.Owned_Buffers",
       "Giflib.Internal.Owned_Objects",
+      "Giflib.Internal.Owned_Vectors",
       "Giflib.Internal.Ownership",
       "Giflib.Internal.Ownership_Arithmetic",
       "Giflib.Internal.Quantization_Buffer_Arithmetic",
       "Giflib.Internal.Quantization_Dithering",
-      "Giflib.Internal.Quantization_Palette");
+      "Giflib.Internal.Quantization_Palette",
+      "Giflib.Internal.Work_Budgets");
    for Create_Missing_Dirs use "True";
 
    package Compiler is

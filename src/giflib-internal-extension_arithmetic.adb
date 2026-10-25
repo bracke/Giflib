@@ -18,12 +18,21 @@ package body Giflib.Internal.Extension_Arithmetic with SPARK_Mode is
       Transparent_Index : Byte) return Frames.Graphic_Control
    is
    begin
+      if Natural (Packed) mod 2 = 1 then
+         return
+           (Has_Transparency => True,
+            Disposal => Frames.Disposal_Method ((Natural (Packed) / 4) mod 8),
+            User_Input => (Natural (Packed) / 2) mod 2 = 1,
+            Delay_CS => Delay_Centiseconds
+              (Decode_U16_LE (Delay_Low, Delay_High)),
+            Transparent_Index => Palette_Index (Transparent_Index));
+      end if;
       return
-        (Disposal => Frames.Disposal_Method ((Natural (Packed) / 4) mod 8),
+        (Has_Transparency => False,
+         Disposal => Frames.Disposal_Method ((Natural (Packed) / 4) mod 8),
          User_Input => (Natural (Packed) / 2) mod 2 = 1,
-         Delay_CS => Delay_Centiseconds (Decode_U16_LE (Delay_Low, Delay_High)),
-         Has_Transparency => Natural (Packed) mod 2 = 1,
-         Transparent_Index => Palette_Index (Transparent_Index));
+         Delay_CS => Delay_Centiseconds
+           (Decode_U16_LE (Delay_Low, Delay_High)));
    end Decode_Graphic_Control;
 
    function Encode_Graphic_Control (Control : Frames.Graphic_Control) return Byte is

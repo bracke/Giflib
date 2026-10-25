@@ -7,9 +7,7 @@ function Add_Truecolor_Frame
    return Results.Result
 is
    Total : constant Byte_Count := Geometry_Arithmetic.Area (Info.Width, Info.Height);
-   Palette : Palettes.Palette;
-   Has_Transparency : Boolean;
-   Transparent_Index : Palette_Index;
+   Quantized : Quantization.Quantization_Result;
    Quantize_Options : Quantization.Quantize_Options := Options;
    Adjusted : Frame_Info := Info;
    Selection : Palette_Selection := Use_Local_Palette;
@@ -50,8 +48,10 @@ begin
          return Fail_Frame
            (Object, Errors.Make (Errors.Missing_Color_Table));
       end if;
-      Quantize_Options.Strategy := Quantization.Use_Fixed_Palette;
-      Quantize_Options.Fixed_Palette := Object.Global_Palette;
+      Quantize_Options.Palette :=
+        (Strategy => Quantization.Use_Fixed_Palette,
+         Fixed_Palette => Object.Global_Palette,
+         Fixed_Transparent_Index => 0);
       Selection := Use_Global_Palette;
    end if;
    Outcome := Resource_Management.Ensure_Truecolor_Pixels (Object, Total);
@@ -61,27 +61,35 @@ begin
    Outcome := Quantization.Quantize
      (Object.Resources.Quantizer, Source,
       Buffers.Value (Object.Resources.Truecolor_Pixels).all (1 .. Natural (Total)),
-      Palette, Has_Transparency, Transparent_Index, Quantize_Options,
+      Quantized, Quantize_Options,
       Resource_Management.Quantization_Constraints (Object));
    if not Results.Succeeded (Outcome) then
       return Fail_Frame
         (Object, Resource_Management.Normalize_Quantization_Error
            (Object, Outcome.First_Error));
    end if;
-   if Has_Transparency then
-      Adjusted.Control.Has_Transparency := True;
-      Adjusted.Control.Transparent_Index := Transparent_Index;
-   else
-      Adjusted.Control.Has_Transparency := False;
-      Adjusted.Control.Transparent_Index := 0;
-   end if;
+   Adjusted.Control :=
+     (if Quantized.Transparency.Present
+      then (Has_Transparency => True,
+            Disposal => Info.Control.Disposal,
+            User_Input => Info.Control.User_Input,
+            Delay_CS => Info.Control.Delay_CS,
+            Transparent_Index => Quantized.Transparency.Index)
+      else (Has_Transparency => False,
+            Disposal => Info.Control.Disposal,
+            User_Input => Info.Control.User_Input,
+            Delay_CS => Info.Control.Delay_CS));
    if Object.Options.Truecolor_Palettes = Reuse_Identical_Global
      and then Object.Has_Global_Palette
-     and then Palettes.Same_Entries (Palette, Object.Global_Palette)
+     and then Palettes.Same_Entries (Quantized.Palette, Object.Global_Palette)
    then
       Selection := Use_Global_Palette;
    end if;
    return Add_Indexed_Frame
-     (Object, Adjusted, Selection, Palette,
+     (Object,
+      Adjusted,
+      (if Selection = Use_Local_Palette
+       then (Selection => Use_Local_Palette, Value => Quantized.Palette)
+       else Global_Frame_Palette),
       Buffers.Value (Object.Resources.Truecolor_Pixels).all (1 .. Natural (Total)));
 end Add_Truecolor_Frame;

@@ -3,42 +3,14 @@ function Read_Graphic_Control
   (Object : in out Decoder;
    Info : in out Metadata.Extension_Info) return Results.Result
 is
-   Size_Byte : Byte;
    Terminator : Byte;
    Fixed : Streams.Byte_Array (1 .. 4);
    Control : Frames.Graphic_Control;
    Outcome : Results.Result;
 begin
-   Outcome := Internal.Bytes.Read_Byte
-     (Object.Input.all, Size_Byte, Graphic_Control_Extension_Block);
-   if not Results.Succeeded (Outcome) then
-      return Truncated (Object, Info, Outcome);
-   elsif Size_Byte /= 4 then
-      declare
-         Prior : constant Streams.Source_Position_Result :=
-           Streams.Position (Object.Input.all, 1);
-      begin
-         return Results.Failure
-           (Errors.Make
-              (Errors.Invalid_Extension,
-               (Has_Source => Prior.Available,
-                Source => Prior.Value,
-                Block => Graphic_Control_Extension_Block,
-                Extension_Label => Info.Label,
-                Expected => 4,
-                Actual => Byte_Count (Size_Byte),
-                others => <>)));
-      end;
-   end if;
-
-   Outcome := Check_Fixed_Payload
-     (Object, Info, 4, Graphic_Control_Extension_Block);
+   Outcome := Read_Fixed_Block (Object, Info, Fixed);
    if not Results.Succeeded (Outcome) then
       return Outcome;
-   end if;
-   Outcome := Streams.Read_Exact (Object.Input.all, Fixed);
-   if not Results.Succeeded (Outcome) then
-      return Truncated (Object, Info, Outcome);
    end if;
    Outcome := Internal.Bytes.Read_Byte
      (Object.Input.all, Terminator, Graphic_Control_Extension_Block);
@@ -52,10 +24,11 @@ begin
          return Results.Failure
            (Errors.Make
               (Errors.Invalid_Extension,
-               (Has_Source => Prior.Available,
-                Source => Prior.Value,
+               (Source_Position =>
+                  Internal.Diagnostics.With_Source ((others => <>), Prior).Source_Position,
                 Block => Graphic_Control_Extension_Block,
-                Extension_Label => Info.Label,
+                Extension_Label =>
+                  Errors.Extension_Label_At (Metadata.Label_Of (Info)),
                 Expected => 0,
                 Actual => Byte_Count (Terminator),
                 others => <>)));
@@ -66,8 +39,7 @@ begin
       return Results.Failure
         (Errors.Make
            (Errors.Duplicate_Graphic_Control,
-            (Has_Source => True,
-             Source => Info.Offset,
+            (Source_Position => Errors.Source_Position_At (Info.Offset),
              Block => Graphic_Control_Extension_Block,
              others => <>)));
    end if;
@@ -77,10 +49,10 @@ begin
          return Results.Failure
            (Errors.Make
               (Errors.Invalid_Extension,
-               (Has_Source => True,
-                Source => Info.Offset,
+               (Source_Position => Errors.Source_Position_At (Info.Offset),
                 Block => Graphic_Control_Extension_Block,
-                Extension_Label => Info.Label,
+                Extension_Label =>
+                  Errors.Extension_Label_At (Metadata.Label_Of (Info)),
                 Actual => Byte_Count (Fixed (1)),
                 others => <>)));
       end if;
@@ -88,10 +60,10 @@ begin
         (Object,
          Errors.Reserved_Value_Accepted,
          Errors.Compatibility,
-         (Has_Source => True,
-          Source => Info.Offset,
+         (Source_Position => Errors.Source_Position_At (Info.Offset),
           Block => Graphic_Control_Extension_Block,
-          Extension_Label => Info.Label,
+          Extension_Label =>
+            Errors.Extension_Label_At (Metadata.Label_Of (Info)),
           Actual => Byte_Count (Fixed (1)),
           others => <>));
    end if;
@@ -100,8 +72,7 @@ begin
         (Object,
          Errors.Compatibility_Issue,
          Errors.Compatibility,
-         (Has_Source => True,
-          Source => Info.Offset,
+         (Source_Position => Errors.Source_Position_At (Info.Offset),
           Block => Graphic_Control_Extension_Block,
           others => <>));
    end if;
@@ -110,7 +81,6 @@ begin
      (Fixed (1), Fixed (2), Fixed (3), Fixed (4));
    Object.Pending_Control := Control;
    Object.Has_Pending_Control := True;
-   Info.Has_Graphic_Control := True;
    Info.Graphic_Control := Control;
    Info.Payload_Length := 4;
    Info.Sub_Block_Count := 1;

@@ -1,5 +1,5 @@
 with Giflib.Errors;
-with Giflib.Internal.Budget_Arithmetic;
+with Giflib.Internal.Resource_Diagnostics;
 with Giflib.Internal.Quantization_Arithmetic;
 
 package body Giflib.Internal.Quantization_Palette is
@@ -24,26 +24,16 @@ package body Giflib.Internal.Quantization_Palette is
      (Histogram       : in out Histogram_State;
       Generated_Start : Natural;
       Opaque_Capacity : Natural;
-      Work            : in out Byte_Count;
-      Maximum_Work    : Byte_Count;
+      Work            : in out Work_Budgets.Meter;
       Output_Palette  : in out Palettes.Palette) return Results.Result
    is
       Boxes : Box_Array;
       Box_Count : Natural := 0;
-      Budget_Failed : Boolean := False;
-      Failed_Attempt : Byte_Count := 0;
-
       function Charge (Amount : Byte_Count := 1) return Boolean is
-         Budget : constant Budget_Arithmetic.Charge_Result :=
-           Budget_Arithmetic.Charge (Work, Maximum_Work, Amount);
+         Accepted : Boolean;
       begin
-         if not Budget.Accepted then
-            Budget_Failed := True;
-            Failed_Attempt := Budget.Attempted;
-            return False;
-         end if;
-         Work := Budget.Total;
-         return True;
+         Work_Budgets.Try_Charge (Work, Amount, Accepted);
+         return Accepted;
       end Charge;
 
       function Axis_Value
@@ -67,7 +57,7 @@ package body Giflib.Internal.Quantization_Palette is
       begin
          Item.Population := 0;
          for Position in Item.First .. Item.Last loop
-            exit when Budget_Failed;
+            exit when Work_Budgets.Failed (Work);
             if not Charge then
                exit;
             end if;
@@ -133,7 +123,7 @@ package body Giflib.Internal.Quantization_Palette is
             Axis := 2;
          end if;
          for Bucket_Position in Original.First .. Original.Last loop
-            exit when Budget_Failed;
+            exit when Work_Budgets.Failed (Work);
             if not Charge then
                exit;
             end if;
@@ -141,7 +131,7 @@ package body Giflib.Internal.Quantization_Palette is
             Position := Axis_Value (Bucket, Axis);
             Counts (Position) := Counts (Position) + Histogram.Counts (Bucket);
          end loop;
-         if Budget_Failed then
+         if Work_Budgets.Failed (Work) then
             return;
          end if;
          declare
@@ -206,7 +196,10 @@ package body Giflib.Internal.Quantization_Palette is
          Right.First := Natural (Left_Position);
          Analyze (Left);
          Analyze (Right);
-         if Left.Valid and then Right.Valid and then not Budget_Failed then
+         if Left.Valid
+           and then Right.Valid
+           and then not Work_Budgets.Failed (Work)
+         then
             Boxes (Index) := Left;
             Boxes (Box_Count) := Right;
             Box_Count := Box_Count + 1;
@@ -220,7 +213,7 @@ package body Giflib.Internal.Quantization_Palette is
          Count : Natural;
       begin
          for Position in Item.First .. Item.Last loop
-            exit when Budget_Failed;
+            exit when Work_Budgets.Failed (Work);
             if not Charge then
                exit;
             end if;
@@ -262,7 +255,9 @@ package body Giflib.Internal.Quantization_Palette is
          others => <>);
       Analyze (Boxes (0));
       Box_Count := (if Boxes (0).Valid then 1 else 0);
-      while Box_Count < Opaque_Capacity and then not Budget_Failed loop
+      while Box_Count < Opaque_Capacity
+        and then not Work_Budgets.Failed (Work)
+      loop
          Choice := Box_Count;
          Best_Range := 0;
          for I in 0 .. Box_Count - 1 loop
@@ -279,27 +274,23 @@ package body Giflib.Internal.Quantization_Palette is
          exit when Choice = Box_Count or else Best_Range = 0;
          Split_Box (Choice);
       end loop;
-      if Budget_Failed then
+      if Work_Budgets.Failed (Work) then
          return Results.Failure
            (Errors.Make
               (Errors.Limit_Exceeded,
-               (Expected => Maximum_Work,
-                Actual => Failed_Attempt,
-                Limit => Quantization_Work_Limit,
-                others => <>)));
+               Resource_Diagnostics.With_Work_Limit
+                 (Work, Quantization_Work_Limit)));
       end if;
       for I in 0 .. Box_Count - 1 loop
          Output_Palette.Colors (Palette_Index (Generated_Start + I)) :=
            Representative (Boxes (I));
       end loop;
-      if Budget_Failed then
+      if Work_Budgets.Failed (Work) then
          return Results.Failure
            (Errors.Make
               (Errors.Limit_Exceeded,
-               (Expected => Maximum_Work,
-                Actual => Failed_Attempt,
-                Limit => Quantization_Work_Limit,
-                others => <>)));
+               Resource_Diagnostics.With_Work_Limit
+                 (Work, Quantization_Work_Limit)));
       end if;
       Output_Palette.Length := Generated_Start + Box_Count;
       return Results.Success;

@@ -29,9 +29,38 @@ package Giflib.Internal.LZW_Encoding is
       Max_Compressed_Bytes : Byte_Count;
       Max_Wire_Bytes : Byte_Count;
       Compressed_Bytes : out Byte_Count;
+      Wire_Bytes : out Byte_Count;
       Maximum_Index : Byte := 255;
       Interlace_Width : Natural := 0;
       Interlace_Height : Natural := 0) return Results.Result;
+
+   function Encode
+     (Context : in out Workspace;
+      Object : in out Streams.Destination'Class;
+      Input : Streams.Byte_Array;
+      Minimum_Code_Size : Byte;
+      Max_Work : Byte_Count;
+      Max_Compressed_Bytes : Byte_Count;
+      Max_Wire_Bytes : Byte_Count;
+      Compressed_Bytes : out Byte_Count;
+      Maximum_Index : Byte := 255;
+      Interlace_Width : Natural := 0;
+      Interlace_Height : Natural := 0) return Results.Result;
+
+   function Encode
+     (Context : in out Workspace_Handle;
+      Object : in out Streams.Destination'Class;
+      Input : Streams.Byte_Array;
+      Minimum_Code_Size : Byte;
+      Max_Work : Byte_Count;
+      Max_Compressed_Bytes : Byte_Count;
+      Max_Wire_Bytes : Byte_Count;
+      Compressed_Bytes : out Byte_Count;
+      Wire_Bytes : out Byte_Count;
+      Maximum_Index : Byte := 255;
+      Interlace_Width : Natural := 0;
+      Interlace_Height : Natural := 0) return Results.Result
+     with Pre => Is_Allocated (Context);
 
    function Encode
      (Context : in out Workspace_Handle;

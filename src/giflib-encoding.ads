@@ -1,3 +1,4 @@
+with Giflib.Animations;
 with Giflib.Errors;
 with Giflib.Frames;
 with Giflib.Images;
@@ -54,6 +55,26 @@ package Giflib.Encoding is
    end record;
 
    type Palette_Selection is (Use_Global_Palette, Use_Local_Palette);
+   type Frame_Palette (Selection : Palette_Selection := Use_Global_Palette) is record
+      case Selection is
+         when Use_Global_Palette =>
+            null;
+         when Use_Local_Palette =>
+            Value : Palettes.Palette;
+      end case;
+   end record;
+   Global_Frame_Palette : constant Frame_Palette :=
+     (Selection => Use_Global_Palette);
+   subtype Encodable_Extension_Kind is Metadata.Encodable_Extension_Kind;
+   subtype Extension_Descriptor is Metadata.Extension_Descriptor;
+   Comment_Extension : constant Encodable_Extension_Kind :=
+     Metadata.Comment_Extension;
+   Plain_Text_Extension : constant Encodable_Extension_Kind :=
+     Metadata.Plain_Text_Extension;
+   Application_Extension : constant Encodable_Extension_Kind :=
+     Metadata.Application_Extension;
+   Unknown_Extension : constant Encodable_Extension_Kind :=
+     Metadata.Unknown_Extension;
    type Chunk_Length_Array is array (Positive range <>) of Natural range 1 .. 255;
    type Encoder
      (Output : not null access Streams.Destination'Class)
@@ -73,14 +94,26 @@ package Giflib.Encoding is
    function Add_Indexed_Frame
      (Object : in out Encoder;
       Info : Frame_Info;
-      Selection : Palette_Selection;
-      Local_Palette : Palettes.Palette;
+      Palette : Frame_Palette;
       Pixels : Streams.Byte_Array) return Results.Result;
    function Add_Extension
      (Object : in out Encoder;
-      Info : Metadata.Extension_Info;
+      Descriptor : Extension_Descriptor;
       Payload : Streams.Byte_Array) return Results.Result;
    function Add_Extension_Exact
+     (Object : in out Encoder;
+      Descriptor : Extension_Descriptor;
+      Payload : Streams.Byte_Array;
+      Chunk_Lengths : Chunk_Length_Array) return Results.Result;
+
+   --  Compatibility operations for decoded metadata.  Only Kind and Label are
+   --  encoding inputs; the remaining observational fields are ignored.  Their
+   --  distinct names keep descriptor aggregates unambiguous.
+   function Add_Decoded_Extension
+     (Object : in out Encoder;
+      Info : Metadata.Extension_Info;
+      Payload : Streams.Byte_Array) return Results.Result;
+   function Add_Decoded_Extension_Exact
      (Object : in out Encoder;
       Info : Metadata.Extension_Info;
       Payload : Streams.Byte_Array;
@@ -115,12 +148,10 @@ private
       Screen : Screen_Info;
       Global_Palette : Palettes.Palette;
       Has_Global_Palette : Boolean := False;
-      Has_Loop : Boolean := False;
-      Loop_Count : Natural range 0 .. 65_535 := 0;
+      Loop_Data : Animations.Loop_Info := Animations.No_Loop;
       Header_Written : Boolean := False;
       Frames_Written : Frame_Ordinal := 0;
       Extensions_Written : Natural := 0;
-      Start_Offset : Destination_Offset := 0;
       Bytes_Written : Byte_Count := 0;
       Compressed_Bytes_Written : Byte_Count := 0;
       Resources : Encoder_Resources;
@@ -139,6 +170,4 @@ private
      (Object : in out Encoder;
       Data : Streams.Byte_Array) return Results.Result;
    function Write_Header (Object : in out Encoder) return Results.Result;
-   function Output_Position
-     (Object : Encoder) return Streams.Destination_Position_Result;
 end Giflib.Encoding;

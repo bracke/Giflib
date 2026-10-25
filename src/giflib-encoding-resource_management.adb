@@ -1,48 +1,36 @@
 with Giflib.Internal.Budget_Arithmetic;
+with Giflib.Internal.Diagnostics;
+with Giflib.Internal.Resource_Diagnostics;
 
 package body Giflib.Encoding.Resource_Management is
    use type Internal.Ownership.Allocation_Status;
    use type Errors.Error_Code;
    package Buffers renames Internal.Owned_Buffers;
 
-   function Release_Buffer (Resources : in out Encoder_Resources)
-      return Boolean
-   is
-   begin
-      return Buffers.Release
-        (Resources.Truecolor_Pixels, Resources.Allocation_Budget);
-   exception
-      when others =>
-         return False;
-   end Release_Buffer;
-
-   function Release_LZW (Resources : in out Encoder_Resources) return Boolean is
-   begin
-      return Internal.LZW_Encoding.Release
-        (Resources.LZW_Workspace, Resources.Allocation_Budget);
-   exception
-      when others =>
-         return False;
-   end Release_LZW;
-
-   function Release_Quantizer (Resources : in out Encoder_Resources)
-      return Boolean
-   is
-   begin
-      Quantization.Finalize (Resources.Quantizer);
-      return Quantization.Cleanup_Succeeded (Resources.Quantizer);
-   exception
-      when others =>
-         return False;
-   end Release_Quantizer;
-
    procedure Release (Resources : in out Encoder_Resources) is
-      Released : Boolean;
+      Failed : Boolean := False;
+      function Release_Buffer return Boolean is
+        (Buffers.Release
+           (Resources.Truecolor_Pixels, Resources.Allocation_Budget));
+      function Release_LZW return Boolean is
+        (Internal.LZW_Encoding.Release
+           (Resources.LZW_Workspace, Resources.Allocation_Budget));
+      function Release_Quantizer return Boolean is
+      begin
+         Quantization.Finalize (Resources.Quantizer);
+         return Quantization.Cleanup_Succeeded (Resources.Quantizer);
+      end Release_Quantizer;
+      procedure Try_Buffer is new Internal.Ownership.Attempt_Release
+        (Release_Buffer);
+      procedure Try_LZW is new Internal.Ownership.Attempt_Release
+        (Release_LZW);
+      procedure Try_Quantizer is new Internal.Ownership.Attempt_Release
+        (Release_Quantizer);
    begin
-      Released := Release_Buffer (Resources);
-      Released := Release_LZW (Resources) and Released;
-      Released := Release_Quantizer (Resources) and Released;
-      Resources.Cleanup_Failed := Resources.Cleanup_Failed or else not Released;
+      Try_Buffer (Failed);
+      Try_LZW (Failed);
+      Try_Quantizer (Failed);
+      Resources.Cleanup_Failed := Resources.Cleanup_Failed or else Failed;
    end Release;
 
    procedure Release (Object : in out Encoder) is
@@ -69,39 +57,23 @@ package body Giflib.Encoding.Resource_Management is
          else Object.Constraints.Max_Allocation_Bytes - Reserved);
    end Outer_Maximum;
 
-   function Allocation_Failure
-     (Object : Encoder;
-      Attempted : Byte_Count) return Results.Result
-   is
-   begin
-      return Results.Failure
-        (Errors.Make
-           (Errors.Limit_Exceeded,
-            (Has_Destination => Output_Position (Object).Available,
-             Destination => Output_Position (Object).Value,
-             Expected => Object.Constraints.Max_Allocation_Bytes,
-             Actual => Combined_Amount (Quantizer_Bytes (Object), Attempted),
-             Limit => Allocation_Byte_Limit,
-             others => <>)));
-   end Allocation_Failure;
-
    function Allocation_Result
      (Object : Encoder;
       Allocation : Internal.Ownership.Allocation_Outcome)
       return Results.Result
    is
+      Context : constant Errors.Diagnostic_Context :=
+        Internal.Diagnostics.At_Destination
+          (Object.Output.all,
+           (Frame => Errors.Frame_At (Object.Frames_Written),
+            others => <>));
    begin
-      if Allocation.Status = Internal.Ownership.Allocation_Owner_Error then
-         return Results.Failure
-           (Errors.Make
-              (Errors.Internal_Invariant_Failed,
-               (Has_Destination => Output_Position (Object).Available,
-                Destination => Output_Position (Object).Value,
-                Has_Frame => True,
-                Frame => Object.Frames_Written,
-                others => <>)));
-      end if;
-      return Allocation_Failure (Object, Allocation.Attempted);
+      return Results.Failure
+        (Internal.Resource_Diagnostics.Allocation_Error
+           (Allocation,
+            Object.Constraints.Max_Allocation_Bytes,
+            Combined_Amount (Quantizer_Bytes (Object), Allocation.Attempted),
+            Context));
    end Allocation_Result;
 
    function Ensure_Truecolor_Pixels

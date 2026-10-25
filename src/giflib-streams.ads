@@ -17,14 +17,22 @@ package Giflib.Streams is
       Count : Byte_Count := 0;
    end record;
 
-   type Source_Position_Result is record
-      Available : Boolean := False;
-      Value : Source_Offset := 0;
+   type Source_Position_Result (Available : Boolean := False) is record
+      case Available is
+         when True =>
+            Value : Source_Offset := 0;
+         when False =>
+            null;
+      end case;
    end record;
 
-   type Destination_Position_Result is record
-      Available : Boolean := False;
-      Value : Destination_Offset := 0;
+   type Destination_Position_Result (Available : Boolean := False) is record
+      case Available is
+         when True =>
+            Value : Destination_Offset := 0;
+         when False =>
+            null;
+      end case;
    end record;
 
    type Source is limited interface;
@@ -42,6 +50,12 @@ package Giflib.Streams is
    function Read_Exact (Object : in out Source'Class; Buffer : out Byte_Array) return Results.Result;
    function Skip_Exact (Object : in out Source'Class; Count : Byte_Count) return Results.Result;
    function Write_All (Object : in out Destination'Class; Buffer : Byte_Array) return Results.Result;
+   function Write_All
+     (Object : in out Destination'Class;
+      Buffer : Byte_Array;
+      Count : out Byte_Count) return Results.Result;
+   --  Count includes every byte accepted by the destination, including bytes
+   --  accepted by the final write call when that call also reports an error.
    function Read_Some
      (Object : in out Source'Class;
       Buffer : out Byte_Array) return Source_Result;
