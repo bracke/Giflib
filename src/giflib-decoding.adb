@@ -190,42 +190,15 @@ package body Giflib.Decoding is
    function Initialize
      (Object : in out Decoder;
       Options : Decode_Options := Default_Options;
-      Constraints : Limits.Limit_Set := Limits.Default_Limits) return Results.Result
-   is
-   begin
-      if not State_Arithmetic.Can_Initialize
-        (Object.Current_State)
-      then
-         return Invalid_Transition (Object);
-      end if;
-      Resource_Management.Release (Object);
-      if not Internal.Decoder_Storage.Cleanup_Succeeded (Object.Resources) then
-         Session_Transitions.Fail_Session
-           (Object, Errors.Make (Errors.Internal_Invariant_Failed));
-         return Results.Failure (Object.Diagnostic);
-      end if;
-      if not Input_Position (Object).Available then
-         Session_Transitions.Fail_Session
-           (Object,
-            Errors.Make
-              (Errors.Source_Read_Failed,
-               (Source_Position => (State => Errors.Position_Unavailable),
-                others => <>)));
-         return Results.Failure (Object.Diagnostic);
-      end if;
-      Session_Transitions.Begin_Session (Object, Options, Constraints);
-      return Results.Success;
-   end Initialize;
+      Constraints : Limits.Limit_Set := Limits.Default_Limits)
+      return Results.Result
+   is separate;
 
    function Reset
      (Object : in out Decoder;
       Options : Decode_Options := Default_Options;
       Constraints : Limits.Limit_Set := Limits.Default_Limits) return Results.Result
-   is
-   begin
-      Session_Transitions.Reset_Session (Object);
-      return Initialize (Object, Options, Constraints);
-   end Reset;
+   is separate;
 
    function Read_Header
      (Object : in out Decoder;
@@ -386,25 +359,8 @@ package body Giflib.Decoding is
    function Skip_Frame (Object : in out Decoder) return Results.Result
    is separate;
 
-   function Cancel (Object : in out Decoder) return Results.Result is
-   begin
-      if State_Arithmetic.Can_Cancel (Object.Current_State) then
-         Resource_Management.Release (Object);
-         if not Internal.Decoder_Storage.Cleanup_Succeeded (Object.Resources) then
-            Session_Transitions.Fail_Session
-              (Object, Errors.Make (Errors.Internal_Invariant_Failed));
-            return Results.Failure (Object.Diagnostic);
-         end if;
-         Session_Transitions.Cancel_Session (Object);
-         return Results.Success;
-      elsif Object.Current_State = Cancelled then
-         return Results.Success;
-      elsif Object.Current_State = Failed then
-         return Results.Failure (Object.Diagnostic);
-      else
-         return Invalid_Transition (Object);
-      end if;
-   end Cancel;
+   function Cancel (Object : in out Decoder) return Results.Result
+   is separate;
 
    function State (Object : Decoder) return Decoder_State is
    begin
@@ -486,15 +442,6 @@ package body Giflib.Decoding is
         (Object.Resources, Index, Chunk_Index, Target, Count);
    end Copy_Retained_Extension_Chunk;
 
-   procedure Finalize (Object : in out Decoder) is
-   begin
-      Resource_Management.Release (Object);
-      if not Internal.Decoder_Storage.Cleanup_Succeeded (Object.Resources)
-        and then Object.Diagnostic.Code = Errors.No_Error
-      then
-         Session_Transitions.Record_Diagnostic
-           (Object, Errors.Make (Errors.Internal_Invariant_Failed));
-      end if;
-      Session_Transitions.Finalize_Session (Object);
-   end Finalize;
+   procedure Finalize (Object : in out Decoder)
+   is separate;
 end Giflib.Decoding;
