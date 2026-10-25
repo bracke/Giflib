@@ -151,6 +151,24 @@ begin
            "metadata survived chunk allocation failure");
    Finish_Scenario (Comment_Decoder);
 
+   Options.Mode := Giflib.Decoding.Composited_RGBA;
+   Start (Comment_Source, Comment_Decoder, Options);
+   Outcome := Giflib.Decoding.Read_Header (Comment_Decoder, Header);
+   Assert (Giflib.Results.Succeeded (Outcome),
+           "cleanup-fault decoder header failed");
+   Outcome := Giflib.Decoding.Next_Event (Comment_Decoder, Event);
+   Assert
+     (Giflib.Results.Succeeded (Outcome)
+      and then Event.Kind = Giflib.Decoding.Extension_Event,
+      "cleanup-fault decoder did not retain metadata");
+   Giflib.Decoding.Testing.Corrupt_Allocation_Budget (Comment_Decoder);
+   Outcome := Giflib.Decoding.Cancel (Comment_Decoder);
+   Assert
+     (Outcome.First_Error.Code = Giflib.Errors.Internal_Invariant_Failed
+      and then Giflib.Decoding.Testing.Resources_Released (Comment_Decoder),
+      "decoder cleanup failure retained owned storage");
+   Finish_Scenario (Comment_Decoder);
+
    Options := Giflib.Decoding.Default_Options;
    Options.Mode := Giflib.Decoding.Composited_RGBA;
    Start (Restore_Source, Restore_Decoder, Options);

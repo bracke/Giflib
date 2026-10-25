@@ -39,10 +39,10 @@ begin
 
    Outcome_B := Giflib.Encoding.Add_Indexed_Frame
      (Encoder_B, (Width => 2, Height => 1, others => <>),
-      Giflib.Encoding.Use_Global_Palette, (others => <>), [1, 0]);
+      Giflib.Encoding.Global_Frame_Palette, [1, 0]);
    Outcome_A := Giflib.Encoding.Add_Indexed_Frame
      (Encoder_A, (Width => 1, Height => 1, others => <>),
-      Giflib.Encoding.Use_Global_Palette, (others => <>), [0]);
+      Giflib.Encoding.Global_Frame_Palette, [0]);
    Assert (Giflib.Results.Succeeded (Outcome_A)
            and then Giflib.Results.Succeeded (Outcome_B),
            "interleaved frame encoding failed");

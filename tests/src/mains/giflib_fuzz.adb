@@ -129,8 +129,7 @@ procedure Giflib_Fuzz is
       Outcome := Giflib.Encoding.Add_Indexed_Frame
         (Encoder,
          (Width => 64, Height => 64, others => <>),
-         Giflib.Encoding.Use_Global_Palette,
-         (others => <>),
+         Giflib.Encoding.Global_Frame_Palette,
          Pixels);
       Require ("LZW stress frame");
       Outcome := Giflib.Encoding.Finish (Encoder);

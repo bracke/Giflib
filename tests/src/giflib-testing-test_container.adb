@@ -151,9 +151,7 @@ package body Giflib.Testing.Test_Container is
               "global palette descriptor is wrong");
       Assert (Header.Global_Palette.Colors (0) = (0, 0, 0), "first palette entry is wrong");
       Assert (Header.Global_Palette.Colors (1) = (255, 255, 255), "second palette entry is wrong");
-      Outcome := Giflib.Internal.Container.Read_Trailer (Source);
-      Assert (Giflib.Results.Succeeded (Outcome), "valid trailer failed");
-      Assert (Source.Offset = 20, "parser did not stop after trailer");
+      Assert (Source.Offset = 19, "header parser consumed the following trailer");
    end Parses_GIF87a_Global_Palette;
 
    procedure Parses_GIF89a_Without_Palette (T : in out AUnit.Test_Cases.Test_Case'Class) is
@@ -171,13 +169,12 @@ package body Giflib.Testing.Test_Container is
       Assert (Giflib.Results.Succeeded (Outcome), "valid GIF89a header failed");
       Assert (Header.Version = Giflib.GIF89a, "GIF89a version was not retained");
       Assert (Header.Width = 2 and then Header.Height = 3, "logical dimensions are wrong");
-      Assert (not Header.Has_Global_Palette and then Header.Global_Palette.Length = 0,
+      Assert (not Header.Has_Global_Palette,
               "absent global palette became present");
       Assert (Header.Color_Resolution = 8, "color resolution is wrong");
       Assert (Header.Background_Index = 77 and then Header.Pixel_Aspect_Ratio = 49,
               "logical screen fields were not retained");
-      Outcome := Giflib.Internal.Container.Read_Trailer (Source);
-      Assert (Giflib.Results.Succeeded (Outcome), "valid GIF89a trailer failed");
+      Assert (Source.Offset = 13, "header parser consumed the following trailer");
    end Parses_GIF89a_Without_Palette;
 
    procedure Rejects_Signatures_And_Truncation (T : in out AUnit.Test_Cases.Test_Case'Class) is
@@ -219,11 +216,9 @@ package body Giflib.Testing.Test_Container is
         [71, 73, 70, 56, 57, 97, 3, 0, 1, 0, 0, 0, 0];
       Tall : aliased constant Giflib.Streams.Byte_Array :=
         [71, 73, 70, 56, 57, 97, 1, 0, 3, 0, 0, 0, 0];
-      Bad_Trailer : aliased constant Giflib.Streams.Byte_Array := [16#2C#];
       Source : Giflib.Streams.Memory_Source (Zero_Width'Access);
       Wide_Source : Giflib.Streams.Memory_Source (Wide'Access);
       Tall_Source : Giflib.Streams.Memory_Source (Tall'Access);
-      Trailer_Source : Giflib.Streams.Memory_Source (Bad_Trailer'Access);
       Header : Giflib.Internal.Container.Header_Info;
       Constraints : Giflib.Limits.Limit_Set := Giflib.Limits.Default_Limits;
       Outcome : Giflib.Results.Result;
@@ -246,10 +241,6 @@ package body Giflib.Testing.Test_Container is
       Assert (Outcome.First_Error.Code = Giflib.Errors.Limit_Exceeded
               and then Outcome.First_Error.Context.Limit = Giflib.Logical_Height_Limit,
               "height limit was ignored");
-
-      Giflib.Streams.Open (Trailer_Source);
-      Outcome := Giflib.Internal.Container.Read_Trailer (Trailer_Source);
-      Assert (Outcome.First_Error.Code = Giflib.Errors.Invalid_Block, "invalid trailer was accepted");
    end Rejects_Dimensions_And_Limits;
 
    procedure Accepts_Geometry_Boundaries

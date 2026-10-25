@@ -1,6 +1,5 @@
 with AUnit.Assertions;
 
-with Giflib.Internal.Container;
 with Giflib.Internal.Image_Data;
 with Giflib.Internal.Interlacing;
 with Giflib.Internal.LZW;
@@ -71,8 +70,6 @@ package body Giflib.Testing.Test_Interlacing is
       Context : Giflib.Internal.LZW.Workspace_Handle;
       Budget : aliased Giflib.Internal.Ownership.Byte_Budget;
       Fault : Giflib.Internal.Ownership.Fault_State;
-      Descriptor : constant Giflib.Internal.Container.Image_Descriptor :=
-        (Left => 0, Top => 0, Width => 2, Height => 4, Interlaced => True, others => <>);
       Palette : Giflib.Palettes.Palette;
       Output : Giflib.Streams.Byte_Array (1 .. 8);
       Pixels : Giflib.Pixel_Count := 0;
@@ -91,7 +88,7 @@ package body Giflib.Testing.Test_Interlacing is
       Palette.Length := 8;
       Giflib.Streams.Open (Source, Max_Transfer => 1);
       Outcome := Giflib.Internal.Image_Data.Decode_Indices
-        (Context, Source, Descriptor, Palette, Giflib.Limits.Default_Limits,
+        (Context, Source, 2, 4, True, Palette, Giflib.Limits.Default_Limits,
          Pixels, Compressed, Output);
       Assert (Giflib.Results.Succeeded (Outcome), "interlaced image data failed");
       Assert (Output = [0, 1, 4, 5, 2, 3, 6, 7], "interlaced output is not row-major");

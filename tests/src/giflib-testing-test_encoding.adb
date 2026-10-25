@@ -177,8 +177,7 @@ package body Giflib.Testing.Test_Encoding is
       Outcome := Giflib.Encoding.Add_Indexed_Frame
         (Encoder,
          Frame,
-         Giflib.Encoding.Use_Global_Palette,
-         (others => <>),
+         Giflib.Encoding.Global_Frame_Palette,
          [1 => 0]);
       Assert
         (Outcome.First_Error.Code = Giflib.Errors.Destination_Write_Failed,
@@ -197,7 +196,7 @@ package body Giflib.Testing.Test_Encoding is
          "truecolor destination Storage_Error was misclassified");
       Giflib.Encoding.Finalize (Encoder);
 
-      Delayed.Raise_On_Write := 6;
+      Delayed.Raise_On_Write := 7;
       Outcome := Giflib.Encoding.Initialize
         (Delayed_Encoder);
       Giflib.Testing.Assertions.Require_Success (Outcome);
@@ -209,12 +208,15 @@ package body Giflib.Testing.Test_Encoding is
       Outcome := Giflib.Encoding.Add_Indexed_Frame
         (Delayed_Encoder,
          Frame,
-         Giflib.Encoding.Use_Global_Palette,
-         (others => <>),
+         Giflib.Encoding.Global_Frame_Palette,
          [1 => 0]);
       Assert
         (Outcome.First_Error.Code = Giflib.Errors.Destination_Write_Failed
-         and then Giflib.Encoding.State (Delayed_Encoder) = Giflib.Encoding.Failed,
+         and then Giflib.Encoding.State (Delayed_Encoder) = Giflib.Encoding.Failed
+         and then Giflib.Encoding.Testing.Bytes_Written (Delayed_Encoder) =
+           Giflib.Byte_Count (Delayed.Position)
+         and then Giflib.Encoding.Testing.Compressed_Bytes_Written
+           (Delayed_Encoder) = 0,
          "LZW destination Storage_Error escaped the encoder");
       Giflib.Encoding.Finalize (Delayed_Encoder);
 
@@ -286,7 +288,7 @@ package body Giflib.Testing.Test_Encoding is
       Outcome := Giflib.Encoding.Set_Global_Palette (Encoder, BW_Palette);
       Assert (Giflib.Results.Succeeded (Outcome), "GIF87a global palette failed");
       Outcome := Giflib.Encoding.Add_Indexed_Frame
-        (Encoder, Frame, Giflib.Encoding.Use_Global_Palette, (others => <>), [0, 1]);
+        (Encoder, Frame, Giflib.Encoding.Global_Frame_Palette, [0, 1]);
       Assert (Giflib.Results.Succeeded (Outcome), "GIF87a frame encode failed");
       Outcome := Giflib.Encoding.Finish (Encoder);
       Assert (Giflib.Results.Succeeded (Outcome), "GIF87a finish failed");
@@ -349,10 +351,11 @@ package body Giflib.Testing.Test_Encoding is
       Outcome := Giflib.Encoding.Set_Loop_Count (Encoder, 0);
       Assert (Giflib.Results.Succeeded (Outcome), "loop definition failed");
       Outcome := Giflib.Encoding.Add_Indexed_Frame
-        (Encoder, First, Giflib.Encoding.Use_Global_Palette, (others => <>), [0, 1]);
+        (Encoder, First, Giflib.Encoding.Global_Frame_Palette, [0, 1]);
       Assert (Giflib.Results.Succeeded (Outcome), "first animation frame failed");
       Outcome := Giflib.Encoding.Add_Indexed_Frame
-        (Encoder, Second, Giflib.Encoding.Use_Local_Palette, Local, [1, 0]);
+        (Encoder, Second,
+         (Selection => Giflib.Encoding.Use_Local_Palette, Value => Local), [1, 0]);
       Assert (Giflib.Results.Succeeded (Outcome), "second animation frame failed");
       Outcome := Giflib.Encoding.Finish (Encoder);
       Assert (Giflib.Results.Succeeded (Outcome), "animation finish failed");
@@ -374,7 +377,7 @@ package body Giflib.Testing.Test_Encoding is
          Outcome := Giflib.Decoding.Read_Header (Decoder, Header);
          Giflib.Testing.Assertions.Require_Success (Outcome);
          Outcome := Giflib.Decoding.Next_Event (Decoder, Event);
-         Assert (Event.Extension.Is_Loop_Extension
+         Assert (Event.Extension.Loop_Info.Is_Loop
                  and then Giflib.Decoding.Looping (Decoder).State = Giflib.Animations.Infinite_Looping,
                  "encoded infinite loop was not preserved");
          Outcome := Giflib.Decoding.Next_Event (Decoder, Event);
@@ -431,6 +434,22 @@ package body Giflib.Testing.Test_Encoding is
             and then Giflib.Encoding.First_Error (Encoder).Code = Original.Code,
             "cancelling a failed encoder replaced its first diagnostic");
       end;
+
+      Giflib.Encoding.Finalize (Encoder);
+      Giflib.Streams.Open (Destination);
+      Outcome := Giflib.Encoding.Initialize (Encoder);
+      Giflib.Testing.Assertions.Require_Success (Outcome);
+      Outcome := Giflib.Encoding.Define_Screen (Encoder, (others => <>));
+      Giflib.Testing.Assertions.Require_Success (Outcome);
+      Outcome := Giflib.Encoding.Add_Decoded_Extension
+        (Encoder,
+         (Kind => Giflib.Metadata.Graphic_Control_Extension,
+          others => <>),
+         [1 => 0]);
+      Assert
+        (Outcome.First_Error.Code = Giflib.Errors.Unsupported_Feature
+         and then Destination.Offset = 0,
+         "decoded graphic control bypassed frame-control encoding");
    end Rejects_GIF87a_Features_And_Bad_State;
 
    procedure Preserves_Extension_Payload_And_Placement (T : in out AUnit.Test_Cases.Test_Case'Class) is
@@ -440,7 +459,7 @@ package body Giflib.Testing.Test_Encoding is
       Encoder : Giflib.Encoding.Encoder (Destination'Access);
       Frame : constant Giflib.Encoding.Frame_Info := (others => <>);
       Extension : constant Giflib.Metadata.Extension_Info :=
-        (Kind => Giflib.Metadata.Comment_Extension, Label => 16#FE#, others => <>);
+        (Kind => Giflib.Metadata.Comment_Extension, others => <>);
       Large_Payload : constant Giflib.Streams.Byte_Array :=
         [for I in 1 .. 300 => Giflib.Byte ((I - 1) mod 256)];
       Outcome : Giflib.Results.Result;
@@ -453,15 +472,16 @@ package body Giflib.Testing.Test_Encoding is
       Outcome := Giflib.Encoding.Set_Global_Palette (Encoder, BW_Palette);
       Giflib.Testing.Assertions.Require_Success (Outcome);
       Outcome := Giflib.Encoding.Add_Indexed_Frame
-        (Encoder, Frame, Giflib.Encoding.Use_Global_Palette, (others => <>), [0]);
+        (Encoder, Frame, Giflib.Encoding.Global_Frame_Palette, [0]);
       Assert (Giflib.Results.Succeeded (Outcome), "pre-extension frame failed");
-      Outcome := Giflib.Encoding.Add_Extension_Exact
+      Outcome := Giflib.Encoding.Add_Decoded_Extension_Exact
         (Encoder, Extension, [65, 66, 67, 68, 69], [3, 2]);
       Assert (Giflib.Results.Succeeded (Outcome), "exact comment encode failed");
-      Outcome := Giflib.Encoding.Add_Extension (Encoder, Extension, Large_Payload);
+      Outcome := Giflib.Encoding.Add_Decoded_Extension
+        (Encoder, Extension, Large_Payload);
       Assert (Giflib.Results.Succeeded (Outcome), "automatic comment chunking failed");
       Outcome := Giflib.Encoding.Add_Indexed_Frame
-        (Encoder, Frame, Giflib.Encoding.Use_Global_Palette, (others => <>), [1]);
+        (Encoder, Frame, Giflib.Encoding.Global_Frame_Palette, [1]);
       Giflib.Testing.Assertions.Require_Success (Outcome);
       Outcome := Giflib.Encoding.Finish (Encoder);
       Assert (Giflib.Results.Succeeded (Outcome), "extension fixture finish failed");

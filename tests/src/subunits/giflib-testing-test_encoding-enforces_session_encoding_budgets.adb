@@ -29,7 +29,7 @@ begin
      (Encoder, (Width => 2, Height => 1, others => <>));
    Assert
      (Outcome.First_Error.Context.Limit = Giflib.Logical_Width_Limit
-      and then not Outcome.First_Error.Context.Has_Frame,
+      and then not Outcome.First_Error.Context.Frame.Present,
       "screen-definition failure was attributed to a frame");
 
    Giflib.Encoding.Finalize (Encoder);
@@ -37,13 +37,13 @@ begin
    Constraints.Max_Frames := 1;
    Start;
    Outcome := Giflib.Encoding.Add_Indexed_Frame
-     (Encoder, Frame, Giflib.Encoding.Use_Global_Palette, (others => <>), [0]);
+     (Encoder, Frame, Giflib.Encoding.Global_Frame_Palette, [0]);
    Giflib.Testing.Assertions.Require_Success (Outcome);
    Outcome := Giflib.Encoding.Add_Indexed_Frame
-     (Encoder, Frame, Giflib.Encoding.Use_Global_Palette, (others => <>), [1]);
+     (Encoder, Frame, Giflib.Encoding.Global_Frame_Palette, [1]);
    Assert (Outcome.First_Error.Context.Limit = Giflib.Frame_Count_Limit
-           and then Outcome.First_Error.Context.Has_Frame
-           and then Outcome.First_Error.Context.Frame = 1,
+           and then Outcome.First_Error.Context.Frame.Present
+           and then Outcome.First_Error.Context.Frame.Value = 1,
            "encoder frame-count budget was ignored");
 
    Giflib.Encoding.Finalize (Encoder);
@@ -51,7 +51,7 @@ begin
    Constraints.Max_Output_Bytes := 10;
    Start;
    Outcome := Giflib.Encoding.Add_Indexed_Frame
-     (Encoder, Frame, Giflib.Encoding.Use_Global_Palette, (others => <>), [0]);
+     (Encoder, Frame, Giflib.Encoding.Global_Frame_Palette, [0]);
    Assert (Outcome.First_Error.Context.Limit = Giflib.Output_Byte_Limit,
            "encoder output-byte budget was ignored");
 
@@ -76,10 +76,10 @@ begin
    Constraints.Max_Compressed_Bytes := 3;
    Start;
    Outcome := Giflib.Encoding.Add_Indexed_Frame
-     (Encoder, Frame, Giflib.Encoding.Use_Global_Palette, (others => <>), [0]);
+     (Encoder, Frame, Giflib.Encoding.Global_Frame_Palette, [0]);
    Assert (Giflib.Results.Succeeded (Outcome), "first compressed-budget frame failed");
    Outcome := Giflib.Encoding.Add_Indexed_Frame
-     (Encoder, Frame, Giflib.Encoding.Use_Global_Palette, (others => <>), [1]);
+     (Encoder, Frame, Giflib.Encoding.Global_Frame_Palette, [1]);
    Assert (Outcome.First_Error.Context.Limit = Giflib.Compressed_Byte_Limit,
            "cumulative compressed-byte budget was ignored");
 
@@ -88,7 +88,7 @@ begin
    Constraints.Max_Frame_Pixels := 0;
    Start;
    Outcome := Giflib.Encoding.Add_Indexed_Frame
-     (Encoder, Frame, Giflib.Encoding.Use_Global_Palette, (others => <>), [0]);
+     (Encoder, Frame, Giflib.Encoding.Global_Frame_Palette, [0]);
    Assert (Outcome.First_Error.Context.Limit = Giflib.Frame_Pixel_Limit,
            "encoder frame-pixel budget was ignored");
 
@@ -96,7 +96,7 @@ begin
    Constraints := Giflib.Limits.Default_Limits;
    Start;
    Outcome := Giflib.Encoding.Add_Indexed_Frame
-     (Encoder, Frame, Giflib.Encoding.Use_Global_Palette, (others => <>), [2]);
+     (Encoder, Frame, Giflib.Encoding.Global_Frame_Palette, [2]);
    Assert (Outcome.First_Error.Code = Giflib.Errors.Palette_Index_Out_Of_Range
            and then Destination.Offset > 0,
            "indexed compression did not validate palette values in-stream");
@@ -116,29 +116,53 @@ begin
    begin
       Controlled.Control.Delay_CS := 1;
       Outcome := Giflib.Encoding.Add_Indexed_Frame
-        (Encoder, Controlled, Giflib.Encoding.Use_Global_Palette, (others => <>), [0]);
+        (Encoder, Controlled, Giflib.Encoding.Global_Frame_Palette, [0]);
       Assert (Outcome.First_Error.Context.Limit = Giflib.Extension_Count_Limit,
               "graphic control escaped the extension-count budget");
    end;
+
+   Giflib.Encoding.Finalize (Encoder);
+   Start;
+   Outcome := Giflib.Encoding.Add_Extension
+     (Encoder,
+      Giflib.Encoding.Extension_Descriptor'
+        (Kind => Giflib.Encoding.Comment_Extension),
+      [1]);
+   Assert
+     (Outcome.First_Error.Context.Limit = Giflib.Extension_Count_Limit
+      and then Outcome.First_Error.Context.Expected = 0
+      and then Outcome.First_Error.Context.Actual = 1,
+      "extension-count failure omitted expected or actual counts");
 
    Giflib.Encoding.Finalize (Encoder);
    Constraints := Giflib.Limits.Default_Limits;
    Start;
    Outcome := Giflib.Encoding.Add_Extension
      (Encoder,
-      (Kind => Giflib.Metadata.Comment_Extension, Label => 16#FF#, others => <>),
+      Giflib.Encoding.Extension_Descriptor'
+        (Kind => Giflib.Encoding.Unknown_Extension, Label => 16#EE#),
       [1]);
-   Assert (Outcome.First_Error.Code = Giflib.Errors.Invalid_Extension,
-           "mismatched extension kind and label were accepted");
+   Giflib.Testing.Assertions.Require_Success (Outcome);
+
+   Giflib.Encoding.Finalize (Encoder);
+   Start;
+   Outcome := Giflib.Encoding.Add_Extension
+     (Encoder,
+      Giflib.Encoding.Extension_Descriptor'
+        (Kind => Giflib.Encoding.Unknown_Extension, Label => 16#FE#),
+      [1]);
+   Assert
+     (Outcome.First_Error.Code = Giflib.Errors.Invalid_Extension
+      and then Destination.Offset = 0,
+      "known extension label in unknown descriptor was not rejected safely");
 
    Giflib.Encoding.Finalize (Encoder);
    Constraints := Giflib.Limits.Default_Limits;
    Start;
    Outcome := Giflib.Encoding.Add_Extension_Exact
      (Encoder,
-      (Kind => Giflib.Metadata.Comment_Extension,
-       Label => 16#FE#,
-       others => <>),
+      Giflib.Encoding.Extension_Descriptor'
+        (Kind => Giflib.Encoding.Comment_Extension),
       [1],
       [1, 1]);
    Assert

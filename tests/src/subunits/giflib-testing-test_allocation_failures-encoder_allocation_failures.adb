@@ -16,6 +16,12 @@ is
    Cleanup_Destination : aliased Giflib.Streams.Fixed_Buffer_Destination
      (Cleanup_Storage'Access);
    Cleanup_Encoder : Giflib.Encoding.Encoder (Cleanup_Destination'Access);
+   Outer_Cleanup_Storage : aliased Giflib.Streams.Byte_Array :=
+     [for I in 1 .. 512 => 0];
+   Outer_Cleanup_Destination : aliased Giflib.Streams.Fixed_Buffer_Destination
+     (Outer_Cleanup_Storage'Access);
+   Outer_Cleanup_Encoder : Giflib.Encoding.Encoder
+     (Outer_Cleanup_Destination'Access);
    Palette : Giflib.Palettes.Palette;
    Indexed : constant Giflib.Streams.Byte_Array := [0, 1];
    Outcome : Giflib.Results.Result;
@@ -45,8 +51,7 @@ begin
    Outcome := Giflib.Encoding.Add_Indexed_Frame
      (Encoder,
       (Width => 2, Height => 1, others => <>),
-      Giflib.Encoding.Use_Local_Palette,
-      Palette,
+      (Selection => Giflib.Encoding.Use_Local_Palette, Value => Palette),
       Indexed);
    Require_Allocation_Failure
      (Outcome, "encoder LZW-workspace Storage_Error escaped");
@@ -79,6 +84,30 @@ begin
         (Cleanup_Encoder),
       "quantizer cleanup failure was not propagated to the encoder");
    Giflib.Encoding.Finalize (Cleanup_Encoder);
+
+   Giflib.Streams.Open (Outer_Cleanup_Destination);
+   Outcome := Giflib.Encoding.Initialize (Outer_Cleanup_Encoder);
+   Assert (Giflib.Results.Succeeded (Outcome),
+           "outer cleanup encoder initialization failed");
+   Outcome := Giflib.Encoding.Define_Screen
+     (Outer_Cleanup_Encoder, (Width => 2, Height => 1, others => <>));
+   Assert (Giflib.Results.Succeeded (Outcome),
+           "outer cleanup encoder setup failed");
+   Outcome := Giflib.Encoding.Add_Truecolor_Frame
+     (Outer_Cleanup_Encoder,
+      (Width => 2, Height => 1, others => <>),
+      View);
+   Assert (Giflib.Results.Succeeded (Outcome),
+           "outer cleanup fixture did not allocate resources");
+   Giflib.Encoding.Testing.Corrupt_Allocation_Budget
+     (Outer_Cleanup_Encoder);
+   Outcome := Giflib.Encoding.Cancel (Outer_Cleanup_Encoder);
+   Assert
+     (Outcome.First_Error.Code = Giflib.Errors.Internal_Invariant_Failed
+      and then Giflib.Encoding.Testing.Resources_Released
+        (Outer_Cleanup_Encoder),
+      "outer encoder cleanup failure retained owned storage");
+   Giflib.Encoding.Finalize (Outer_Cleanup_Encoder);
 
    Start;
    Giflib.Encoding.Testing.Inject_Storage_Error_After (Encoder);

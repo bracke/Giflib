@@ -44,6 +44,16 @@ procedure Giflib_Check is
          Quiet => False);
       Project_Tools.Release_Checks.Require_Text
         (Checks,
+         "tests/unit_tests.gpr",
+         "with ""giflib_whitebox.gpr"";",
+         Quiet => False);
+      Project_Tools.Release_Checks.Require_Text
+        (Checks,
+         "tests/tools.gpr",
+         "with ""../giflib.gpr"";",
+         Quiet => False);
+      Project_Tools.Release_Checks.Require_Text
+        (Checks,
          "tests/check_private_api.sh",
          "private child unit",
          Quiet => False);

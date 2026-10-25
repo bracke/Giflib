@@ -17,6 +17,12 @@ package body Giflib.Encoding.Testing is
       Object.Bytes_Written := Value;
    end Set_Bytes_Written;
 
+   function Bytes_Written (Object : Encoder) return Byte_Count is
+     (Object.Bytes_Written);
+
+   function Compressed_Bytes_Written (Object : Encoder) return Byte_Count is
+     (Object.Compressed_Bytes_Written);
+
    function Write_Raw
      (Object : in out Encoder;
       Data : Streams.Byte_Array) return Results.Result
@@ -57,6 +63,19 @@ package body Giflib.Encoding.Testing is
       Quantization.Testing.Corrupt_Allocation_Budget
         (Object.Resources.Quantizer);
    end Corrupt_Quantizer_Allocation_Budget;
+
+   procedure Corrupt_Allocation_Budget (Object : in out Encoder) is
+   begin
+      Internal.Ownership.Testing.Set_Used
+        (Object.Resources.Allocation_Budget, 0);
+   end Corrupt_Allocation_Budget;
+
+   function Resources_Released (Object : Encoder) return Boolean is
+     (not Internal.Owned_Buffers.Is_Allocated
+        (Object.Resources.Truecolor_Pixels)
+      and then not Internal.LZW_Encoding.Is_Allocated
+        (Object.Resources.LZW_Workspace)
+      and then Quantization.Allocated_Bytes (Object.Resources.Quantizer) = 0);
 
    function Quantizer_Cleanup_Succeeded (Object : Encoder) return Boolean is
      (Quantization.Cleanup_Succeeded (Object.Resources.Quantizer));

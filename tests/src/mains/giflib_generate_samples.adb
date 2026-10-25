@@ -65,8 +65,7 @@ procedure Giflib_Generate_Samples is
       Outcome := Giflib.Encoding.Add_Indexed_Frame
         (Encoder,
          (Left => 0, Top => 0, Width => 3, Height => 2, Interlaced => True, others => <>),
-         Giflib.Encoding.Use_Global_Palette,
-         (others => <>),
+         Giflib.Encoding.Global_Frame_Palette,
          [1, 2, 3, 3, 2, 1]);
       Require (Outcome, "encode still frame");
       Outcome := Giflib.Encoding.Finish (Encoder);
@@ -96,10 +95,10 @@ procedure Giflib_Generate_Samples is
       Outcome := Giflib.Encoding.Set_Loop_Count (Encoder, 0);
       Require (Outcome, "set animation loop");
       Outcome := Giflib.Encoding.Add_Indexed_Frame
-        (Encoder, First, Giflib.Encoding.Use_Global_Palette, (others => <>), [1, 2]);
+        (Encoder, First, Giflib.Encoding.Global_Frame_Palette, [1, 2]);
       Require (Outcome, "encode animation frame 1");
       Outcome := Giflib.Encoding.Add_Indexed_Frame
-        (Encoder, Second, Giflib.Encoding.Use_Global_Palette, (others => <>), [3]);
+        (Encoder, Second, Giflib.Encoding.Global_Frame_Palette, [3]);
       Require (Outcome, "encode animation frame 2");
       Outcome := Giflib.Encoding.Finish (Encoder);
       Require (Outcome, "finish animation");
@@ -127,7 +126,7 @@ procedure Giflib_Generate_Samples is
             Position := Position + 3;
          end loop;
       end loop;
-      Options.Maximum_Colors := 16;
+      Options.Palette.Maximum_Colors := 16;
       Options.Dither := Giflib.Quantization.Floyd_Steinberg;
       Giflib.Streams.Open (Destination, Max_Transfer => 11);
       Outcome := Giflib.Encoding.Initialize (Encoder);

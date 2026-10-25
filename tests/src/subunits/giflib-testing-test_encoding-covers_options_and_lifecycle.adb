@@ -20,7 +20,7 @@ begin
    Outcome := Giflib.Encoding.Set_Loop_Count (Encoder, 3);
    Assert (Giflib.Results.Succeeded (Outcome), "finite loop definition failed");
    Outcome := Giflib.Encoding.Add_Indexed_Frame
-     (Encoder, Frame, Giflib.Encoding.Use_Global_Palette, (others => <>), [0]);
+     (Encoder, Frame, Giflib.Encoding.Global_Frame_Palette, [0]);
    Giflib.Testing.Assertions.Require_Success (Outcome);
    Outcome := Giflib.Encoding.Finish (Encoder);
    Assert (Giflib.Results.Succeeded (Outcome)
@@ -43,10 +43,11 @@ begin
       Outcome := Giflib.Decoding.Next_Event (Decoder, Event);
       Assert (Giflib.Results.Succeeded (Outcome)
               and then Header.Version = Giflib.GIF89a
-              and then Event.Extension.Is_Loop_Extension
+              and then Event.Extension.Loop_Info.Is_Loop
               and then Giflib.Decoding.Looping (Decoder).State
                 = Giflib.Animations.Finite_Loop_Count
-              and then Giflib.Decoding.Looping (Decoder).Raw_Count = 3,
+              and then Giflib.Animations.Raw_Count
+                (Giflib.Decoding.Looping (Decoder)) = 3,
               "finite loop or forced GIF89a semantics changed");
    end;
 

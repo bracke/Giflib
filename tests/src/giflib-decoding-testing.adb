@@ -17,4 +17,18 @@ package body Giflib.Decoding.Testing is
    begin
       Internal.Ownership.Testing.Disable (Object.Allocation_Fault);
    end Disable_Failure_Injection;
+
+   procedure Corrupt_Allocation_Budget (Object : in out Decoder) is
+   begin
+      Internal.Ownership.Testing.Set_Used
+        (Object.Resources.Allocation_Budget, 0);
+   end Corrupt_Allocation_Budget;
+
+   function Resources_Released (Object : Decoder) return Boolean is
+     (Internal.Metadata_Store.Is_Released (Object.Resources.Metadata_Storage)
+      and then not Internal.Owned_Buffers.Is_Allocated (Object.Resources.Canvas)
+      and then not Internal.Owned_Buffers.Is_Allocated (Object.Resources.Snapshot)
+      and then not Internal.Owned_Buffers.Is_Allocated
+        (Object.Resources.Frame_Scratch)
+      and then not Internal.LZW.Is_Allocated (Object.Resources.LZW_Workspace));
 end Giflib.Decoding.Testing;

@@ -42,29 +42,29 @@ is
               "retention policy kept the wrong extensions");
       Assert (Giflib.Decoding.Looping (Decoder).State
                 = Giflib.Animations.Finite_Loop_Count
-              and then Giflib.Decoding.Looping (Decoder).Raw_Count = 3,
+              and then Giflib.Animations.Raw_Count
+                (Giflib.Decoding.Looping (Decoder)) = 3,
               "finite loop parsing depended on payload retention");
 
       if Check_Bounds then
          Outcome := Giflib.Decoding.Retained_Extension_Info (Decoder, 4, Retained);
-         Assert (Outcome.First_Error.Code = Giflib.Errors.Invalid_State,
+         Assert (Outcome.First_Error.Code = Giflib.Errors.Invalid_Index,
                  "out-of-range retained info was accepted");
          Outcome := Giflib.Decoding.Copy_Retained_Extension_Payload
            (Decoder, 4, Small, Count);
-         Assert (Outcome.First_Error.Code = Giflib.Errors.Invalid_State,
+         Assert (Outcome.First_Error.Code = Giflib.Errors.Invalid_Index,
                  "out-of-range retained payload was accepted");
          Outcome := Giflib.Decoding.Retained_Extension_Chunk_Count
            (Decoder, 4, Chunk_Count);
-         Assert (Outcome.First_Error.Code = Giflib.Errors.Invalid_State,
+         Assert (Outcome.First_Error.Code = Giflib.Errors.Invalid_Index,
                  "out-of-range retained chunk count was accepted");
          Outcome := Giflib.Decoding.Copy_Retained_Extension_Chunk
            (Decoder, 1, 2, Small, Count);
-         Assert (Outcome.First_Error.Code = Giflib.Errors.Invalid_State,
+         Assert (Outcome.First_Error.Code = Giflib.Errors.Invalid_Index,
                  "out-of-range retained chunk was accepted");
          Outcome := Giflib.Decoding.Copy_Retained_Extension_Payload
            (Decoder, 1, Small, Count);
-         Assert (Outcome.First_Error.Code = Giflib.Errors.Limit_Exceeded
-                 and then Outcome.First_Error.Context.Limit = Giflib.Output_Byte_Limit,
+         Assert (Outcome.First_Error.Code = Giflib.Errors.Buffer_Size_Mismatch,
                  "undersized retained payload target was accepted");
       end if;
       Giflib.Decoding.Finalize (Decoder);

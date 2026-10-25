@@ -1,7 +1,6 @@
 with AUnit.Assertions;
 
 with Giflib.Errors;
-with Giflib.Internal.Container;
 with Giflib.Internal.Image_Data;
 with Giflib.Internal.LZW;
 with Giflib.Internal.Ownership;
@@ -34,22 +33,6 @@ package body Giflib.Testing.Test_Image_Data is
                         "image_data.palette_and_truncation");
       Register_Routine (T, Enforces_Buffer_And_Total_Budgets'Access, "image_data.buffer_and_budgets");
    end Register_Tests;
-
-   function Descriptor_1x2 return Giflib.Internal.Container.Image_Descriptor is
-   begin
-      return
-        (Left => 0,
-         Top => 0,
-         Width => 1,
-         Height => 2,
-         Has_Local_Palette => False,
-         Local_Palette => <>,
-         Interlaced => False,
-         Local_Palette_Sorted => False,
-         Reserved_Bits => 0,
-         Has_Packed_Field_Offset => False,
-         Packed_Field_Offset => 0);
-   end Descriptor_1x2;
 
    function Two_Color_Palette return Giflib.Palettes.Palette is
       Item : Giflib.Palettes.Palette;
@@ -92,7 +75,9 @@ package body Giflib.Testing.Test_Image_Data is
       Outcome := Giflib.Internal.Image_Data.Decode_Indices
         (Context,
          Source,
-         Descriptor_1x2,
+         1,
+         2,
+         False,
          Two_Color_Palette,
          Giflib.Limits.Default_Limits,
          Pixels,
@@ -125,31 +110,28 @@ package body Giflib.Testing.Test_Image_Data is
       Prepare (Context, Budget, Fault);
       Giflib.Streams.Open (Source);
       Outcome := Giflib.Internal.Image_Data.Decode_Indices
-        (Context, Source, Descriptor_1x2, Two_Color_Palette,
+        (Context, Source, 1, 2, False, Two_Color_Palette,
          Giflib.Limits.Default_Limits,
          Pixels, Compressed, Output (1 .. 1), Frame => 7);
-      Assert (Outcome.First_Error.Code = Giflib.Errors.LZW_Output_Size_Mismatch,
+      Assert (Outcome.First_Error.Code = Giflib.Errors.Buffer_Size_Mismatch,
               "wrong-sized target was not rejected before input");
       Assert (Source.Offset = 0, "wrong-sized target consumed input");
 
-      declare
-         One_Pixel : constant Giflib.Internal.Container.Image_Descriptor :=
-           (Left => 0, Top => 0, Width => 1, Height => 1, others => <>);
-      begin
-         Outcome := Giflib.Internal.Image_Data.Decode_Indices
-           (Context, Source, One_Pixel, Two_Color_Palette,
-            Giflib.Limits.Default_Limits,
-            Pixels, Compressed, Output (1 .. 1), Frame => 7);
-      end;
+      Outcome := Giflib.Internal.Image_Data.Decode_Indices
+        (Context, Source, 1, 1, False, Two_Color_Palette,
+         Giflib.Limits.Default_Limits,
+         Pixels, Compressed, Output (1 .. 1), Frame => 7);
       Assert (Outcome.First_Error.Code = Giflib.Errors.Palette_Index_Out_Of_Range,
               "invalid palette index was accepted");
-      Assert (Outcome.First_Error.Context.Frame = 7, "palette error lost frame context");
+      Assert (Outcome.First_Error.Context.Frame.Present
+              and then Outcome.First_Error.Context.Frame.Value = 7,
+              "palette error lost frame context");
 
       Pixels := 0;
       Compressed := 0;
       Giflib.Streams.Open (Truncated_Source);
       Outcome := Giflib.Internal.Image_Data.Decode_Indices
-        (Context, Truncated_Source, Descriptor_1x2, Two_Color_Palette,
+        (Context, Truncated_Source, 1, 2, False, Two_Color_Palette,
          Giflib.Limits.Default_Limits,
          Pixels, Compressed, Output);
       Assert (Outcome.First_Error.Code = Giflib.Errors.Truncated_Block,
@@ -175,7 +157,7 @@ package body Giflib.Testing.Test_Image_Data is
       Constraints.Max_Total_Decoded_Frame_Pixels := 2;
       Giflib.Streams.Open (Source);
       Outcome := Giflib.Internal.Image_Data.Decode_Indices
-        (Context, Source, Descriptor_1x2, Two_Color_Palette, Constraints,
+        (Context, Source, 1, 2, False, Two_Color_Palette, Constraints,
          Pixels, Compressed, Output);
       Assert (Outcome.First_Error.Code = Giflib.Errors.Limit_Exceeded,
               "total decoded pixel budget was ignored");
@@ -188,7 +170,7 @@ package body Giflib.Testing.Test_Image_Data is
       Pixels := 0;
       Giflib.Streams.Open (Source);
       Outcome := Giflib.Internal.Image_Data.Decode_Indices
-        (Context, Source, Descriptor_1x2, Two_Color_Palette, Constraints,
+        (Context, Source, 1, 2, False, Two_Color_Palette, Constraints,
          Pixels, Compressed, Output);
       Assert (Outcome.First_Error.Code = Giflib.Errors.Limit_Exceeded,
               "compressed byte budget was ignored");

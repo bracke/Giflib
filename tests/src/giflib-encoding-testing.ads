@@ -5,6 +5,9 @@ package Giflib.Encoding.Testing is
      (Object : in out Encoder;
       Value : Byte_Count);
 
+   function Bytes_Written (Object : Encoder) return Byte_Count;
+   function Compressed_Bytes_Written (Object : Encoder) return Byte_Count;
+
    function Write_Raw
      (Object : in out Encoder;
       Data : Streams.Byte_Array) return Results.Result;
@@ -21,6 +24,9 @@ package Giflib.Encoding.Testing is
 
    procedure Corrupt_Quantizer_Allocation_Budget
      (Object : in out Encoder);
+
+   procedure Corrupt_Allocation_Budget (Object : in out Encoder);
+   function Resources_Released (Object : Encoder) return Boolean;
 
    function Quantizer_Cleanup_Succeeded (Object : Encoder) return Boolean;
 end Giflib.Encoding.Testing;

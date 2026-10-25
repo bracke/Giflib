@@ -75,7 +75,8 @@ begin
       Decode_Extension (Large_Comment'Access, Options, Constraints);
       Assert (Outcome.First_Error.Context.Limit = Giflib.Retained_Metadata_Byte_Limit
               and then Outcome.First_Error.Context.Block = Giflib.Comment_Extension_Block
-              and then Outcome.First_Error.Context.Extension_Label = 16#FE#,
+              and then Outcome.First_Error.Context.Extension_Label.Present
+              and then Outcome.First_Error.Context.Extension_Label.Value = 16#FE#,
               "retained metadata budget was ignored");
    end;
 

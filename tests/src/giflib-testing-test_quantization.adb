@@ -5,6 +5,7 @@ with Giflib.Images;
 with Giflib.Internal.Quantization_Arithmetic;
 with Giflib.Internal.Quantization_Buffer_Arithmetic;
 with Giflib.Internal.Quantization_Palette;
+with Giflib.Internal.Work_Budgets;
 with Giflib.Limits;
 with Giflib.Palettes;
 with Giflib.Quantization;
@@ -77,34 +78,30 @@ package body Giflib.Testing.Test_Quantization is
       Context : Giflib.Quantization.Workspace;
       Narrow : Giflib.Streams.Byte_Array (1 .. 2);
       Reused, Fresh : Giflib.Streams.Byte_Array (1 .. 4);
-      Palette, Fresh_Palette : Giflib.Palettes.Palette;
-      Transparent, Fresh_Transparent : Boolean;
-      Transparent_Index, Fresh_Transparent_Index : Giflib.Palette_Index;
+      Quantized, Fresh_Quantized : Giflib.Quantization.Quantization_Result;
       Dither_Options : Giflib.Quantization.Quantize_Options :=
         Giflib.Quantization.Default_Options;
       Outcome : Giflib.Results.Result;
    begin
-      Dither_Options.Maximum_Colors := 2;
+      Dither_Options.Palette.Maximum_Colors := 2;
       Dither_Options.Dither := Giflib.Quantization.Floyd_Steinberg;
       Outcome := Giflib.Quantization.Quantize
-        (Context, Narrow_View, Narrow, Palette, Transparent,
-         Transparent_Index, Dither_Options);
+        (Context, Narrow_View, Narrow, Quantized, Dither_Options);
       Assert (Giflib.Results.Succeeded (Outcome),
               "initial dithered workspace quantization failed");
 
       Outcome := Giflib.Quantization.Quantize
-        (Context, Wide_View, Reused, Palette, Transparent, Transparent_Index);
+        (Context, Wide_View, Reused, Quantized);
       Assert (Giflib.Results.Succeeded (Outcome),
               "retained dither storage affected a no-dither call");
       Outcome := Giflib.Quantization.Quantize
-        (Wide_View, Fresh, Fresh_Palette, Fresh_Transparent,
-         Fresh_Transparent_Index);
+        (Wide_View, Fresh, Fresh_Quantized);
       Assert
         (Giflib.Results.Succeeded (Outcome)
          and then Reused = Fresh
-         and then Palette = Fresh_Palette
-         and then Transparent = Fresh_Transparent
-         and then Transparent_Index = Fresh_Transparent_Index,
+         and then Quantized.Palette = Fresh_Quantized.Palette
+         and then Quantized.Transparency.Present =
+           Fresh_Quantized.Transparency.Present,
          "workspace reuse changed no-dither output");
       Giflib.Quantization.Finalize (Context);
    exception
@@ -124,20 +121,18 @@ package body Giflib.Testing.Test_Quantization is
          Accessible_Bytes => 6, Data => Data'Access);
       Context : Giflib.Quantization.Workspace;
       Indexed : Giflib.Streams.Byte_Array (1 .. 2);
-      Palette : Giflib.Palettes.Palette;
-      Transparent : Boolean;
-      Transparent_Index : Giflib.Palette_Index;
+      Quantized : Giflib.Quantization.Quantization_Result;
       Outcome : Giflib.Results.Result;
    begin
       Giflib.Quantization.Testing.Disable_Failure_Injection (Context);
       Outcome := Giflib.Quantization.Quantize
-        (Context, View, Indexed, Palette, Transparent, Transparent_Index);
+        (Context, View, Indexed, Quantized);
       Assert (Giflib.Results.Succeeded (Outcome)
               and then Giflib.Quantization.Allocated_Bytes (Context) > 0,
               "quantization workspace was not populated");
       Giflib.Quantization.Testing.Inject_Storage_Error_After (Context);
       Outcome := Giflib.Quantization.Quantize
-        (Context, View, Indexed, Palette, Transparent, Transparent_Index);
+        (Context, View, Indexed, Quantized);
       Assert (Giflib.Results.Succeeded (Outcome),
               "reused quantization workspace allocated again");
       Giflib.Quantization.Testing.Disable_Failure_Injection (Context);
@@ -232,21 +227,19 @@ package body Giflib.Testing.Test_Quantization is
         (Format => Giflib.RGB_24, Width => 3, Height => 1, Stride => 9,
          Accessible_Bytes => 9, Data => Data'Access);
       Indexed : Giflib.Streams.Byte_Array (1 .. 3);
-      Palette : Giflib.Palettes.Palette;
-      Transparent : Boolean;
-      Transparent_Index : Giflib.Palette_Index;
+      Quantized : Giflib.Quantization.Quantization_Result;
       Outcome : Giflib.Results.Result;
    begin
       Outcome := Giflib.Quantization.Quantize
-        (View, Indexed, Palette, Transparent, Transparent_Index);
+        (View, Indexed, Quantized);
       Assert (Giflib.Results.Succeeded (Outcome), "exact quantization failed");
-      Assert (not Transparent and then Indexed = [0, 1, 2],
+      Assert (not Quantized.Transparency.Present and then Indexed = [0, 1, 2],
               "exact quantization changed color indices");
       Assert
-        (Palette.Length = 3
-         and then Palette.Colors (0) = (255, 0, 0)
-         and then Palette.Colors (1) = (0, 255, 0)
-         and then Palette.Colors (2) = (0, 0, 255),
+        (Quantized.Palette.Length = 3
+         and then Quantized.Palette.Colors (0) = (255, 0, 0)
+         and then Quantized.Palette.Colors (1) = (0, 255, 0)
+         and then Quantized.Palette.Colors (2) = (0, 0, 255),
          "exact palette did not preserve first-seen colors");
 
       declare
@@ -264,9 +257,7 @@ package body Giflib.Testing.Test_Quantization is
          Outcome := Giflib.Quantization.Quantize
            (One_Pixel_View,
             Maximum_Bound_Output,
-            Palette,
-            Transparent,
-            Transparent_Index);
+            Quantized);
          Assert
            (Giflib.Results.Succeeded (Outcome)
             and then Maximum_Bound_Output (Positive'Last) = 0,
@@ -282,9 +273,7 @@ package body Giflib.Testing.Test_Quantization is
          Format => Giflib.RGB_24, Width => 17, Height => 17, Stride => 51,
          Accessible_Bytes => Data'Length);
       First, Second : Giflib.Streams.Byte_Array (1 .. 17 * 17);
-      First_Palette, Second_Palette : Giflib.Palettes.Palette;
-      First_Transparent, Second_Transparent : Boolean;
-      First_Transparent_Index, Second_Transparent_Index : Giflib.Palette_Index;
+      First_Result, Second_Result : Giflib.Quantization.Quantization_Result;
       Options : Giflib.Quantization.Quantize_Options := Giflib.Quantization.Default_Options;
       Outcome : Giflib.Results.Result;
       Position : Natural := Data'First;
@@ -300,21 +289,22 @@ package body Giflib.Testing.Test_Quantization is
             Position := Position + 3;
          end loop;
       end loop;
-      Options.Maximum_Colors := 16;
+      Options.Palette.Maximum_Colors := 16;
       Outcome := Giflib.Quantization.Quantize
-        (View, First, First_Palette, First_Transparent, First_Transparent_Index, Options);
+        (View, First, First_Result, Options);
       Assert (Giflib.Results.Succeeded (Outcome), "median-cut quantization failed");
       Outcome := Giflib.Quantization.Quantize
-        (View, Second, Second_Palette, Second_Transparent, Second_Transparent_Index, Options);
+        (View, Second, Second_Result, Options);
       Assert (Giflib.Results.Succeeded (Outcome), "repeat median-cut quantization failed");
-      Assert (First = Second and then First_Palette = Second_Palette,
+      Assert (First = Second and then First_Result.Palette = Second_Result.Palette,
               "median-cut output was not deterministic");
-      Assert (First_Palette.Length = 16 and then not First_Transparent,
+      Assert (First_Result.Palette.Length = 16
+              and then not First_Result.Transparency.Present,
               "median-cut palette size was wrong");
       Position := Data'First;
       for I in First'Range loop
          Pixel := Natural (First (I));
-         Chosen := First_Palette.Colors (Giflib.Palette_Index (Pixel));
+         Chosen := First_Result.Palette.Colors (Giflib.Palette_Index (Pixel));
          Error_Sum := Error_Sum
            + (Long_Long_Integer (Data (Position)) - Long_Long_Integer (Chosen.Red)) ** 2
            + (Long_Long_Integer (Data (Position + 1)) - Long_Long_Integer (Chosen.Green)) ** 2
@@ -340,24 +330,35 @@ package body Giflib.Testing.Test_Quantization is
          Accessible_Bytes => 48);
       Indexed : Giflib.Streams.Byte_Array (1 .. 2);
       Dithered, Repeated : Giflib.Streams.Byte_Array (1 .. 16);
-      Palette, Repeated_Palette : Giflib.Palettes.Palette;
-      Transparent, Repeated_Transparent : Boolean;
-      Transparent_Index, Repeated_Index : Giflib.Palette_Index;
+      Quantized, Repeated_Result : Giflib.Quantization.Quantization_Result;
       Options : Giflib.Quantization.Quantize_Options := Giflib.Quantization.Default_Options;
       Outcome : Giflib.Results.Result;
    begin
-      Options.Strategy := Giflib.Quantization.Use_Fixed_Palette;
-      Options.Fixed_Palette.Length := 3;
-      Options.Fixed_Palette.Colors (0) := (255, 0, 0);
-      Options.Fixed_Palette.Colors (1) := (0, 255, 0);
-      Options.Fixed_Palette.Colors (2) := (0, 0, 0);
-      Options.Fixed_Transparent_Index := 2;
+      Options.Palette :=
+        (Strategy => Giflib.Quantization.Use_Fixed_Palette,
+         Fixed_Palette =>
+           (Length => 3,
+            Colors =>
+              [0 => (255, 0, 0),
+               1 => (0, 255, 0),
+               2 => (0, 0, 0),
+               others => <>]),
+         Fixed_Transparent_Index => 2);
       Outcome := Giflib.Quantization.Quantize
-        (RGBA_View, Indexed, Palette, Transparent, Transparent_Index, Options);
+        (RGBA_View, Indexed, Quantized, Options);
       Assert (Giflib.Results.Succeeded (Outcome)
-              and then Transparent and then Transparent_Index = 2
+              and then Quantized.Transparency.Present
+              and then Quantized.Transparency.Index = 2
               and then Indexed = [2, 1],
               "alpha threshold or fixed transparent palette mapping failed");
+      Options.Transparency := (Enabled => False);
+      Outcome := Giflib.Quantization.Quantize
+        (RGBA_View, Indexed, Quantized, Options);
+      Assert
+        (Giflib.Results.Succeeded (Outcome)
+         and then not Quantized.Transparency.Present
+         and then Indexed = [0, 1],
+         "disabled transparency policy retained an alpha threshold or index");
 
       for I in 0 .. 15 loop
          Gradient (I * 3 + 1) := Giflib.Byte (I * 17);
@@ -365,15 +366,16 @@ package body Giflib.Testing.Test_Quantization is
          Gradient (I * 3 + 3) := Giflib.Byte (I * 17);
       end loop;
       Options := Giflib.Quantization.Default_Options;
-      Options.Maximum_Colors := 2;
+      Options.Palette.Maximum_Colors := 2;
       Options.Dither := Giflib.Quantization.Floyd_Steinberg;
       Outcome := Giflib.Quantization.Quantize
-        (Gradient_View, Dithered, Palette, Transparent, Transparent_Index, Options);
+        (Gradient_View, Dithered, Quantized, Options);
       Assert (Giflib.Results.Succeeded (Outcome), "Floyd-Steinberg quantization failed");
       Outcome := Giflib.Quantization.Quantize
-        (Gradient_View, Repeated, Repeated_Palette, Repeated_Transparent, Repeated_Index, Options);
+        (Gradient_View, Repeated, Repeated_Result, Options);
       Assert (Giflib.Results.Succeeded (Outcome)
-              and then Dithered = Repeated and then Palette = Repeated_Palette,
+              and then Dithered = Repeated
+              and then Quantized.Palette = Repeated_Result.Palette,
               "Floyd-Steinberg output was not deterministic");
    end Handles_Alpha_Fixed_Palettes_And_Dither;
 
@@ -392,27 +394,25 @@ package body Giflib.Testing.Test_Quantization is
         (Format => Giflib.BGRA_32, Width => 2, Height => 1, Stride => 8,
          Accessible_Bytes => 8, Data => BGRA'Access);
       Indexed : Giflib.Streams.Byte_Array (1 .. 2);
-      Palette : Giflib.Palettes.Palette;
-      Transparent : Boolean;
-      Transparent_Index : Giflib.Palette_Index;
+      Quantized : Giflib.Quantization.Quantization_Result;
       Outcome : Giflib.Results.Result;
    begin
       Outcome := Giflib.Quantization.Quantize
-        (BGR_View, Indexed, Palette, Transparent, Transparent_Index);
+        (BGR_View, Indexed, Quantized);
       Assert (Giflib.Results.Succeeded (Outcome)
-              and then not Transparent
+              and then not Quantized.Transparency.Present
               and then Indexed = [0, 1]
-              and then Palette.Colors (0) = (255, 0, 0)
-              and then Palette.Colors (1) = (0, 255, 0),
+              and then Quantized.Palette.Colors (0) = (255, 0, 0)
+              and then Quantized.Palette.Colors (1) = (0, 255, 0),
               "BGR channel order changed during quantization");
 
       Outcome := Giflib.Quantization.Quantize
-        (BGRA_View, Indexed, Palette, Transparent, Transparent_Index);
+        (BGRA_View, Indexed, Quantized);
       Assert (Giflib.Results.Succeeded (Outcome)
-              and then Transparent
-              and then Transparent_Index = 0
+              and then Quantized.Transparency.Present
+              and then Quantized.Transparency.Index = 0
               and then Indexed = [0, 1]
-              and then Palette.Colors (1) = (0, 255, 0),
+              and then Quantized.Palette.Colors (1) = (0, 255, 0),
               "BGRA channel order or alpha handling changed");
    end Handles_BGR_Channel_Orders;
 
@@ -424,15 +424,13 @@ package body Giflib.Testing.Test_Quantization is
         (Format => Giflib.RGB_24, Width => 1, Height => 1, Stride => 3,
          Accessible_Bytes => 3, Data => Data'Access);
       Indexed : Giflib.Streams.Byte_Array (1 .. 1);
-      Palette : Giflib.Palettes.Palette;
-      Transparent : Boolean;
-      Transparent_Index : Giflib.Palette_Index;
+      Quantized : Giflib.Quantization.Quantization_Result;
       Constraints : Giflib.Limits.Limit_Set := Giflib.Limits.Default_Limits;
       Outcome : Giflib.Results.Result;
    begin
       Constraints.Max_Quantization_Work := 0;
       Outcome := Giflib.Quantization.Quantize
-        (View, Indexed, Palette, Transparent, Transparent_Index,
+        (View, Indexed, Quantized,
          Constraints => Constraints);
       Assert (Outcome.First_Error.Code = Giflib.Errors.Limit_Exceeded
               and then Outcome.First_Error.Context.Limit = Giflib.Quantization_Work_Limit,
@@ -440,7 +438,7 @@ package body Giflib.Testing.Test_Quantization is
       Constraints := Giflib.Limits.Default_Limits;
       Constraints.Max_Allocation_Bytes := 1;
       Outcome := Giflib.Quantization.Quantize
-        (View, Indexed, Palette, Transparent, Transparent_Index,
+        (View, Indexed, Quantized,
          Constraints => Constraints);
       Assert (Outcome.First_Error.Code = Giflib.Errors.Limit_Exceeded
               and then Outcome.First_Error.Context.Limit = Giflib.Allocation_Byte_Limit,
@@ -455,7 +453,7 @@ package body Giflib.Testing.Test_Quantization is
          Constraints := Giflib.Limits.Default_Limits;
          Constraints.Max_Quantization_Work := 32_770;
          Outcome := Giflib.Quantization.Quantize
-           (Two_Color_View, Two_Indices, Palette, Transparent, Transparent_Index,
+           (Two_Color_View, Two_Indices, Quantized,
             Constraints => Constraints);
          Assert (Outcome.First_Error.Code = Giflib.Errors.Limit_Exceeded
                  and then Outcome.First_Error.Context.Limit = Giflib.Quantization_Work_Limit
@@ -477,17 +475,16 @@ package body Giflib.Testing.Test_Quantization is
          Fixed : Giflib.Quantization.Quantize_Options :=
            Giflib.Quantization.Default_Options;
       begin
-         Fixed.Strategy := Giflib.Quantization.Use_Fixed_Palette;
-         Fixed.Fixed_Palette.Length := 2;
-         Fixed.Fixed_Transparent_Index := 0;
+         Fixed.Palette :=
+           (Strategy => Giflib.Quantization.Use_Fixed_Palette,
+            Fixed_Palette => (Length => 2, others => <>),
+            Fixed_Transparent_Index => 0);
          Constraints := Giflib.Limits.Default_Limits;
          Constraints.Max_Quantization_Work := 4_097;
          Outcome := Giflib.Quantization.Quantize
            (Transparent_View,
             Transparent_Indices,
-            Palette,
-            Transparent,
-            Transparent_Index,
+            Quantized,
             Fixed,
             Constraints);
          Assert
@@ -503,7 +500,7 @@ package body Giflib.Testing.Test_Quantization is
            Giflib.Internal.Quantization_Palette;
          Histogram : Palette_Builder.Histogram_State;
          Median_Palette : Giflib.Palettes.Palette;
-         Work : Giflib.Byte_Count := 0;
+         Work : Giflib.Internal.Work_Budgets.Meter (8);
       begin
          Histogram.Occupied_Count := 2;
          Histogram.Occupied (1) := 0;
@@ -515,7 +512,6 @@ package body Giflib.Testing.Test_Quantization is
             Generated_Start => 0,
             Opaque_Capacity => 2,
             Work => Work,
-            Maximum_Work => 8,
             Output_Palette => Median_Palette);
          Assert
            (Outcome.First_Error.Code = Giflib.Errors.Limit_Exceeded

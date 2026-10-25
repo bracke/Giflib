@@ -373,7 +373,7 @@ package body Giflib.Testing.Test_LZW is
       Assert (Outcome.First_Error.Code = Giflib.Errors.LZW_Invalid_Code,
               "stream without an initial clear code was accepted");
       Assert
-        (Outcome.First_Error.Context.Has_LZW_Context
+        (Outcome.First_Error.Context.LZW.Present
          and then Outcome.First_Error.Context.Expected = 4
          and then Outcome.First_Error.Context.Actual = 0,
          "missing-initial-clear diagnostic context is wrong");

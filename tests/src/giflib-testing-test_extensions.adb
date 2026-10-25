@@ -65,11 +65,17 @@ package body Giflib.Testing.Test_Extensions is
       package Arithmetic renames Giflib.Internal.Metadata_Arithmetic;
    begin
       Assert
-        (Arithmetic.Classify (16#F9#) = Giflib.Metadata.Graphic_Control_Extension
-         and then Arithmetic.Classify (16#FE#) = Giflib.Metadata.Comment_Extension
-         and then Arithmetic.Classify (16#01#) = Giflib.Metadata.Plain_Text_Extension
-         and then Arithmetic.Classify (16#FF#) = Giflib.Metadata.Application_Extension
-         and then Arithmetic.Classify (16#02#) = Giflib.Metadata.Unknown_Extension,
+        (Giflib.Metadata.Kind_Of (16#F9#) = Giflib.Metadata.Graphic_Control_Extension
+         and then Giflib.Metadata.Kind_Of (16#FE#) = Giflib.Metadata.Comment_Extension
+         and then Giflib.Metadata.Kind_Of (16#01#) = Giflib.Metadata.Plain_Text_Extension
+         and then Giflib.Metadata.Kind_Of (16#FF#) = Giflib.Metadata.Application_Extension
+         and then Giflib.Metadata.Kind_Of (16#02#) = Giflib.Metadata.Unknown_Extension
+         and then Giflib.Metadata.Label_Of
+           (Giflib.Metadata.Comment_Extension) = 16#FE#
+         and then Giflib.Metadata.Label_Of
+           (Giflib.Metadata.Extension_Descriptor'
+              (Kind => Giflib.Metadata.Unknown_Extension,
+               Label => 16#02#)) = 16#02#,
          "extension label classification is wrong");
       Assert
         (Arithmetic.Block_For (Giflib.Metadata.Comment_Extension)
@@ -154,8 +160,7 @@ package body Giflib.Testing.Test_Extensions is
       Assert (Giflib.Results.Succeeded (Outcome)
               and then Event.Extension.Kind = Giflib.Metadata.Graphic_Control_Extension,
               "GCE event failed");
-      Assert (Event.Extension.Has_Graphic_Control
-              and then Event.Extension.Graphic_Control.Disposal = 2
+      Assert (Event.Extension.Graphic_Control.Disposal = 2
               and then Event.Extension.Graphic_Control.User_Input
               and then Event.Extension.Graphic_Control.Delay_CS = 5
               and then Event.Extension.Graphic_Control.Has_Transparency,
@@ -202,8 +207,7 @@ package body Giflib.Testing.Test_Extensions is
       Assert (Giflib.Results.Succeeded (Outcome)
               and then Event.Extension.Kind = Giflib.Metadata.Plain_Text_Extension,
               "plain-text event failed");
-      Assert (Event.Extension.Has_Plain_Text_Header
-              and then Event.Extension.Plain_Text.Grid_Width = 1
+      Assert (Event.Extension.Plain_Text.Grid_Width = 1
               and then Event.Extension.Plain_Text.Grid_Height = 1
               and then Event.Extension.Plain_Text.Cell_Width = 8
               and then Event.Extension.Plain_Text.Cell_Height = 8
@@ -250,12 +254,12 @@ package body Giflib.Testing.Test_Extensions is
       Assert (Giflib.Results.Succeeded (Outcome)
               and then Event.Kind = Giflib.Decoding.Extension_Event
               and then Event.Extension.Kind = Giflib.Metadata.Application_Extension
-              and then Event.Extension.Has_Application_Identifier
-              and then Event.Extension.Is_Loop_Extension
-              and then Event.Extension.Loop_Count = 5
+              and then Event.Extension.Loop_Info.Is_Loop
+              and then Event.Extension.Loop_Info.Count = 5
               and then Giflib.Decoding.Looping (Decoder).State
                 = Giflib.Animations.Finite_Loop_Count
-              and then Giflib.Decoding.Looping (Decoder).Raw_Count = 5,
+              and then Giflib.Animations.Raw_Count
+                (Giflib.Decoding.Looping (Decoder)) = 5,
               "ANIMEXTS finite loop was not recognized");
    end Recognizes_Animexts_Loop;
 

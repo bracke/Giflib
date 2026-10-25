@@ -232,8 +232,7 @@ package body Giflib.Testing.Test_Policy is
               "overflowed warning buffer did not report suppression");
 
       Giflib.Decoding.Finalize (Decoder);
-      Constraints.Max_Warning_Records := 256;
-      Constraints.Max_Diagnostic_Events := 0;
+      Constraints.Max_Warning_Records := 0;
       Giflib.Streams.Open (Source);
       Outcome := Giflib.Decoding.Initialize
         (Decoder, Options, Constraints);
@@ -273,13 +272,11 @@ package body Giflib.Testing.Test_Policy is
       Outcome := Giflib.Decoding.Read_Header (Decoder, Header);
       Giflib.Testing.Assertions.Require_Success (Outcome);
       Outcome := Giflib.Decoding.Next_Event (Decoder, Event);
-      Giflib.Testing.Assertions.Require_Success (Outcome);
-      Outcome := Giflib.Decoding.Decode_Indexed_Frame (Decoder, Pixel, Info);
       Assert (Outcome.First_Error.Code = Giflib.Errors.Invalid_Block,
               "strict mode accepted reserved image-descriptor bits");
       Assert
         (Outcome.First_Error.Context.Block = Giflib.Image_Descriptor_Block
-         and then Outcome.First_Error.Context.Source = 28
+         and then Outcome.First_Error.Context.Source_Position.Value = 28
          and then Outcome.First_Error.Context.Actual = 8,
          "reserved image-descriptor diagnostic context is wrong");
 
@@ -304,7 +301,7 @@ package body Giflib.Testing.Test_Policy is
       Assert
         (Warning.Code = Giflib.Errors.Reserved_Value_Accepted
          and then Warning.Context.Block = Giflib.Image_Descriptor_Block
-         and then Warning.Context.Source = 28
+         and then Warning.Context.Source_Position.Value = 28
          and then Warning.Context.Actual = 8,
          "compatible reserved image-descriptor warning context is wrong");
    end Image_Descriptor_Reserved_Policy;

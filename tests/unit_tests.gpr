@@ -1,3 +1,5 @@
+with "giflib_whitebox.gpr";
+
 project Unit_Tests extends "tests_common.gpr" is
    for Source_Dirs use ("src", "src/subunits", "src/mains");
    for Main use ("giflib_tests.adb");

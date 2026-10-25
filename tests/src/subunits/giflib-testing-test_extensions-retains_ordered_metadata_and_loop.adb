@@ -28,7 +28,8 @@ begin
    for Expected_Label of Labels loop
       Outcome := Giflib.Decoding.Next_Event (Decoder, Event);
       Assert (Giflib.Results.Succeeded (Outcome), "metadata event failed");
-      Assert (Event.Extension_Label = Expected_Label, "metadata order changed");
+      Assert (Giflib.Metadata.Label_Of (Event.Extension) = Expected_Label,
+              "metadata order changed");
    end loop;
    Assert (Giflib.Decoding.Retained_Extension_Count (Decoder) = 3,
            "retained extension count is wrong");
@@ -38,6 +39,17 @@ begin
    Outcome := Giflib.Decoding.Retained_Extension_Info (Decoder, 1, Retained);
    Assert (Giflib.Results.Succeeded (Outcome) and then Retained.Payload_Length = 5,
            "comment retention info is wrong");
+   declare
+      Constrained : Giflib.Metadata.Extension_Info
+        (Kind => Giflib.Metadata.Application_Extension);
+   begin
+      Outcome := Giflib.Decoding.Retained_Extension_Info
+        (Decoder, 1, Constrained);
+      Assert
+        (Outcome.First_Error.Code = Giflib.Errors.Output_Variant_Mismatch
+         and then Constrained.Payload_Length = 0,
+         "constrained retained metadata output raised or changed variant");
+   end;
    Outcome := Giflib.Decoding.Copy_Retained_Extension_Payload (Decoder, 1, Payload, Count);
    Assert (Giflib.Results.Succeeded (Outcome) and then Count = 5,
            "comment retention copy failed");
@@ -51,7 +63,7 @@ begin
            "exact comment chunk boundary changed");
 
    Outcome := Giflib.Decoding.Retained_Extension_Info (Decoder, 2, Retained);
-   Assert (Retained.Is_Loop_Extension and then Retained.Loop_Count = 0,
+   Assert (Retained.Loop_Info.Is_Loop and then Retained.Loop_Info.Count = 0,
            "loop metadata was not retained");
    Outcome := Giflib.Decoding.Copy_Retained_Extension_Payload (Decoder, 2, Payload, Count);
    Assert (Giflib.Results.Succeeded (Outcome) and then Count = 14,

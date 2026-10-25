@@ -8,9 +8,14 @@ with Giflib.Images;
 with Giflib.Decoding.Testing;
 with Giflib.Encoding.Testing;
 with Giflib.Internal.Ownership;
+with Giflib.Internal.Resource_Diagnostics;
 with Giflib.Internal.Ownership.Testing;
 with Giflib.Internal.Ownership_Arithmetic;
+with Giflib.Internal.Work_Budgets;
+with Giflib.Internal.Owned_Arrays;
 with Giflib.Internal.Owned_Buffers;
+with Giflib.Internal.Owned_Objects;
+with Giflib.Internal.Owned_Vectors;
 with Giflib.Internal.Metadata_Store;
 with Giflib.Metadata;
 with Giflib.Palettes;
@@ -28,6 +33,17 @@ package body Giflib.Testing.Test_Allocation_Failures is
    use type Giflib.Internal.Ownership_Arithmetic.Injection_State;
    use type Giflib.Internal.Ownership.Allocation_Status;
 
+   type Test_Array is array (Natural range <>) of Integer;
+   package Test_Array_Ownership is new Giflib.Internal.Owned_Arrays
+     (Natural, Integer, Test_Array, 0);
+   type Test_Vector_Array is array (Positive range <>) of Integer;
+   package Test_Vector_Storage is new Giflib.Internal.Owned_Arrays
+     (Positive, Integer, Test_Vector_Array, 0);
+   package Test_Vector is new Giflib.Internal.Owned_Vectors
+     (Element_Type => Integer,
+      Storage => Test_Vector_Storage,
+      Initial_Capacity => 2);
+
    procedure Decoder_Allocation_Failures
      (T : in out AUnit.Test_Cases.Test_Case'Class);
    procedure Quantizer_Allocation_Failures
@@ -39,6 +55,8 @@ package body Giflib.Testing.Test_Allocation_Failures is
    procedure Failure_Injection_Is_Object_Local
      (T : in out AUnit.Test_Cases.Test_Case'Class);
    procedure Owned_Resources_Reject_Foreign_Ledgers
+     (T : in out AUnit.Test_Cases.Test_Case'Class);
+   procedure Owned_Array_Ranges_Are_Structured
      (T : in out AUnit.Test_Cases.Test_Case'Class);
    procedure Metadata_Store_Rejects_Foreign_Ledgers
      (T : in out AUnit.Test_Cases.Test_Case'Class);
@@ -71,6 +89,9 @@ package body Giflib.Testing.Test_Allocation_Failures is
         (T, Owned_Resources_Reject_Foreign_Ledgers'Access,
          "allocation_failures.owner_identity");
       Register_Routine
+        (T, Owned_Array_Ranges_Are_Structured'Access,
+         "allocation_failures.array_range");
+      Register_Routine
         (T, Metadata_Store_Rejects_Foreign_Ledgers'Access,
          "allocation_failures.metadata_owner_identity");
    end Register_Tests;
@@ -84,6 +105,17 @@ package body Giflib.Testing.Test_Allocation_Failures is
       Result : Arithmetic.Check_Result;
       Budget : Giflib.Internal.Ownership.Byte_Budget;
       Reserved : Boolean;
+      Work : Giflib.Internal.Work_Budgets.Meter (6);
+      Accepted : Boolean;
+      Work_Context : Giflib.Errors.Diagnostic_Context;
+      Cleanup_Failed : Boolean := False;
+      function Raising_Release return Boolean is
+      begin
+         raise Program_Error;
+         return True;
+      end Raising_Release;
+      procedure Attempt_Raising_Release is new
+        Giflib.Internal.Ownership.Attempt_Release (Raising_Release);
    begin
       Result := Arithmetic.Check (State);
       Assert
@@ -114,10 +146,134 @@ package body Giflib.Testing.Test_Allocation_Failures is
         (Giflib.Internal.Ownership.Used (Budget) = 6
          and then not Reserved,
          "allocation budget did not retain its charge");
-      Giflib.Internal.Ownership.Release (Budget, 6);
-      Assert (Giflib.Internal.Ownership.Used (Budget) = 0,
+      Assert
+        (Giflib.Internal.Ownership.Release (Budget, 6)
+         and then Giflib.Internal.Ownership.Used (Budget) = 0,
               "allocation budget release is unbalanced");
+      Giflib.Internal.Work_Budgets.Try_Charge
+        (Work, Amount => 6, Accepted => Accepted);
+      Assert
+        (Accepted
+         and then Giflib.Internal.Work_Budgets.Used (Work) = 6
+         and then Giflib.Internal.Work_Budgets.Attempted (Work) = 6,
+         "shared work meter did not update its total");
+      Giflib.Internal.Work_Budgets.Try_Charge
+        (Work, Amount => 1, Accepted => Accepted);
+      Assert
+        (not Accepted
+         and then Giflib.Internal.Work_Budgets.Used (Work) = 6
+         and then Giflib.Internal.Work_Budgets.Attempted (Work) = 7
+         and then Giflib.Internal.Work_Budgets.Failed (Work),
+         "shared work-meter rejection changed its total");
+      Giflib.Internal.Work_Budgets.Try_Charge
+        (Work, Amount => 0, Accepted => Accepted);
+      Assert
+        (not Accepted
+         and then Giflib.Internal.Work_Budgets.Used (Work) = 6
+         and then Giflib.Internal.Work_Budgets.Attempted (Work) = 7,
+         "exhausted work meter resumed or lost its first failure");
+      Work_Context := Giflib.Internal.Resource_Diagnostics.With_Work_Limit
+        (Work, Giflib.Optimization_Work_Limit);
+      Assert
+        (Work_Context.Expected = 6
+         and then Work_Context.Actual = 7
+         and then Work_Context.Limit = Giflib.Optimization_Work_Limit,
+         "shared work-meter diagnostic context is wrong");
+      Attempt_Raising_Release (Cleanup_Failed);
+      Assert
+        (Cleanup_Failed,
+         "shared cleanup policy allowed an exception to escape");
    end Ownership_Transitions_Are_Exact;
+
+   procedure Owned_Array_Ranges_Are_Structured
+     (T : in out AUnit.Test_Cases.Test_Case'Class)
+   is
+      pragma Unreferenced (T);
+      Object : Test_Array_Ownership.Handle;
+      Budget : aliased Giflib.Internal.Ownership.Byte_Budget;
+      Fault : Giflib.Internal.Ownership.Fault_State;
+      Outcome : Giflib.Internal.Ownership.Allocation_Outcome;
+      Item : Giflib.Errors.Error;
+      Before : Giflib.Byte_Count;
+      Vector : Test_Vector.Handle;
+   begin
+      Outcome := Test_Array_Ownership.Ensure
+        (Object,
+         Budget,
+         Fault,
+         First => 0,
+         Last => Natural'Last,
+         Maximum => Giflib.Byte_Count'Last);
+      Assert
+        (Outcome.Status = Giflib.Internal.Ownership.Allocation_Size_Error
+         and then not Test_Array_Ownership.Is_Allocated (Object)
+         and then Giflib.Internal.Ownership.Used (Budget) = 0,
+         "unrepresentable array range did not return a structured failure");
+      Item := Giflib.Internal.Resource_Diagnostics.Allocation_Error
+        (Outcome, Giflib.Byte_Count'Last, Outcome.Attempted);
+      Assert
+        (Item.Code = Giflib.Errors.Integer_Overflow,
+         "array range failure was translated incorrectly");
+
+      Outcome := Test_Array_Ownership.Ensure
+        (Object, Budget, Fault, First => 0, Last => 1, Maximum => 64);
+      Assert
+        (Outcome.Status = Giflib.Internal.Ownership.Allocation_Ready
+         and then Test_Array_Ownership.Element (Object, 0) = 0
+         and then Test_Array_Ownership.Element (Object, 1) = 0,
+         "owned-array allocation exposed uninitialized capacity");
+      Test_Array_Ownership.Set_Element (Object, 0, 7);
+      Before := Giflib.Internal.Ownership.Used (Budget);
+      Giflib.Internal.Ownership.Testing.Arm (Fault);
+      Outcome := Test_Array_Ownership.Ensure
+        (Object, Budget, Fault, First => 0, Last => 3, Maximum => 64);
+      Assert
+        (Outcome.Status = Giflib.Internal.Ownership.Allocation_Storage_Error
+         and then Test_Array_Ownership.Length (Object) = 2
+         and then Test_Array_Ownership.Element (Object, 0) = 7
+         and then Giflib.Internal.Ownership.Used (Budget) = Before,
+         "failed owned-array replacement changed storage or its ledger");
+      Outcome := Test_Array_Ownership.Grow
+        (Object, Budget, Fault, First => 0, Last => 3,
+         Preserve => 1, Maximum => 64);
+      Assert
+        (Outcome.Status = Giflib.Internal.Ownership.Allocation_Ready
+         and then Test_Array_Ownership.Element (Object, 0) = 7
+         and then Test_Array_Ownership.Element (Object, 1) = 0
+         and then Test_Array_Ownership.Element (Object, 3) = 0,
+         "owned-array growth did not initialize unused capacity");
+      Assert
+        (Test_Array_Ownership.Release (Object, Budget),
+         "owned-array initialized-capacity cleanup failed");
+
+      Outcome := Test_Vector.Ensure_Append
+        (Vector, Budget, Fault, Maximum => 64);
+      Assert
+        (Outcome.Status = Giflib.Internal.Ownership.Allocation_Ready
+         and then Test_Vector.Length (Vector) = 0
+         and then Test_Vector.Capacity (Vector) = 2,
+         "owned vector confused reserved capacity with logical length");
+      Test_Vector.Append (Vector, 11);
+      Test_Vector.Append (Vector, 12);
+      Outcome := Test_Vector.Ensure_Append
+        (Vector, Budget, Fault, Maximum => 64);
+      Assert
+        (Outcome.Status = Giflib.Internal.Ownership.Allocation_Ready
+         and then Test_Vector.Length (Vector) = 2
+         and then Test_Vector.Capacity (Vector) = 4
+         and then Test_Vector.Element (Vector, 1) = 11
+         and then Test_Vector.Element (Vector, 2) = 12,
+         "owned vector growth changed its logical prefix");
+      Test_Vector.Append (Vector, 13);
+      Assert
+        (Test_Vector.Length (Vector) = 3
+         and then Test_Vector.Element (Vector, 3) = 13,
+         "owned vector append did not advance logical length");
+      Assert
+        (Test_Vector.Release (Vector, Budget)
+         and then Test_Vector.Length (Vector) = 0,
+         "owned vector cleanup did not reset logical length");
+   end Owned_Array_Ranges_Are_Structured;
 
    procedure Failure_Injection_Is_Object_Local
      (T : in out AUnit.Test_Cases.Test_Case'Class)
@@ -150,7 +306,12 @@ package body Giflib.Testing.Test_Allocation_Failures is
    is
       pragma Unreferenced (T);
       package Buffers renames Giflib.Internal.Owned_Buffers;
+      type Test_Object is limited record
+         Value : Giflib.Byte := 0;
+      end record;
+      package Objects is new Giflib.Internal.Owned_Objects (Test_Object);
       Buffer : Buffers.Handle;
+      Object : Objects.Handle;
       First_Budget : aliased Giflib.Internal.Ownership.Byte_Budget;
       Second_Budget : aliased Giflib.Internal.Ownership.Byte_Budget;
       Fault : Giflib.Internal.Ownership.Fault_State;
@@ -165,13 +326,54 @@ package body Giflib.Testing.Test_Allocation_Failures is
         (Buffer, Second_Budget, Fault, Required => 8, Maximum => 8);
       Assert
         (Outcome.Status = Giflib.Internal.Ownership.Allocation_Owner_Error
-         and then not Buffers.Release (Buffer, Second_Budget)
+         and then Buffers.Is_Allocated (Buffer)
          and then Giflib.Internal.Ownership.Used (Second_Budget) = 0,
-         "owned buffer accepted or debited a foreign ledger");
+         "owned buffer accepted a foreign ledger");
       Assert
-        (Buffers.Release (Buffer, First_Budget)
-         and then Giflib.Internal.Ownership.Used (First_Budget) = 0,
-         "owned buffer did not release through its original ledger");
+        (not Buffers.Release (Buffer, Second_Budget)
+         and then not Buffers.Is_Allocated (Buffer)
+         and then Giflib.Internal.Ownership.Used (First_Budget) = 8
+         and then Giflib.Internal.Ownership.Used (Second_Budget) = 0,
+         "foreign-ledger cleanup leaked storage or changed a ledger");
+      Giflib.Internal.Ownership.Testing.Set_Used (First_Budget, 0);
+
+      Outcome := Buffers.Ensure
+        (Buffer, First_Budget, Fault, Required => 8, Maximum => 8);
+      Assert
+        (Outcome.Status = Giflib.Internal.Ownership.Allocation_Ready,
+         "owned buffer cleanup-fault setup failed");
+      Giflib.Internal.Ownership.Testing.Set_Used (First_Budget, 0);
+      Assert
+        (not Buffers.Release (Buffer, First_Budget)
+         and then not Buffers.Is_Allocated (Buffer),
+         "owned buffer retained storage after a ledger mismatch");
+      Giflib.Internal.Ownership.Testing.Set_Used (First_Budget, 0);
+
+      Outcome := Objects.Ensure
+        (Object,
+         First_Budget,
+         Fault,
+         Maximum => Objects.Allocation_Bytes);
+      Assert
+        (Outcome.Status = Giflib.Internal.Ownership.Allocation_Ready,
+         "owned object setup failed");
+      Outcome := Objects.Ensure
+        (Object,
+         Second_Budget,
+         Fault,
+         Maximum => Objects.Allocation_Bytes);
+      Assert
+        (Outcome.Status = Giflib.Internal.Ownership.Allocation_Owner_Error
+         and then Objects.Is_Allocated (Object),
+         "owned object accepted a foreign ledger");
+      Assert
+        (not Objects.Release (Object, Second_Budget)
+         and then not Objects.Is_Allocated (Object)
+         and then Giflib.Internal.Ownership.Used (First_Budget)
+           = Objects.Allocation_Bytes
+         and then Giflib.Internal.Ownership.Used (Second_Budget) = 0,
+         "foreign-ledger object cleanup leaked storage or changed a ledger");
+      Giflib.Internal.Ownership.Testing.Set_Used (First_Budget, 0);
    end Owned_Resources_Reject_Foreign_Ledgers;
 
    procedure Metadata_Store_Rejects_Foreign_Ledgers
@@ -185,11 +387,26 @@ package body Giflib.Testing.Test_Allocation_Failures is
       Fault : Giflib.Internal.Ownership.Fault_State;
       Info : constant Giflib.Metadata.Extension_Info :=
         (Kind => Giflib.Metadata.Comment_Extension,
-         Label => 16#FE#,
          others => <>);
       Data : constant Giflib.Streams.Byte_Array := [1 => 16#41#];
+      Stored_Info : Giflib.Metadata.Extension_Info;
+      Copied : Giflib.Streams.Byte_Array (1 .. 1);
+      Copied_Count : Giflib.Byte_Count;
       Outcome : Giflib.Results.Result;
    begin
+      Outcome := Store.Append
+        (Object,
+         Data,
+         Giflib.Byte_Count'Last,
+         Giflib.Byte_Count'Last,
+         First_Budget,
+         Fault);
+      Assert (Outcome.First_Error.Code = Giflib.Errors.Invalid_State,
+              "metadata append accepted an idle store");
+      Outcome := Store.Finish (Object, Info);
+      Assert (Outcome.First_Error.Code = Giflib.Errors.Invalid_State,
+              "metadata finish accepted an idle store");
+
       Outcome := Store.Start
         (Object,
          Giflib.Metadata.Retain_All_Bounded,
@@ -199,6 +416,15 @@ package body Giflib.Testing.Test_Allocation_Failures is
          Info);
       Assert (Giflib.Results.Succeeded (Outcome),
               "metadata store setup failed");
+      Outcome := Store.Start
+        (Object,
+         Giflib.Metadata.Retain_All_Bounded,
+         Giflib.Byte_Count'Last,
+         First_Budget,
+         Fault,
+         Info);
+      Assert (Outcome.First_Error.Code = Giflib.Errors.Invalid_State,
+              "metadata start replaced an unfinished extension");
       Outcome := Store.Append
         (Object,
          Data,
@@ -208,14 +434,52 @@ package body Giflib.Testing.Test_Allocation_Failures is
          Fault);
       Assert
         (Outcome.First_Error.Code = Giflib.Errors.Internal_Invariant_Failed
-         and then not Store.Release (Object, Second_Budget)
          and then Giflib.Internal.Ownership.Used (Second_Budget) = 0,
-         "metadata store accepted or debited a foreign ledger");
-      Store.Finish (Object, Info);
+         "metadata store accepted a foreign ledger");
       Assert
-        (Store.Release (Object, First_Budget)
-         and then Giflib.Internal.Ownership.Used (First_Budget) = 0,
-         "metadata store did not release through its original ledger");
+        (not Store.Release (Object, Second_Budget)
+         and then Store.Is_Released (Object)
+         and then Giflib.Internal.Ownership.Used (First_Budget) > 0
+         and then Giflib.Internal.Ownership.Used (Second_Budget) = 0,
+         "foreign-ledger metadata cleanup leaked storage or changed a ledger");
+      Giflib.Internal.Ownership.Testing.Set_Used (First_Budget, 0);
+
+      Outcome := Store.Start
+        (Object,
+         Giflib.Metadata.Retain_All_Bounded,
+         Giflib.Byte_Count'Last,
+         First_Budget,
+         Fault,
+         Info);
+      Assert (Giflib.Results.Succeeded (Outcome),
+              "metadata cleanup-fault setup failed");
+      Outcome := Store.Append
+        (Object,
+         Data,
+         Giflib.Byte_Count'Last,
+         Giflib.Byte_Count'Last,
+         First_Budget,
+         Fault);
+      Assert (Giflib.Results.Succeeded (Outcome),
+              "metadata cleanup-fault payload setup failed");
+      Outcome := Store.Finish (Object, Info);
+      Assert (Giflib.Results.Succeeded (Outcome),
+              "metadata store finish failed");
+      Outcome := Store.Info_At (Object, 1, Stored_Info);
+      Assert (Giflib.Results.Succeeded (Outcome),
+              "metadata store info lookup failed");
+      Outcome := Store.Copy_Payload (Object, 1, Copied, Copied_Count);
+      Assert
+        (Giflib.Results.Succeeded (Outcome)
+         and then Stored_Info.Payload_Length = 1
+         and then Copied_Count = 1
+         and then Copied (1) = Data (1),
+         "metadata store trusted a stale caller payload length");
+      Giflib.Internal.Ownership.Testing.Set_Used (First_Budget, 0);
+      Assert
+        (not Store.Release (Object, First_Budget)
+         and then Store.Is_Released (Object),
+         "metadata store retained allocations after a ledger mismatch");
    end Metadata_Store_Rejects_Foreign_Ledgers;
 
    procedure Require_Allocation_Failure

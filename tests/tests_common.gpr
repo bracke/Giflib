@@ -1,5 +1,4 @@
 with "config/tests_config.gpr";
-with "giflib_whitebox.gpr";
 with "../giflib_build.gpr";
 
 abstract project Tests_Common is

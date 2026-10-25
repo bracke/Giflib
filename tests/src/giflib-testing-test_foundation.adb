@@ -18,6 +18,7 @@ with Giflib.Streams;
 package body Giflib.Testing.Test_Foundation is
    use AUnit.Assertions;
    use type Giflib.Errors.Error_Code;
+   use type Giflib.Errors.Position_State;
    use type Giflib.Errors.Warning_Code;
    use type Giflib.Errors.Warning_Severity;
    use type Giflib.Results.Status;
@@ -76,9 +77,7 @@ package body Giflib.Testing.Test_Foundation is
          Accessible_Bytes => 3,
          Data => RGB'Access);
       Indexed : Giflib.Streams.Byte_Array (1 .. 1);
-      Palette : Giflib.Palettes.Palette;
-      Has_Transparency : Boolean;
-      Transparent_Index : Giflib.Palette_Index;
+      Quantized : Giflib.Quantization.Quantization_Result;
       Outcome : Giflib.Results.Result;
    begin
       Giflib.Streams.Open (Source);
@@ -124,8 +123,7 @@ package body Giflib.Testing.Test_Foundation is
          Object : Giflib.Quantization.Workspace;
       begin
          Outcome := Giflib.Quantization.Quantize
-           (Object, View, Indexed, Palette, Has_Transparency,
-            Transparent_Index);
+           (Object, View, Indexed, Quantized);
          Assert
            (Giflib.Results.Succeeded (Outcome)
             and then Giflib.Quantization.Allocated_Bytes (Object) > 0,
@@ -148,7 +146,7 @@ package body Giflib.Testing.Test_Foundation is
           (Giflib.Byte_Count'Last, Giflib.Byte_Count'Last, 1);
    begin
       Assert
-        (Arithmetic.Warning_Capacity (Natural'Last, Natural'Last) = 256
+        (Arithmetic.Warning_Capacity (Natural'Last) = 256
          and then Arithmetic.Has_Natural_Capacity
            (Natural'Last - 1, Natural'Last, 1),
          "session count capacity is wrong");
@@ -184,7 +182,10 @@ package body Giflib.Testing.Test_Foundation is
       pragma Unreferenced (T);
       Good : constant Giflib.Results.Result := Giflib.Results.Success;
       Context : constant Giflib.Errors.Diagnostic_Context :=
-        (Source => 19, Block => Giflib.Image_Data_Block, Frame => 3, others => <>);
+        (Source_Position => Giflib.Errors.Source_Position_At (19),
+         Block => Giflib.Image_Data_Block,
+         Frame => Giflib.Errors.Frame_At (3),
+         others => <>);
       Expected : constant Giflib.Errors.Error := Giflib.Errors.Make (Giflib.Errors.Truncated_Block, Context);
       Bad : constant Giflib.Results.Result := Giflib.Results.Failure (Expected);
    begin
@@ -193,53 +194,42 @@ package body Giflib.Testing.Test_Foundation is
       Assert (Giflib.Results.Status_Of (Bad) = Giflib.Results.Failed,
               "failure has the wrong status");
       Assert (Bad.First_Error.Code = Giflib.Errors.Truncated_Block, "failure lost its error code");
-      Assert (Bad.First_Error.Context.Source = 19, "failure lost its source offset");
-      Assert (Bad.First_Error.Context.Frame = 3, "failure lost its frame ordinal");
+      Assert (Bad.First_Error.Context.Source_Position.Value = 19, "failure lost its source offset");
+      Assert (Bad.First_Error.Context.Frame.Present
+              and then Bad.First_Error.Context.Frame.Value = 3,
+              "failure lost its frame ordinal");
    end Results_Preserve_First_Error;
 
    procedure Error_Identifiers_And_Context (T : in out AUnit.Test_Cases.Test_Case'Class) is
       pragma Unreferenced (T);
       Context : constant Giflib.Errors.Diagnostic_Context :=
-        (Has_Source => True,
-         Source => 31,
-         Has_Destination => True,
-         Destination => 7,
+        (Source_Position => Giflib.Errors.Source_Position_At (31),
+         Destination_Position => Giflib.Errors.Destination_Position_At (7),
          Block => Giflib.Image_Data_Block,
-         Extension_Label => 16#F9#,
-         Has_Frame => True,
-         Frame => 4,
-         LZW_Code_Value => 299,
-         LZW_Width => 9,
-         LZW_Code_Ordinal => 17,
-         Has_LZW_Context => True,
+         Extension_Label => Giflib.Errors.Extension_Label_At (16#F9#),
+         Frame => Giflib.Errors.Frame_At (4),
+         LZW => Giflib.Errors.LZW_At (299, 9, 17),
          Expected => 12,
          Actual => 13,
          Limit => Giflib.LZW_Work_Limit,
-         Underlying_Code => 5,
-         Has_Underlying_Code => True);
+         Underlying_Code => Giflib.Errors.Underlying_Code_At (5));
       Item : constant Giflib.Errors.Error := Giflib.Errors.Make (Giflib.Errors.LZW_Invalid_Code, Context);
       Zero_Position : constant Giflib.Errors.Error :=
         Giflib.Errors.Make
           (Giflib.Errors.Invalid_Block,
-           (Has_Source => True,
-            Source => 0,
-            Has_Frame => True,
-            Frame => 0,
+           (Source_Position => Giflib.Errors.Source_Position_At (0),
+            Frame => Giflib.Errors.Frame_At (0),
             others => <>));
       Absent_Positions : constant Giflib.Errors.Error :=
         Giflib.Errors.Make
           (Giflib.Errors.Invalid_Block,
-           (Source => 9,
-            Destination => 11,
-            Frame => 2,
+           (Frame => (Present => False),
             others => <>));
       Absent_Warning_Positions : constant Giflib.Errors.Warning :=
         Giflib.Errors.Make_Warning
           (Giflib.Errors.Generic_Warning,
            Giflib.Errors.Informational,
-           (Source => 9,
-            Destination => 11,
-            Frame => 2,
+           (Frame => (Present => False),
             others => <>));
    begin
       for Code in Giflib.Errors.Error_Code loop
@@ -249,29 +239,38 @@ package body Giflib.Testing.Test_Foundation is
               "signature identifier changed");
       Assert (Giflib.Errors.Identifier_For (Giflib.Errors.Limit_Exceeded) = "gif.limit.exceeded",
               "limit identifier changed");
-      Assert (Item.Context.Source = 31 and then Item.Context.Destination = 7, "offset context was lost");
       Assert
-        (Item.Context.Has_Source
-         and then Item.Context.Has_Destination
-         and then Item.Context.Has_Frame,
+        (Item.Context.Source_Position.Value = 31
+         and then Item.Context.Destination_Position.Value = 7,
+         "offset context was lost");
+      Assert
+        (Item.Context.Source_Position.State = Giflib.Errors.Position_Available
+         and then Item.Context.Destination_Position.State =
+           Giflib.Errors.Position_Available
+         and then Item.Context.Frame.Present,
          "nonzero diagnostic positions were not marked present");
       Assert
-        (Zero_Position.Context.Has_Source
-         and then Zero_Position.Context.Source = 0
-         and then Zero_Position.Context.Has_Frame
-         and then Zero_Position.Context.Frame = 0,
+        (Zero_Position.Context.Source_Position.State =
+           Giflib.Errors.Position_Available
+         and then Zero_Position.Context.Source_Position.Value = 0
+         and then Zero_Position.Context.Frame.Present
+         and then Zero_Position.Context.Frame.Value = 0,
          "zero-valued diagnostic positions cannot be represented");
       Assert
-        (not Absent_Positions.Context.Has_Source
-         and then not Absent_Positions.Context.Has_Destination
-         and then not Absent_Positions.Context.Has_Frame,
+        (Absent_Positions.Context.Source_Position.State =
+           Giflib.Errors.Position_Not_Checked
+         and then Absent_Positions.Context.Destination_Position.State =
+           Giflib.Errors.Position_Not_Checked
+         and then not Absent_Positions.Context.Frame.Present,
          "diagnostic presence was inferred from field values");
       Assert
-        (not Absent_Warning_Positions.Context.Has_Source
-         and then not Absent_Warning_Positions.Context.Has_Destination
-         and then not Absent_Warning_Positions.Context.Has_Frame,
+        (Absent_Warning_Positions.Context.Source_Position.State =
+           Giflib.Errors.Position_Not_Checked
+         and then Absent_Warning_Positions.Context.Destination_Position.State =
+           Giflib.Errors.Position_Not_Checked
+         and then not Absent_Warning_Positions.Context.Frame.Present,
          "warning presence was inferred from field values");
-      Assert (Item.Context.Has_LZW_Context and then Item.Context.LZW_Code_Value = 299,
+      Assert (Item.Context.LZW.Present and then Item.Context.LZW.Code_Value = 299,
               "LZW context was lost");
       Assert (Item.Context.Limit = Giflib.LZW_Work_Limit, "limit context was lost");
    end Error_Identifiers_And_Context;
@@ -297,7 +296,6 @@ package body Giflib.Testing.Test_Foundation is
       Assert (L.Max_Quantization_Work > 0, "quantization work limit disabled");
       Assert (L.Max_Optimization_Work > 0, "optimization work limit disabled");
       Assert (L.Max_Warning_Records > 0, "warning limit disabled");
-      Assert (L.Max_Diagnostic_Events > 0, "diagnostic limit disabled");
       Assert (L.Max_Compositor_Snapshot_Bytes > 0, "snapshot limit disabled");
    end Defaults_Cover_Every_Limit;
 
@@ -306,7 +304,9 @@ package body Giflib.Testing.Test_Foundation is
       Left : Giflib.Palettes.Palette;
       Right : Giflib.Palettes.Palette;
       Context : constant Giflib.Errors.Diagnostic_Context :=
-        (Source => 7, Frame => 2, others => <>);
+        (Source_Position => Giflib.Errors.Source_Position_At (7),
+         Frame => Giflib.Errors.Frame_At (2),
+         others => <>);
       Warning : constant Giflib.Errors.Warning :=
         Giflib.Errors.Make_Warning
           (Giflib.Errors.Recovery_Applied, Giflib.Errors.Recovery, Context);
@@ -348,8 +348,9 @@ package body Giflib.Testing.Test_Foundation is
       end loop;
       Assert (Warning.Code = Giflib.Errors.Recovery_Applied
               and then Warning.Severity = Giflib.Errors.Recovery
-              and then Warning.Context.Source = 7
-              and then Warning.Context.Frame = 2,
+              and then Warning.Context.Source_Position.Value = 7
+              and then Warning.Context.Frame.Present
+              and then Warning.Context.Frame.Value = 2,
               "warning construction lost severity or context");
       Assert (Code_Only.First_Error.Code = Giflib.Errors.Invalid_State,
               "code-only failure construction lost its error");

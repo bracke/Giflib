@@ -3,6 +3,7 @@ with Ada.Directories;
 
 with Giflib.Decoding;
 with Giflib.Errors;
+with Giflib.Metadata;
 with Giflib.Results;
 with Giflib.Streams;
 with Giflib.Testing.Assertions;
@@ -12,7 +13,9 @@ package body Giflib.Testing.Test_Decoder is
    use AUnit.Assertions;
    use type Giflib.Decoding.Decoder_State;
    use type Giflib.Decoding.Event_Kind;
+   use type Giflib.Decoding.Output_Mode;
    use type Giflib.Errors.Error_Code;
+   use type Giflib.Errors.Position_State;
    use type Giflib.Streams.Byte_Array;
 
    procedure Decodes_Independent_One_Pixel_GIF (T : in out AUnit.Test_Cases.Test_Case'Class);
@@ -24,6 +27,8 @@ package body Giflib.Testing.Test_Decoder is
    procedure Expands_Frame_Rectangle_To_RGBA (T : in out AUnit.Test_Cases.Test_Case'Class);
    procedure Decodes_Independent_File_Corpus (T : in out AUnit.Test_Cases.Test_Case'Class);
    procedure Rejects_Unpositioned_Source (T : in out AUnit.Test_Cases.Test_Case'Class);
+   procedure Constrained_Outputs_Are_Non_Raising
+     (T : in out AUnit.Test_Cases.Test_Case'Class);
 
    type Unpositioned_Source is limited new Giflib.Streams.Source with null record;
    overriding function Read
@@ -84,6 +89,8 @@ package body Giflib.Testing.Test_Decoder is
                         "decoder.independent_file_corpus");
       Register_Routine (T, Rejects_Unpositioned_Source'Access,
                         "decoder.requires_source_position");
+      Register_Routine (T, Constrained_Outputs_Are_Non_Raising'Access,
+                        "decoder.constrained_outputs");
    end Register_Tests;
 
    procedure Rejects_Unpositioned_Source
@@ -97,7 +104,8 @@ package body Giflib.Testing.Test_Decoder is
       Outcome := Giflib.Decoding.Initialize (Decoder);
       Assert
         (Outcome.First_Error.Code = Giflib.Errors.Source_Read_Failed
-         and then not Outcome.First_Error.Context.Has_Source,
+         and then Outcome.First_Error.Context.Source_Position.State =
+           Giflib.Errors.Position_Unavailable,
          "decoder accepted a source without a reportable event offset");
    end Rejects_Unpositioned_Source;
 
@@ -137,6 +145,13 @@ package body Giflib.Testing.Test_Decoder is
       Outcome := Giflib.Decoding.Next_Event (Decoder, Event);
       Assert (Giflib.Results.Succeeded (Outcome) and then Event.Kind = Giflib.Decoding.Image_Event,
               "image event was not reported");
+      Assert
+        (Event.Left = 0 and then Event.Top = 0
+         and then Event.Width = 1 and then Event.Height = 1
+         and then not Event.Interlaced
+         and then Event.Indexed_Bytes = 1
+         and then Event.Expanded_Bytes = 4,
+         "image event did not expose exact prepared-frame geometry");
       Outcome := Giflib.Decoding.Decode_Indexed_Frame (Decoder, Pixels, Info);
       Assert (Giflib.Results.Succeeded (Outcome), "public indexed decode failed");
       Assert (Pixels = [0] and then Info.Ordinal = 0, "public indexed frame is wrong");
@@ -153,6 +168,170 @@ package body Giflib.Testing.Test_Decoder is
       Assert (Giflib.Decoding.State (Decoder) = Giflib.Decoding.Finalized,
               "finalization is not idempotent");
    end Decodes_Independent_One_Pixel_GIF;
+
+   procedure Constrained_Outputs_Are_Non_Raising
+     (T : in out AUnit.Test_Cases.Test_Case'Class)
+   is
+      pragma Unreferenced (T);
+      No_Image : aliased constant Giflib.Streams.Byte_Array :=
+        [71, 73, 70, 56, 57, 97,
+         1, 0, 1, 0, 0, 0, 0,
+         16#3B#];
+      Image : aliased constant Giflib.Streams.Byte_Array := One_Pixel_GIF;
+      Outcome : Giflib.Results.Result;
+   begin
+      declare
+         Source : aliased Giflib.Streams.Memory_Source (No_Image'Access);
+         Decoder : Giflib.Decoding.Decoder (Source'Access);
+         Header : Giflib.Decoding.Header_Info
+           (Has_Global_Palette => True);
+      begin
+         Giflib.Streams.Open (Source);
+         Outcome := Giflib.Decoding.Initialize (Decoder);
+         Giflib.Testing.Assertions.Require_Success (Outcome);
+         Outcome := Giflib.Decoding.Read_Header (Decoder, Header);
+         Assert
+           (Outcome.First_Error.Code = Giflib.Errors.Output_Variant_Mismatch,
+            "constrained header output raised or accepted the wrong variant");
+      end;
+
+      declare
+         Source : aliased Giflib.Streams.Memory_Source (No_Image'Access);
+         Decoder : Giflib.Decoding.Decoder (Source'Access);
+         Header : Giflib.Decoding.Header_Info;
+         Event : Giflib.Decoding.Decode_Event
+           (Kind => Giflib.Decoding.Image_Event);
+      begin
+         Giflib.Streams.Open (Source);
+         Outcome := Giflib.Decoding.Initialize (Decoder);
+         Giflib.Testing.Assertions.Require_Success (Outcome);
+         Outcome := Giflib.Decoding.Read_Header (Decoder, Header);
+         Giflib.Testing.Assertions.Require_Success (Outcome);
+         Outcome := Giflib.Decoding.Next_Event (Decoder, Event);
+         Assert
+           (Outcome.First_Error.Code = Giflib.Errors.Output_Variant_Mismatch,
+            "constrained event output raised or accepted the wrong variant");
+      end;
+
+      declare
+         Source : aliased Giflib.Streams.Memory_Source (Image'Access);
+         Decoder : Giflib.Decoding.Decoder (Source'Access);
+         Header : Giflib.Decoding.Header_Info;
+         Event : Giflib.Decoding.Decode_Event
+           (Kind => Giflib.Decoding.Image_Event);
+         Info : Giflib.Decoding.Frame_Info
+           (Has_Local_Palette => True);
+         Retry_Info : Giflib.Decoding.Frame_Info;
+         Pixel : Giflib.Streams.Byte_Array (1 .. 1);
+         Frame_Offset : Giflib.Source_Offset;
+      begin
+         Giflib.Streams.Open (Source);
+         Outcome := Giflib.Decoding.Initialize (Decoder);
+         Giflib.Testing.Assertions.Require_Success (Outcome);
+         Outcome := Giflib.Decoding.Read_Header (Decoder, Header);
+         Giflib.Testing.Assertions.Require_Success (Outcome);
+         Outcome := Giflib.Decoding.Next_Event (Decoder, Event);
+         Giflib.Testing.Assertions.Require_Success (Outcome);
+         Frame_Offset := Source.Offset;
+         Outcome := Giflib.Decoding.Decode_Indexed_Frame
+           (Decoder, Pixel, Info);
+         Assert
+           (Outcome.First_Error.Code = Giflib.Errors.Output_Variant_Mismatch
+            and then Giflib.Decoding.State (Decoder) =
+              Giflib.Decoding.Awaiting_Frame_Decision
+            and then Source.Offset = Frame_Offset,
+            "constrained frame mismatch was not retryable");
+         Outcome := Giflib.Decoding.Decode_Indexed_Frame
+           (Decoder, Pixel, Retry_Info);
+         Assert
+           (Giflib.Results.Succeeded (Outcome) and then Pixel = [0],
+            "frame decode did not succeed after correcting its output variant");
+      end;
+
+      declare
+         Source : aliased Giflib.Streams.Memory_Source (Image'Access);
+         Decoder : Giflib.Decoding.Decoder (Source'Access);
+         Header : Giflib.Decoding.Header_Info;
+         Event : Giflib.Decoding.Decode_Event;
+         Info : Giflib.Decoding.Frame_Info;
+         Pixels : Giflib.Streams.Byte_Array (1 .. 2);
+         Pixel : Giflib.Streams.Byte_Array (1 .. 1);
+         Frame_Offset : Giflib.Source_Offset;
+      begin
+         Giflib.Streams.Open (Source);
+         Outcome := Giflib.Decoding.Initialize (Decoder);
+         Giflib.Testing.Assertions.Require_Success (Outcome);
+         Outcome := Giflib.Decoding.Read_Header (Decoder, Header);
+         Giflib.Testing.Assertions.Require_Success (Outcome);
+         Outcome := Giflib.Decoding.Next_Event (Decoder, Event);
+         Giflib.Testing.Assertions.Require_Success (Outcome);
+         Assert
+           (Event.Indexed_Bytes = 1,
+            "prepared event reported the wrong indexed byte count");
+         Frame_Offset := Source.Offset;
+         Outcome := Giflib.Decoding.Decode_Indexed_Frame
+           (Decoder, Pixels, Info);
+         Assert
+           (Outcome.First_Error.Code = Giflib.Errors.Buffer_Size_Mismatch
+            and then Giflib.Decoding.State (Decoder) =
+              Giflib.Decoding.Awaiting_Frame_Decision
+            and then Source.Offset = Frame_Offset,
+            "raw buffer mismatch was not retryable");
+         Outcome := Giflib.Decoding.Decode_Indexed_Frame
+           (Decoder, Pixel, Info);
+         Assert
+           (Giflib.Results.Succeeded (Outcome) and then Pixel = [0],
+            "raw decode did not succeed after correcting its buffer");
+      end;
+
+      for Mode in Giflib.Decoding.Expanded_Frame .. Giflib.Decoding.Composited_RGBA loop
+         declare
+            Source : aliased Giflib.Streams.Memory_Source (Image'Access);
+            Decoder : Giflib.Decoding.Decoder (Source'Access);
+            Options : Giflib.Decoding.Decode_Options :=
+              Giflib.Decoding.Default_Options;
+            Header : Giflib.Decoding.Header_Info;
+            Event : Giflib.Decoding.Decode_Event;
+            Info : Giflib.Decoding.Frame_Info;
+            Wrong : Giflib.Streams.Byte_Array (1 .. 3);
+            Correct : Giflib.Streams.Byte_Array (1 .. 4);
+            Frame_Offset : Giflib.Source_Offset;
+         begin
+            Options.Mode := Mode;
+            Giflib.Streams.Open (Source);
+            Outcome := Giflib.Decoding.Initialize (Decoder, Options);
+            Giflib.Testing.Assertions.Require_Success (Outcome);
+            Outcome := Giflib.Decoding.Read_Header (Decoder, Header);
+            Giflib.Testing.Assertions.Require_Success (Outcome);
+            Outcome := Giflib.Decoding.Next_Event (Decoder, Event);
+            Giflib.Testing.Assertions.Require_Success (Outcome);
+            Frame_Offset := Source.Offset;
+            if Mode = Giflib.Decoding.Expanded_Frame then
+               Outcome := Giflib.Decoding.Decode_Expanded_Frame
+                 (Decoder, Wrong, Info);
+            else
+               Outcome := Giflib.Decoding.Decode_Composited_Frame
+                 (Decoder, Wrong, Info);
+            end if;
+            Assert
+              (Outcome.First_Error.Code = Giflib.Errors.Buffer_Size_Mismatch
+               and then Giflib.Decoding.State (Decoder) =
+                 Giflib.Decoding.Awaiting_Frame_Decision
+               and then Source.Offset = Frame_Offset,
+               "RGBA buffer mismatch was not retryable");
+            if Mode = Giflib.Decoding.Expanded_Frame then
+               Outcome := Giflib.Decoding.Decode_Expanded_Frame
+                 (Decoder, Correct, Info);
+            else
+               Outcome := Giflib.Decoding.Decode_Composited_Frame
+                 (Decoder, Correct, Info);
+            end if;
+            Assert
+              (Giflib.Results.Succeeded (Outcome),
+               "RGBA decode did not succeed after correcting its buffer");
+         end;
+      end loop;
+   end Constrained_Outputs_Are_Non_Raising;
 
    procedure Decodes_Local_Interlaced_GIF89a (T : in out AUnit.Test_Cases.Test_Case'Class) is
       pragma Unreferenced (T);
@@ -196,10 +375,16 @@ package body Giflib.Testing.Test_Decoder is
          2, 2, 16#C4#, 16#0B#, 0, 16#3B#];
       Bad_Signature : aliased constant Giflib.Streams.Byte_Array :=
         [0, 73, 70, 56, 57, 97];
+      Bad_Marker : aliased constant Giflib.Streams.Byte_Array :=
+        [71, 73, 70, 56, 57, 97,
+         1, 0, 1, 0, 0, 0, 0,
+         0];
       Source : aliased Giflib.Streams.Memory_Source (Fixture'Access);
       Bad_Source : aliased Giflib.Streams.Memory_Source (Bad_Signature'Access);
+      Marker_Source : aliased Giflib.Streams.Memory_Source (Bad_Marker'Access);
       Decoder : Giflib.Decoding.Decoder (Source'Access);
       Bad_Decoder : Giflib.Decoding.Decoder (Bad_Source'Access);
+      Marker_Decoder : Giflib.Decoding.Decoder (Marker_Source'Access);
       Header : Giflib.Decoding.Header_Info;
       Event : Giflib.Decoding.Decode_Event;
       Info : Giflib.Decoding.Frame_Info;
@@ -230,10 +415,24 @@ package body Giflib.Testing.Test_Decoder is
       Outcome := Giflib.Decoding.Read_Header (Bad_Decoder, Header);
       Assert
         (Outcome.First_Error.Code = Giflib.Errors.Invalid_Signature
-         and then Outcome.First_Error.Context.Has_Source
-         and then Outcome.First_Error.Context.Source = 0
-         and then not Outcome.First_Error.Context.Has_Frame,
+         and then Outcome.First_Error.Context.Source_Position.State =
+           Giflib.Errors.Position_Available
+         and then Outcome.First_Error.Context.Source_Position.Value = 0
+         and then not Outcome.First_Error.Context.Frame.Present,
          "zero-offset signature diagnostic was overwritten by decoder context");
+
+      Giflib.Streams.Open (Marker_Source);
+      Outcome := Giflib.Decoding.Initialize (Marker_Decoder);
+      Giflib.Testing.Assertions.Require_Success (Outcome);
+      Outcome := Giflib.Decoding.Read_Header (Marker_Decoder, Header);
+      Giflib.Testing.Assertions.Require_Success (Outcome);
+      Outcome := Giflib.Decoding.Next_Event (Marker_Decoder, Event);
+      Assert
+        (Outcome.First_Error.Code = Giflib.Errors.Invalid_Block
+         and then Outcome.First_Error.Context.Source_Position.State =
+           Giflib.Errors.Position_Available
+         and then Outcome.First_Error.Context.Source_Position.Value = 13,
+         "invalid top-level marker was not rejected by the decoder");
    end Failure_Preserves_First_Diagnostic;
 
    procedure State_Cancel_Reset_And_Unsupported (T : in out AUnit.Test_Cases.Test_Case'Class) is
@@ -288,7 +487,8 @@ package body Giflib.Testing.Test_Decoder is
       Assert (Giflib.Results.Succeeded (Outcome), "extension fixture header failed");
       Outcome := Giflib.Decoding.Next_Event (Extension_Decoder, Event);
       Assert (Giflib.Results.Succeeded (Outcome), "comment extension failed");
-      Assert (Event.Kind = Giflib.Decoding.Extension_Event and then Event.Extension_Label = 16#FE#,
+      Assert (Event.Kind = Giflib.Decoding.Extension_Event
+              and then Giflib.Metadata.Label_Of (Event.Extension) = 16#FE#,
               "comment extension event lost its label");
    end State_Cancel_Reset_And_Unsupported;
 
