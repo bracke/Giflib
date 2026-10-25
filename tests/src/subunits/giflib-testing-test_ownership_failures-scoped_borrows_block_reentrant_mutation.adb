@@ -7,7 +7,8 @@ is
    type Test_Object is limited record
       Value : Natural := 0;
    end record;
-   package Objects is new Giflib.Internal.Owned_Objects (Test_Object);
+   package Objects is new Giflib.Internal.Owned_Objects
+     (Test_Object, Element_Operations_Are_No_Throw => True);
    package Object_Results is new Objects.Result_Operations (Boolean);
    Buffer : Buffers.Handle;
    Object : Objects.Handle;

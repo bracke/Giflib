@@ -10,6 +10,7 @@ with Giflib.Results;
 with Giflib.Streams;
 
 package body Giflib.Testing.Test_Metadata_Ownership is
+   use type Giflib.Internal.Cleanup.Cleanup_Status;
    use AUnit.Assertions;
    use type Giflib.Errors.Error_Code;
 

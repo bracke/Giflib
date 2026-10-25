@@ -1,6 +1,7 @@
 with Giflib.Internal.Resource_Cleanup;
 
 package body Giflib.Internal.Decoder_Storage is
+   use type Cleanup.Cleanup_Status;
    function Ensure_Frame_Scratch
      (Object : in out Resources;
       Fault : in out Ownership.Fault_State;

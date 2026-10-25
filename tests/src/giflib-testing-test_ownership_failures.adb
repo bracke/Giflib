@@ -22,13 +22,16 @@ package body Giflib.Testing.Test_Ownership_Failures is
    use type Giflib.Errors.Error_Code;
    use type Giflib.Internal.Ownership_Arithmetic.Injection_State;
    use type Giflib.Internal.Ownership.Allocation_Status;
+   use type Giflib.Internal.Cleanup.Cleanup_Status;
 
    type Test_Array is array (Natural range <>) of Integer;
    package Test_Array_Ownership is new Giflib.Internal.Owned_Arrays
-     (Natural, Integer, Test_Array, 0);
+     (Natural, Integer, Test_Array, 0,
+      Element_Operations_Are_No_Throw => True);
    type Test_Vector_Array is array (Positive range <>) of Integer;
    package Test_Vector_Storage is new Giflib.Internal.Owned_Arrays
-     (Positive, Integer, Test_Vector_Array, 0);
+     (Positive, Integer, Test_Vector_Array, 0,
+      Element_Operations_Are_No_Throw => True);
    package Test_Vector is new Giflib.Internal.Owned_Vectors
      (Element_Type => Integer,
       Storage => Test_Vector_Storage,
@@ -75,6 +78,7 @@ package body Giflib.Testing.Test_Ownership_Failures is
 
    package Cleanup_Elements is new Giflib.Internal.Owned_Element_Vectors
      (Element_Type => Cleanup_Test_Element,
+      Element_Operations_Are_No_Throw => True,
       Contents_Releasable => Can_Release_Element_Contents,
       Release_Contents => Release_Element_Contents);
 
@@ -266,7 +270,8 @@ package body Giflib.Testing.Test_Ownership_Failures is
       type Test_Object is limited record
          Value : Giflib.Byte := 0;
       end record;
-      package Objects is new Giflib.Internal.Owned_Objects (Test_Object);
+      package Objects is new Giflib.Internal.Owned_Objects
+        (Test_Object, Element_Operations_Are_No_Throw => True);
       Buffer : Buffers.Handle;
       Object : Objects.Handle;
       First_Budget : aliased Giflib.Internal.Ownership.Byte_Budget;

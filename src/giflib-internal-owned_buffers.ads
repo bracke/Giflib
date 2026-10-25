@@ -7,7 +7,8 @@ package Giflib.Internal.Owned_Buffers is
    pragma Preelaborate;
 
    package Storage is new Owned_Arrays
-     (Positive, Byte, Streams.Byte_Array, 0);
+     (Positive, Byte, Streams.Byte_Array, 0,
+      Element_Operations_Are_No_Throw => True);
    type Handle is limited private;
    --  A successful Ensure binds the handle to Budget until Release.  The
    --  binding stores only the ledger identity; callers supply the ledger when

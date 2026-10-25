@@ -55,7 +55,8 @@ private
       Parameters : Encode_Parameters;
       Statistics : out Encode_Statistics) return Results.Result;
 
-   package Workspace_Ownership is new Owned_Objects (Workspace);
+   package Workspace_Ownership is new Owned_Objects
+     (Workspace, Element_Operations_Are_No_Throw => True);
    type Workspace_Handle is limited record
       Owner : Workspace_Ownership.Handle;
    end record;

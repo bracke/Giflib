@@ -20,6 +20,9 @@ package body Giflib.Quantization is
    function Cleanup_Succeeded (Context : Workspace) return Boolean is
      (Storage.Cleanup_Succeeded (Context.Resources));
 
+   function First_Cleanup_Status (Context : Workspace) return Cleanup_Status is
+     (Storage.First_Cleanup_Status (Context.Resources));
+
    function Release (Context : in out Workspace) return Cleanup_Status is
       Outcome : constant Internal.Cleanup.Cleanup_Outcome :=
         Storage.Release (Context.Resources);

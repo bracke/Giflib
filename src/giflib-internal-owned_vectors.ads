@@ -8,11 +8,13 @@ generic
      (Index_Type => Positive,
       Element_Type => Element_Type,
       Element_Array => <>,
-      Default_Element => <>);
+      Default_Element => <>,
+      Element_Operations_Are_No_Throw => <>);
    Initial_Capacity : Positive := 16;
 package Giflib.Internal.Owned_Vectors is
    pragma Preelaborate;
    pragma Unevaluated_Use_Of_Old (Allow);
+   use type Cleanup.Cleanup_Status;
 
    type Handle is limited private;
 

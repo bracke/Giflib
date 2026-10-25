@@ -1,4 +1,5 @@
 package body Giflib.Internal.Resource_Cleanup is
+   use type Cleanup.Cleanup_Status;
 
    procedure Attempt (Object : in out Guard) is
       Outcome : Cleanup.Cleanup_Outcome;

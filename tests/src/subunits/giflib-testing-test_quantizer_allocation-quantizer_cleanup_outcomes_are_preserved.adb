@@ -24,12 +24,16 @@ begin
    Assert
      (Status = Giflib.Quantization.Cleanup_Accounting_Failed
       and then Giflib.Quantization.Allocated_Bytes (Context) = 0
-      and then not Giflib.Quantization.Cleanup_Succeeded (Context),
+      and then not Giflib.Quantization.Cleanup_Succeeded (Context)
+      and then Giflib.Quantization.First_Cleanup_Status (Context) =
+        Giflib.Quantization.Cleanup_Accounting_Failed,
       "quantizer cleanup outcome was collapsed or storage was retained");
    Giflib.Quantization.Testing.Repair_Allocation_Budget (Context);
    Status := Giflib.Quantization.Release (Context);
    Assert
      (Status = Giflib.Quantization.Cleanup_Complete
-      and then not Giflib.Quantization.Cleanup_Succeeded (Context),
+      and then not Giflib.Quantization.Cleanup_Succeeded (Context)
+      and then Giflib.Quantization.First_Cleanup_Status (Context) =
+        Giflib.Quantization.Cleanup_Accounting_Failed,
       "quantizer release did not separate current and sticky outcomes");
 end Quantizer_Cleanup_Outcomes_Are_Preserved;

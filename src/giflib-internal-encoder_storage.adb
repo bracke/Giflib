@@ -1,6 +1,7 @@
 with Giflib.Internal.Resource_Cleanup;
 
 package body Giflib.Internal.Encoder_Storage is
+   use type Cleanup.Cleanup_Status;
    function Ensure_Truecolor_Pixels
      (Object : in out Resources;
       Fault : in out Ownership.Fault_State;

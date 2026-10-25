@@ -1,6 +1,7 @@
 with Giflib.Internal.Resource_Cleanup;
 
 package body Giflib.Internal.Quantization_Storage is
+   use type Cleanup.Cleanup_Status;
    function Ensure_Histogram
      (Object : in out Resources;
       Fault : in out Ownership.Fault_State;
@@ -39,6 +40,9 @@ package body Giflib.Internal.Quantization_Storage is
      (Object.Cleanup_State = Cleanup.Cleanup_Complete
       and then Is_Released (Object)
       and then Allocated_Bytes (Object) = 0);
+   function First_Cleanup_Status
+     (Object : Resources) return Cleanup.Cleanup_Status
+   is (Object.Cleanup_State);
 
    function Release
      (Object : in out Resources) return Cleanup.Cleanup_Outcome

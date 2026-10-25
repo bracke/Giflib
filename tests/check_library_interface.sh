@@ -60,6 +60,7 @@ sed -n '/^Giflib$/,/^Giflib.Internal.Work_Budgets$/p' <<'EOF' >"$expected_interf
 Giflib
 Giflib.Animations
 Giflib.Capabilities
+Giflib.Cleanup
 Giflib.Decoding
 Giflib.Encoding
 Giflib.Errors
@@ -89,7 +90,6 @@ Giflib.Internal.LZW_Encoder_Dictionary
 Giflib.Internal.Metadata_Store
 Giflib.Internal.Owned_Arrays
 Giflib.Internal.Owned_Buffers
-Giflib.Internal.Owned_Element_Vectors
 Giflib.Internal.Owned_Objects
 Giflib.Internal.Owned_Vectors
 Giflib.Internal.Ownership

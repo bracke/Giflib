@@ -2,6 +2,7 @@ with Ada.Unchecked_Deallocation;
 
 package body Giflib.Internal.Owned_Element_Vectors is
    use type Ownership.Allocation_Status;
+   use type Cleanup.Cleanup_Status;
 
    procedure Free is new Ada.Unchecked_Deallocation
      (Element_Type, Element_Access);

@@ -1,6 +1,7 @@
 with Giflib;
 with Giflib.Animations;
 with Giflib.Capabilities;
+with Giflib.Cleanup;
 with Giflib.Decoding;
 with Giflib.Errors;
 with Giflib.Encoding;
@@ -25,6 +26,9 @@ package Giflib_API_Consumer is
    No_Error : constant Giflib.Errors.Error := Giflib.Errors.Make (Giflib.Errors.No_Error);
    Success : constant Giflib.Results.Result := Giflib.Results.Success;
    Streams_Available : constant Boolean := Giflib.Capabilities.Memory_Streams;
+   subtype Cleanup_Status is Giflib.Cleanup.Cleanup_Status;
+   Quantization_Cleanup : constant Cleanup_Status :=
+     Giflib.Quantization.Cleanup_Complete;
    subtype Decoder_State is Giflib.Decoding.Decoder_State;
    subtype Encoder_State is Giflib.Encoding.Encoder_State;
    subtype Loop_Info is Giflib.Animations.Loop_Info;

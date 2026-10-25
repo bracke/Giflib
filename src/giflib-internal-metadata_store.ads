@@ -75,7 +75,8 @@ private
      array (Positive range <>) of Payload_Chunk;
    package Payload_Storage is new Owned_Arrays
      (Positive, Payload_Chunk, Payload_Chunk_Array,
-      (Length => 1, Data => [others => 0]));
+      (Length => 1, Data => [others => 0]),
+      Element_Operations_Are_No_Throw => True);
    package Payload_Chunks is new Owned_Vectors
      (Element_Type => Payload_Chunk, Storage => Payload_Storage);
 
@@ -97,7 +98,8 @@ private
           Sub_Block_Count => 0,
           Label => 0),
        First_Chunk => 0, Chunk_Count => 0,
-       Retained_Length => 0));
+       Retained_Length => 0),
+      Element_Operations_Are_No_Throw => True);
    package Extension_Nodes is new Owned_Vectors
      (Element_Type => Extension_Node, Storage => Extension_Storage);
 

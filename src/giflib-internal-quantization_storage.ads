@@ -41,6 +41,8 @@ package Giflib.Internal.Quantization_Storage is
    function Allocated_Bytes (Object : Resources) return Byte_Count;
    function Is_Released (Object : Resources) return Boolean;
    function Cleanup_Succeeded (Object : Resources) return Boolean;
+   function First_Cleanup_Status
+     (Object : Resources) return Cleanup.Cleanup_Status;
 
    function Release
      (Object : in out Resources) return Cleanup.Cleanup_Outcome
@@ -60,11 +62,13 @@ private
      array (Natural range 0 .. Cache_Capacity - 1) of Cache_Item;
 
    package Histogram_Ownership is new Owned_Objects
-     (Quantization_Palette.Histogram_State);
+     (Quantization_Palette.Histogram_State,
+      Element_Operations_Are_No_Throw => True);
    package Nearest_Cache_Ownership is new Owned_Objects
-     (Cache_Array);
+     (Cache_Array, Element_Operations_Are_No_Throw => True);
    package Error_Ownership is new Owned_Arrays
-     (Natural, Long_Integer, Quantization_Dithering.Error_Array, 0);
+     (Natural, Long_Integer, Quantization_Dithering.Error_Array, 0,
+      Element_Operations_Are_No_Throw => True);
 
    type Resources is new Ada.Finalization.Limited_Controlled with record
       Histogram_Data : Histogram_Ownership.Handle;

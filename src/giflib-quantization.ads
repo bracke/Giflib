@@ -1,4 +1,5 @@
 with Giflib.Images;
+with Giflib.Cleanup;
 with Giflib.Limits;
 with Giflib.Palettes;
 with Giflib.Results;
@@ -9,6 +10,7 @@ private with Giflib.Internal.Quantization_Storage;
 
 package Giflib.Quantization is
    pragma Preelaborate;
+   use type Giflib.Cleanup.Cleanup_Status;
 
    type Dither_Mode is (No_Dither, Floyd_Steinberg);
    type Palette_Strategy is (Generate_Palette, Use_Fixed_Palette);
@@ -56,18 +58,19 @@ package Giflib.Quantization is
    end record;
 
    type Workspace is limited private;
-   subtype Cleanup_Status is Giflib.Cleanup_Status;
-   Cleanup_Complete : constant Cleanup_Status := Giflib.Cleanup_Complete;
+   subtype Cleanup_Status is Giflib.Cleanup.Cleanup_Status;
+   Cleanup_Complete : constant Cleanup_Status :=
+     Giflib.Cleanup.Cleanup_Complete;
    Cleanup_Borrow_Conflict : constant Cleanup_Status :=
-     Giflib.Cleanup_Borrow_Conflict;
+     Giflib.Cleanup.Cleanup_Borrow_Conflict;
    Cleanup_Owner_Mismatch : constant Cleanup_Status :=
-     Giflib.Cleanup_Owner_Mismatch;
+     Giflib.Cleanup.Cleanup_Owner_Mismatch;
    Cleanup_Preflight_Refused : constant Cleanup_Status :=
-     Giflib.Cleanup_Preflight_Refused;
+     Giflib.Cleanup.Cleanup_Preflight_Refused;
    Cleanup_Callback_Failed : constant Cleanup_Status :=
-     Giflib.Cleanup_Callback_Failed;
+     Giflib.Cleanup.Cleanup_Callback_Failed;
    Cleanup_Accounting_Failed : constant Cleanup_Status :=
-     Giflib.Cleanup_Accounting_Failed;
+     Giflib.Cleanup.Cleanup_Accounting_Failed;
 
    --  Source and Indexed_Pixels remain caller-owned. Indexed_Pixels must contain
    --  exactly Width * Height bytes. Alpha <= Alpha_Threshold becomes transparent
@@ -90,6 +93,7 @@ package Giflib.Quantization is
 
    function Allocated_Bytes (Context : Workspace) return Byte_Count;
    function Cleanup_Succeeded (Context : Workspace) return Boolean;
+   function First_Cleanup_Status (Context : Workspace) return Cleanup_Status;
    function Release (Context : in out Workspace) return Cleanup_Status
      with Post =>
        (if Release'Result = Cleanup_Complete

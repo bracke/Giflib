@@ -6,6 +6,8 @@ with Giflib.Internal.Ownership;
 
 generic
    type Element_Type is limited private;
+   --  Test-support instances must use elements whose finalization cannot raise.
+   Element_Operations_Are_No_Throw : Boolean;
    --  The preflight must not mutate Element.  Once it returns True,
    --  Release_Contents consumes all nested resources; its outcome reports
    --  cleanup/accounting status rather than whether the resources remain.
@@ -21,6 +23,9 @@ generic
 package Giflib.Internal.Owned_Element_Vectors
   with Preelaborate
 is
+   pragma Compile_Time_Error
+     (not Element_Operations_Are_No_Throw,
+      "Owned_Element_Vectors requires non-raising finalization");
    type Handle is limited private;
 
    function Append_New
@@ -63,7 +68,8 @@ private
    type Element_Access is access all Element_Type;
    type Index_Array is array (Positive range <>) of Element_Access;
    package Index_Storage is new Owned_Arrays
-     (Positive, Element_Access, Index_Array, null);
+     (Positive, Element_Access, Index_Array, null,
+      Element_Operations_Are_No_Throw => True);
    package Indexes is new Owned_Vectors
      (Element_Type => Element_Access, Storage => Index_Storage);
 
