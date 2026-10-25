@@ -32,7 +32,7 @@ begin
    if not Results.Succeeded (Outcome) then
       return Outcome;
    end if;
-   State_Arithmetic.Begin_Frame (Object);
+   State_Arithmetic.Begin_Frame (Object.Current_State);
    Outcome := Resource_Management.Ensure_LZW_Workspace (Object);
    if not Results.Succeeded (Outcome) then
       return Fail (Object, Outcome.First_Error);

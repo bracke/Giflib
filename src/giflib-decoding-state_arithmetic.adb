@@ -1,41 +1,44 @@
 package body Giflib.Decoding.State_Arithmetic
   with SPARK_Mode
 is
-   procedure Reset (State : in out Decoder_State) is
+   procedure Reset (State : out Decoder_State) is
    begin State := Uninitialized; end Reset;
-   procedure Fail (State : in out Decoder_State) is
+   procedure Fail (State : out Decoder_State) is
    begin State := Failed; end Fail;
    procedure Initialize (State : in out Decoder_State) is
    begin State := Initialized; end Initialize;
    procedure Header_Parsed
-     (Object : in out Decoder;
-      Header : Header_Info) is
+     (State : in out Decoder_State) is
    begin
-      Object.Header_Data := Header;
-      Object.Current_State := Header_Ready;
+      State := Header_Ready;
    end Header_Parsed;
-   procedure Frame_Discovered (Object : in out Decoder) is
-   begin Object.Current_State := Decoding_Frame; end Frame_Discovered;
-   procedure Await_Frame_Decision (Object : in out Decoder) is
+   procedure Frame_Discovered (State : in out Decoder_State) is
+   begin State := Decoding_Frame; end Frame_Discovered;
+   procedure Await_Frame_Decision
+     (State : in out Decoder_State;
+      Has_Pending_Frame : out Boolean) is
    begin
-      Object.Has_Pending_Frame := True;
-      Object.Current_State := Awaiting_Frame_Decision;
+      Has_Pending_Frame := True;
+      State := Awaiting_Frame_Decision;
    end Await_Frame_Decision;
-   procedure Begin_Frame (Object : in out Decoder) is
-   begin Object.Current_State := Decoding_Frame; end Begin_Frame;
-   procedure Complete_Frame (Object : in out Decoder) is
+   procedure Begin_Frame (State : in out Decoder_State) is
+   begin State := Decoding_Frame; end Begin_Frame;
+   procedure Complete_Frame
+     (State : in out Decoder_State;
+      Has_Pending_Control : out Boolean;
+      Has_Pending_Frame : in out Boolean;
+      Frames_Seen : in out Frame_Ordinal) is
    begin
-      Object.Pending_Control := Frames.Default_Control;
-      Object.Has_Pending_Control := False;
-      Object.Has_Pending_Frame := False;
-      Object.Frames_Seen := Object.Frames_Seen + 1;
-      Object.Current_State := Header_Ready;
+      Has_Pending_Control := False;
+      Has_Pending_Frame := False;
+      Frames_Seen := Frames_Seen + 1;
+      State := Header_Ready;
    end Complete_Frame;
    procedure Complete_Stream (State : in out Decoder_State) is
    begin State := Completed; end Complete_Stream;
    procedure Cancel (State : in out Decoder_State) is
    begin State := Cancelled; end Cancel;
-   procedure Finalize (State : in out Decoder_State) is
+   procedure Finalize (State : out Decoder_State) is
    begin State := Finalized; end Finalize;
 
    function Can_Initialize (State : Decoder_State) return Boolean is

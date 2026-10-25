@@ -1,35 +1,38 @@
 package body Giflib.Encoding.State_Arithmetic
   with SPARK_Mode
 is
-   procedure Fail (State : in out Encoder_State) is
+   procedure Fail (State : out Encoder_State) is
    begin State := Failed; end Fail;
    procedure Initialize (State : in out Encoder_State) is
    begin State := Initialized; end Initialize;
    procedure Define_Screen
-     (Object : in out Encoder;
+     (State : in out Encoder_State;
+      Stored_Screen : out Screen_Info;
       Screen : Screen_Info) is
    begin
-      Object.Screen := Screen;
-      Object.Current_State := Screen_Defined;
+      Stored_Screen := Screen;
+      State := Screen_Defined;
    end Define_Screen;
-   procedure Frame_Accepted (Object : in out Encoder) is
+   procedure Frame_Accepted
+     (State : in out Encoder_State;
+      Frames_Written : in out Frame_Ordinal) is
    begin
-      Object.Frames_Written := Object.Frames_Written + 1;
-      Object.Current_State := Accepting_Frames;
+      Frames_Written := Frames_Written + 1;
+      State := Accepting_Frames;
    end Frame_Accepted;
-   procedure Record_Extension (Object : in out Encoder) is
+   procedure Record_Extension (Extensions_Written : in out Natural) is
    begin
-      Object.Extensions_Written := Object.Extensions_Written + 1;
+      Extensions_Written := Extensions_Written + 1;
    end Record_Extension;
-   procedure Accept_Data (Object : in out Encoder) is
+   procedure Accept_Data (State : in out Encoder_State) is
    begin
-      Object.Current_State := Accepting_Frames;
+      State := Accepting_Frames;
    end Accept_Data;
    procedure Complete (State : in out Encoder_State) is
    begin State := Completed; end Complete;
    procedure Cancel (State : in out Encoder_State) is
    begin State := Cancelled; end Cancel;
-   procedure Finalize (State : in out Encoder_State) is
+   procedure Finalize (State : out Encoder_State) is
    begin State := Finalized; end Finalize;
 
    function Can_Initialize (State : Encoder_State) return Boolean is

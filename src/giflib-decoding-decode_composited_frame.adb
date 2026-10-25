@@ -42,7 +42,7 @@ begin
    if not Results.Succeeded (Outcome) then
       return Fail (Object, Outcome.First_Error);
    end if;
-   State_Arithmetic.Begin_Frame (Object);
+   State_Arithmetic.Begin_Frame (Object.Current_State);
    if Prepared.Control.Disposal > 3
      and then Object.Options.Strictness = Strict
    then

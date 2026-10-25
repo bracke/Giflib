@@ -25,37 +25,37 @@ is
        Can_Cancel'Result =
          (State in Initialized | Screen_Defined | Accepting_Frames | Cancelled);
 
-   procedure Fail (State : in out Encoder_State)
+   procedure Fail (State : out Encoder_State)
      with Post => State = Failed;
    procedure Initialize (State : in out Encoder_State)
      with Pre => Can_Initialize (State),
           Post => State = Initialized;
    procedure Define_Screen
-     (Object : in out Encoder;
+     (State : in out Encoder_State;
+      Stored_Screen : out Screen_Info;
       Screen : Screen_Info)
-     with Pre => Can_Define_Screen (Object.Current_State),
-          Post => Object.Current_State = Screen_Defined
-                  and then Object.Screen = Screen;
-   procedure Frame_Accepted (Object : in out Encoder)
-     with Pre => Can_Accept_Data (Object.Current_State)
-                 and then Object.Frames_Written < Frame_Ordinal'Last,
-          Post => Object.Current_State = Accepting_Frames
-                  and then Object.Frames_Written
-                    = Object.Frames_Written'Old + 1;
-   procedure Record_Extension (Object : in out Encoder)
-     with Pre => Object.Extensions_Written < Natural'Last,
-          Post => Object.Extensions_Written
-                    = Object.Extensions_Written'Old + 1;
-   procedure Accept_Data (Object : in out Encoder)
-     with Pre => Can_Accept_Data (Object.Current_State),
-          Post => Object.Current_State = Accepting_Frames;
+     with Pre => Can_Define_Screen (State),
+          Post => State = Screen_Defined and then Stored_Screen = Screen;
+   procedure Frame_Accepted
+     (State : in out Encoder_State;
+      Frames_Written : in out Frame_Ordinal)
+     with Pre => Can_Accept_Data (State)
+                 and then Frames_Written < Frame_Ordinal'Last,
+          Post => State = Accepting_Frames
+                  and then Frames_Written = Frames_Written'Old + 1;
+   procedure Record_Extension (Extensions_Written : in out Natural)
+     with Pre => Extensions_Written < Natural'Last,
+          Post => Extensions_Written = Extensions_Written'Old + 1;
+   procedure Accept_Data (State : in out Encoder_State)
+     with Pre => Can_Accept_Data (State),
+          Post => State = Accepting_Frames;
    procedure Complete (State : in out Encoder_State)
      with Pre => Can_Finish (State) and then State /= Completed,
           Post => State = Completed;
    procedure Cancel (State : in out Encoder_State)
      with Pre => Can_Cancel (State) and then State /= Cancelled,
           Post => State = Cancelled;
-   procedure Finalize (State : in out Encoder_State)
+   procedure Finalize (State : out Encoder_State)
      with Post => State = Finalized;
 
 end Giflib.Encoding.State_Arithmetic;

@@ -15,18 +15,6 @@ is
    Selection : Palette_Selection := Use_Local_Palette;
    Outcome : Results.Result;
 
-   function Add_Quantized
-     (Pixels : Streams.Byte_Array) return Results.Result
-   is (Add_Indexed_Frame
-         (Object,
-          Adjusted,
-          (if Selection = Use_Local_Palette
-           then (Selection => Use_Local_Palette, Value => Quantized.Palette)
-           else Global_Frame_Palette),
-          Pixels));
-   function Consume_Quantized is new
-     Internal.Encoder_Storage.Quantization_Operations
-       .Consume_Truecolor_Pixels (Add_Quantized);
 begin
    if not State_Arithmetic.Can_Accept_Data (Object.Current_State) then
       return Invalid_Transition (Object);
@@ -98,5 +86,11 @@ begin
    then
       Selection := Use_Global_Palette;
    end if;
-   return Consume_Quantized (Object.Resources, Total);
+   return Frame_Pipeline.Add_Stored
+     (Object,
+      Adjusted,
+      (if Selection = Use_Local_Palette
+       then (Selection => Use_Local_Palette, Value => Quantized.Palette)
+       else Global_Frame_Palette),
+      Total);
 end Add_Truecolor_Frame;

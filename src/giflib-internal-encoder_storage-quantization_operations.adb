@@ -24,20 +24,4 @@ package body Giflib.Internal.Encoder_Storage.Quantization_Operations is
          Output, Options, Constraints);
    end Quantize;
 
-   function Consume_Truecolor_Pixels
-     (Object : in out Resources;
-      Pixel_Count : Byte_Count) return Results.Result
-   is
-   begin
-      if Pixel_Count = 0
-        or else Pixel_Count > Byte_Count (Natural'Last)
-        or else Truecolor_Length (Object) < Pixel_Count
-      then
-         return Results.Failure
-           (Errors.Make (Errors.Internal_Invariant_Failed));
-      end if;
-      return Consume
-        (Owned_Buffers.Value (Object.Truecolor_Buffer).all
-           (1 .. Natural (Pixel_Count)));
-   end Consume_Truecolor_Pixels;
 end Giflib.Internal.Encoder_Storage.Quantization_Operations;

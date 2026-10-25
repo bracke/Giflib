@@ -159,12 +159,21 @@ private
    function Reject_Frame_Request
      (Object : Encoder;
       Item : Errors.Error) return Results.Result;
+   function Fail_Frame
+     (Object : in out Encoder;
+      Item : Errors.Error) return Results.Result;
    function Invalid_Transition (Object : Encoder) return Results.Result;
    function Has_Extension_Capacity
      (Object : Encoder;
       Additional : Natural) return Boolean;
+   function Validate_Frame_Request
+     (Object : Encoder;
+      Info : Frame_Info) return Results.Result;
    function Write_Raw
      (Object : in out Encoder;
       Data : Streams.Byte_Array) return Results.Result;
    function Write_Header (Object : in out Encoder) return Results.Result;
+   function Write_Palette
+     (Object : in out Encoder;
+      Palette : Palettes.Palette) return Results.Result;
 end Giflib.Encoding;
