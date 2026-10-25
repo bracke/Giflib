@@ -103,13 +103,18 @@ Giflib.Internal.Quantization_Pixels -- pixel-format access and transparency poli
 Giflib.Internal.Quantization_Dithering -- Floyd-Steinberg row state and diffusion
 Giflib.Internal.Quantization_Palette -- median-cut palette construction
 Giflib.Internal.Quantization_Mapping -- nearest-color selection and cache policy
+Giflib.Internal.Quantization_Storage.Outcomes -- phase-specific service statuses
 Giflib.Internal.Quantization_Storage.*_Operations -- checked workspace services
+Giflib.Quantization.Workspace_Operations -- allocation and failure translation
+Giflib.Quantization.Palette_Building -- fixed/generated palette preparation
+Giflib.Quantization.Pixel_Mapping -- indexed output and optional dithering
 Giflib.Internal.Interlacing   -- pass addressing
 Giflib.Internal.Stream_Arithmetic -- proved transfer windows/progress
 Giflib.Decoding.State_Arithmetic -- private proved decoder lifecycle guards
 Giflib.Decoding.Session_Arithmetic -- proved complete decoder state transitions
 Giflib.Decoding.Session_Transitions -- private complete decoder state commits
 Giflib.Encoding.State_Arithmetic -- private proved encoder lifecycle guards
+Giflib.Encoding.Session_Transitions -- private complete encoder state commits
 Giflib.Encoding.Frame_Pipeline -- private shared indexed-frame orchestration
 Giflib.Internal.Session_Arithmetic -- proved shared count/warning capacity
 Giflib.Internal.Metadata_Arithmetic -- proved retention/count accounting
@@ -408,6 +413,10 @@ work meter. Cache capacity and slot selection remain private to the cache
 service. Pixel access validates coordinates and byte extent without raising
 before reading caller-owned storage.
 
+Owned scratch containers expose contents only through scoped query/update
+callbacks. Storage addresses are not part of their interface and cannot be
+retained across ensure, growth, or release operations.
+
 Optimization is a separate opt-in layer: trim unchanged regions, select subrectangles, consider transparent unchanged pixels, deduplicate safe frame segments, and optimize LZW/palette size. Its contract is *rendered equivalence*, not necessarily exact preservation of frame structure or extensions. Disposal and delay semantics must remain observably equivalent under the documented reference renderer. Lossless indexed pass-through must be available independently of optimization.
 
 ## 9. Extension/metadata policy
@@ -451,7 +460,7 @@ giflib/
     unit_tests.gpr
     tools.gpr
     src/ (AUnit suites, runner, tools)
-      subunits/ (separate suite procedure bodies)
+      subunits/ (separate procedure bodies owned by domain-specific suites)
     fixtures/ (goldens, malformed cases, animation cases)
 ```
 

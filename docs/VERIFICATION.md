@@ -69,7 +69,8 @@ alr exec -- gnatprove -P giflib.gpr \
 
 `Giflib.Internal.Ownership`, `Owned_Arrays`, `Owned_Buffers`, and
 `Owned_Objects` are runtime-checked Ada. They provide scoped reservation
-rollback and ledger-identity-checked ownership, but are outside the SPARK
+rollback, ledger-identity-checked ownership, and callback-scoped storage
+access, but are outside the SPARK
 subset because they manage controlled types and heap allocation.
 Decoder, encoder, and quantizer resource representations are consolidated in
 their respective `Internal.*_Storage` packages. The tooling check requires

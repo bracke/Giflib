@@ -159,8 +159,10 @@ The white-box suite uses the `Giflib.Testing` descendant hierarchy so Ada's
 private-child rules remain intact. A production-project consumer compile and an
 expected-failure private-child import guard that boundary. The root and tests
 crates both pin GNAT 15, and all GPR variants share compiler-switch policy from
-`giflib_build.gpr`. Separate test procedure bodies live under `tests/src/subunits`, keeping package
-inventory checks focused on actual AUnit package bodies.
+`giflib_build.gpr`. Allocation and ownership tests are separate domain-specific
+AUnit cases. Large individual procedures live under `tests/src/subunits`,
+keeping package inventory checks focused without sharing unrelated fixtures or
+dependencies.
 
 ## Cross-cutting acceptance checklist
 
