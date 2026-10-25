@@ -49,6 +49,10 @@ The GIF format has a logical screen and zero or more graphic rendering blocks. A
   to the sub-block writer. Indexed palette validation is performed as pixels
   enter the compressor, so invalid caller input can leave a nonseekable
   destination with partial output as described by the encoder state contract.
+- Decoder orchestration separates code reading, output placement, and
+  dictionary expansion. Encoder orchestration separates code writing,
+  dictionary lookup/update, and the logical input view. Each component owns its
+  transport state while sharing the operation's bounded work meter.
 - Support interlace passes in this order (zero-based rows): `(0,8)`, `(4,8)`, `(2,4)`, `(1,2)` and inverse reordering on encode. Include heights smaller than eight in tests.
 
 ### 3.3 Palettes, transparency, disposal and looping
@@ -96,7 +100,8 @@ Giflib.Internal.Geometry_Arithmetic -- proved areas and rectangle containment
 Giflib.Internal.Image_Arithmetic   -- proved row/stride extent arithmetic
 Giflib.Internal.LZW_Arithmetic     -- proved table/width/hash arithmetic
 Giflib.Internal.LZW_Bit_Arithmetic -- proved LSB-first bit-buffer state
-Giflib.Internal.LZW           -- code dictionary, bit packing
+Giflib.Internal.LZW           -- decoder orchestration over code-reader/output components
+Giflib.Internal.LZW_Encoding  -- encoder orchestration over code-writer/dictionary components
 Giflib.Internal.Quantization_Arithmetic -- proved color/index arithmetic
 Giflib.Internal.Quantization_Buffer_Arithmetic -- proved dither-buffer indices
 Giflib.Internal.Quantization_Pixels -- pixel-format access and transparency policy
@@ -110,6 +115,8 @@ Giflib.Quantization.Palette_Building -- fixed/generated palette preparation
 Giflib.Quantization.Pixel_Mapping -- indexed output and optional dithering
 Giflib.Internal.Interlacing   -- pass addressing
 Giflib.Internal.Stream_Arithmetic -- proved transfer windows/progress
+Giflib.Internal.Stream_Dispatch -- exception-safe callback and position dispatch
+Giflib.Internal.Stream_Transfers -- exact read/skip/write progress algorithms
 Giflib.Decoding.State_Arithmetic -- private proved decoder lifecycle guards
 Giflib.Decoding.Session_Arithmetic -- proved complete decoder state transitions
 Giflib.Decoding.Session_Transitions -- private complete decoder state commits
@@ -133,9 +140,11 @@ Giflib.Internal.Quantization_Storage -- quantizer workspace ownership
 Giflib.Internal.Ownership_Arithmetic -- proved injection state transitions
 Giflib.Internal.Owned_Arrays  -- budget-bound reusable array ownership
 Giflib.Internal.Owned_Vectors -- budget-bound logical-length collections
+Giflib.Internal.Owned_Element_Vectors -- budget-bound ownership of element objects
 Giflib.Internal.Owned_Buffers -- budget-bound reusable byte-buffer ownership
 Giflib.Internal.Owned_Buffers.Result_Operations -- result-preserving scoped buffer access
 Giflib.Internal.Owned_Objects -- budget-bound fixed-object ownership
+Giflib.Internal.Borrow_Guards -- exception-safe scoped borrow acquisition
 Giflib.Internal.Optimization_Arithmetic -- proved optimizer decisions/bounds
 Giflib.Internal.Pixel_Arithmetic -- proved row-major/component offsets
 Giflib.Decoding.Resource_Management -- private decoder resource lifecycle
@@ -159,7 +168,7 @@ Declare root `Byte` based on `Interfaces.Unsigned_8`, 64-bit-capacity byte offse
 
 ### 5.2 Streams
 
-Mirror `jpeglib` stream conventions: `Source` limited interface with `Read`, `Offset`, `Skip`; `Destination` limited interface with `Write`, `Offset`, `Flush`; explicit transfer counts and source EOF; memory and fixed-buffer adapters. Stream position results are discriminated so an unavailable position cannot carry a stale offset. `Read` can return short counts; zero count without EOF/failure must fail deterministically as `Source_Zero_Progress`. `Write` can return short counts; zero-progress writes must fail. Exceptions from `Read` or `Skip` callbacks must become `Source_Read_Failed`; exceptions from `Write` or `Flush` callbacks must become `Destination_Write_Failed`, including callbacks reached through LZW sub-block emission. An exception from `Offset` makes that diagnostic position unavailable and must not escape. Direct one-byte probes must validate the returned transfer count with the same rules as the public stream helpers. No seek required. Streaming GIF image-data sub-blocks must not require buffering all compressed bytes.
+Mirror `jpeglib` stream conventions: `Source` limited interface with `Read`, `Offset`, `Skip`; `Destination` limited interface with `Write`, `Offset`, `Flush`; explicit transfer counts and source EOF; memory and fixed-buffer adapters. Stream callback exception normalization and position capture belong to `Internal.Stream_Dispatch`; exact-transfer progress loops belong to `Internal.Stream_Transfers`; the public body delegates to those services and retains only the concrete memory adapters. Stream position results are discriminated so an unavailable position cannot carry a stale offset. `Read` can return short counts; zero count without EOF/failure must fail deterministically as `Source_Zero_Progress`. `Write` can return short counts; zero-progress writes must fail. Exceptions from `Read` or `Skip` callbacks must become `Source_Read_Failed`; exceptions from `Write` or `Flush` callbacks must become `Destination_Write_Failed`, including callbacks reached through LZW sub-block emission. An exception from `Offset` makes that diagnostic position unavailable and must not escape. Direct one-byte probes must validate the returned transfer count with the same rules as the public stream helpers. No seek required. Streaming GIF image-data sub-blocks must not require buffering all compressed bytes.
 
 ### 5.3 Image views and palettes
 
@@ -193,8 +202,10 @@ A palette is a bounded count and array of at most 256 RGB entries; tables writte
   sticky ledger fault, and reports failure. Public indexed
   extension and chunk access must not repeatedly scan from the head; the store
   maintains bounded, allocation-accounted indexes with amortized constant-time
-  lookup. The shared owned-array layer provides preserve-on-growth storage for
-  these indexes and default-initializes every newly allocated capacity slot;
+  lookup. Nodes and chunks are allocated and destroyed only by the shared
+  owned-element-vector layer; the metadata store performs no direct access-type
+  allocation, deallocation, or ledger reservation. The shared owned-array layer
+  provides preserve-on-growth storage for these indexes and default-initializes every newly allocated capacity slot;
   callers never observe an uninitialized scalar or access value. Each retained
   node tracks its stored payload length itself;
   `Finish` reconciles observational metadata to that owned length, and copy
@@ -207,7 +218,11 @@ A palette is a bounded count and array of at most 256 RGB entries; tables writte
   algorithms consume owned storage only during an operation controlled by its
   owner. A scoped query or update marks its handle as borrowed for the complete
   callback, including exceptional unwinding. Reentrant release, growth, or
-  mutation is rejected without invalidating the borrowed value. Operations
+  mutation is rejected without invalidating the borrowed value. A shared
+  controlled borrow guard owns acquisition and exceptional unwind for arrays,
+  objects, and owned element collections. Result-returning owned-object
+  operations return their callback result directly instead of communicating it
+  through mutable outer state. Operations
   involving two buffers acquire both borrows before exposing either payload.
   Successful ensure operations establish both allocation and required capacity
   as part of their contract.
@@ -312,6 +327,13 @@ shares one chunk-emission and completion path between ordinary and exact
 extension writing.
 
 Required decoder states: `Uninitialized`, `Initialized`, `Header_Ready`, `Awaiting_Frame_Decision`, `Decoding_Frame`, `Completed`, `Cancelled`, `Failed`, `Finalized` (exact names negotiable, transitions not). Invalid transitions return `Invalid_State`; fatal errors transition to `Failed` and preserve first diagnostic. After completion, repeated calls do not consume further source bytes. Reset releases previous resources and restarts on the decoder's bound source. Decoding another source requires another decoder object, preserving the statically checked source lifetime relationship.
+
+`Decoding.Session_Transitions` and `Encoding.Session_Transitions` are the sole
+mutation gateways for lifecycle state and the session fields committed with a
+transition (screen/header readiness, pending-frame flags, frame/extension
+counters, completion, failure, reset, and cancellation). Orchestrators may ask
+the proved state-arithmetic packages whether an operation is legal, but must not
+invoke their mutating operations directly or duplicate a multi-field commit.
 
 Calling `Cancel` on a failed decoder or encoder returns the preserved first
 diagnostic rather than replacing it with `Invalid_State`; repeated cancellation
