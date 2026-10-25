@@ -185,9 +185,17 @@ A palette is a bounded count and array of at most 256 RGB entries; tables writte
   `Finish` reconciles observational metadata to that owned length, and copy
   operations validate against the owned length rather than trusting a caller
   supplied value.
+- Owned collection wrappers preserve both backing storage and logical contents
+  when an operation is attempted through a foreign allocation ledger. Resource
+  containers keep handles, payloads, and their ledgers paired behind cohesive
+  operations. Session and workspace façades do not return payload access values;
+  algorithms consume owned storage only during an operation controlled by its
+  owner. Successful ensure operations establish both allocation and required
+  capacity as part of their contract.
 - Initialization/reset/finalization must be idempotent where explicitly specified and must clean up all owned allocations on failures and cancellation. No dangling pointers or leakage on decoder/encoder reuse.
 - Cleanup bookkeeping is production state, not a test callback embedded in a
   resource record. Controlled finalizers must not propagate cleanup failures;
+  cleanup aggregation is scope-bound so ledger reconciliation cannot be omitted;
   an explicit decoder or encoder lifecycle operation records
   `Internal_Invariant_Failed` when a release invariant fails and preserves any
   earlier fatal diagnostic.
