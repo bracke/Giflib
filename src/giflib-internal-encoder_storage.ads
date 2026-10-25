@@ -1,4 +1,5 @@
 with Ada.Finalization;
+with Giflib.Internal.Cleanup;
 with Giflib.Internal.LZW_Encoding;
 with Giflib.Internal.Owned_Buffers;
 with Giflib.Internal.Ownership;
@@ -44,6 +45,7 @@ private
       Allocation_Budget : aliased Ownership.Byte_Budget;
       Quantizer_Data : Quantization.Workspace;
       LZW_Data : LZW_Encoding.Workspace_Handle;
-      Cleanup_Failed : aliased Boolean := False;
+      Cleanup_State : aliased Cleanup.Cleanup_Status :=
+        Cleanup.Cleanup_Complete;
    end record;
 end Giflib.Internal.Encoder_Storage;

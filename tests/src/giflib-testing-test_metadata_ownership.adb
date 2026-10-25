@@ -1,5 +1,6 @@
 with AUnit.Assertions;
 with Giflib.Errors;
+with Giflib.Internal.Cleanup;
 with Giflib.Internal.Metadata_Store;
 with Giflib.Internal.Ownership;
 with Giflib.Internal.Ownership.Testing;
@@ -10,6 +11,7 @@ with Giflib.Streams;
 package body Giflib.Testing.Test_Metadata_Ownership is
    use AUnit.Assertions;
    use type Giflib.Errors.Error_Code;
+   use type Giflib.Internal.Cleanup.Cleanup_Status;
 
    procedure Metadata_Store_Rejects_Foreign_Ledgers
      (T : in out AUnit.Test_Cases.Test_Case'Class);
@@ -45,6 +47,7 @@ package body Giflib.Testing.Test_Metadata_Ownership is
       Copied : Giflib.Streams.Byte_Array (1 .. 1);
       Copied_Count : Giflib.Byte_Count;
       Outcome : Giflib.Results.Result;
+      Cleanup_Outcome : Giflib.Internal.Cleanup.Cleanup_Outcome;
    begin
       Outcome := Store.Append
         (Object,
@@ -88,14 +91,17 @@ package body Giflib.Testing.Test_Metadata_Ownership is
         (Outcome.First_Error.Code = Giflib.Errors.Internal_Invariant_Failed
          and then Giflib.Internal.Ownership.Used (Second_Budget) = 0,
          "metadata store accepted a foreign ledger");
+      Cleanup_Outcome := Store.Release (Object, Second_Budget);
       Assert
-        (not Store.Release (Object, Second_Budget)
+        (Cleanup_Outcome.Status =
+           Giflib.Internal.Cleanup.Cleanup_Owner_Mismatch
          and then not Store.Is_Released (Object)
          and then Giflib.Internal.Ownership.Used (First_Budget) > 0
          and then Giflib.Internal.Ownership.Used (Second_Budget) = 0,
          "foreign-ledger metadata cleanup changed storage or a ledger");
+      Cleanup_Outcome := Store.Release (Object, First_Budget);
       Assert
-        (Store.Release (Object, First_Budget)
+        (Giflib.Internal.Cleanup.Succeeded (Cleanup_Outcome)
          and then Store.Is_Released (Object)
          and then Giflib.Internal.Ownership.Used (First_Budget) = 0,
          "metadata cleanup was not retryable with its owner");
@@ -132,8 +138,10 @@ package body Giflib.Testing.Test_Metadata_Ownership is
          and then Copied (1) = Data (1),
          "metadata store trusted a stale caller payload length");
       Giflib.Internal.Ownership.Testing.Set_Used (First_Budget, 0);
+      Cleanup_Outcome := Store.Release (Object, First_Budget);
       Assert
-        (not Store.Release (Object, First_Budget)
+        (Cleanup_Outcome.Status =
+           Giflib.Internal.Cleanup.Cleanup_Accounting_Failed
          and then Store.Is_Released (Object),
          "metadata store retained allocations after a ledger mismatch");
    end Metadata_Store_Rejects_Foreign_Ledgers;

@@ -15,13 +15,15 @@ is
    Accepted : Boolean;
    Work_Context : Giflib.Errors.Diagnostic_Context;
    Cleanup_Budget : aliased Giflib.Internal.Ownership.Byte_Budget;
-   Cleanup_Failed : aliased Boolean := False;
+   Cleanup_Status : aliased Giflib.Internal.Cleanup.Cleanup_Status :=
+     Giflib.Internal.Cleanup.Cleanup_Complete;
    Residual_Budget : aliased Giflib.Internal.Ownership.Byte_Budget;
-   Residual_Failed : aliased Boolean := False;
-   function Raising_Release return Boolean is
+   Residual_Status : aliased Giflib.Internal.Cleanup.Cleanup_Status :=
+     Giflib.Internal.Cleanup.Cleanup_Complete;
+   function Raising_Release return Giflib.Internal.Cleanup.Cleanup_Outcome is
    begin
       raise Program_Error;
-      return True;
+      return Giflib.Internal.Cleanup.Success;
    end Raising_Release;
    procedure Attempt_Raising_Release is new
      Giflib.Internal.Resource_Cleanup.Attempt (Raising_Release);
@@ -101,27 +103,29 @@ begin
       "shared work-meter diagnostic context is wrong");
    declare
       Guard : Giflib.Internal.Resource_Cleanup.Guard
-        (Cleanup_Budget'Access, Cleanup_Failed'Access);
+        (Cleanup_Budget'Access, Cleanup_Status'Access);
    begin
       Attempt_Raising_Release (Guard);
       Assert
-        (not Cleanup_Failed,
+        (Cleanup_Status = Giflib.Internal.Cleanup.Cleanup_Complete,
          "cleanup guard reconciled before leaving its scope");
    end;
    Assert
-     (Cleanup_Failed,
+     (Cleanup_Status = Giflib.Internal.Cleanup.Cleanup_Callback_Failed,
       "scope-bound cleanup did not retain a release exception");
    Giflib.Internal.Ownership.Try_Reserve
      (Residual_Budget, 1, 1, Reserved);
    declare
       Guard : Giflib.Internal.Resource_Cleanup.Guard
-        (Residual_Budget'Access, Residual_Failed'Access);
+        (Residual_Budget'Access, Residual_Status'Access);
       pragma Unreferenced (Guard);
    begin
       null;
    end;
    Assert
-     (Reserved and then Residual_Failed,
+     (Reserved
+      and then Residual_Status =
+        Giflib.Internal.Cleanup.Cleanup_Accounting_Failed,
       "cleanup guard accepted a healthy ledger with residual ownership");
    Assert
      (Giflib.Internal.Ownership.Release (Residual_Budget, 1),

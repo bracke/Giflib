@@ -1,4 +1,5 @@
 with Ada.Finalization;
+with Giflib.Internal.Cleanup;
 with Giflib.Internal.Ownership;
 
 package Giflib.Internal.Resource_Cleanup is
@@ -6,11 +7,11 @@ package Giflib.Internal.Resource_Cleanup is
 
    type Guard
      (Budget : not null access Ownership.Byte_Budget;
-      Sticky_Failure : not null access Boolean)
+      Sticky_Status : not null access Cleanup.Cleanup_Status)
       is new Ada.Finalization.Limited_Controlled with private;
 
    generic
-      with function Release_Operation return Boolean;
+      with function Release_Operation return Cleanup.Cleanup_Outcome;
    procedure Attempt (Object : in out Guard);
 
    overriding procedure Finalize (Object : in out Guard);
@@ -18,8 +19,8 @@ package Giflib.Internal.Resource_Cleanup is
 private
    type Guard
      (Budget : not null access Ownership.Byte_Budget;
-      Sticky_Failure : not null access Boolean)
+      Sticky_Status : not null access Cleanup.Cleanup_Status)
       is new Ada.Finalization.Limited_Controlled with record
-      Failed : Boolean := False;
+      Status : Cleanup.Cleanup_Status := Cleanup.Cleanup_Complete;
    end record;
 end Giflib.Internal.Resource_Cleanup;

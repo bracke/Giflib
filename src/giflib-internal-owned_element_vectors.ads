@@ -1,13 +1,23 @@
 with Giflib.Internal.Borrow_Guards;
+with Giflib.Internal.Cleanup;
 with Giflib.Internal.Owned_Arrays;
 with Giflib.Internal.Owned_Vectors;
 with Giflib.Internal.Ownership;
 
 generic
    type Element_Type is limited private;
+   --  The preflight must not mutate Element.  Once it returns True,
+   --  Release_Contents consumes all nested resources; its outcome reports
+   --  cleanup/accounting status rather than whether the resources remain.
+   --  Completed callbacks are checkpointed.  If Release_Contents raises, it
+   --  must tolerate retry of that same element after any partial work.
+   with function Contents_Releasable
+     (Element : Element_Type;
+      Budget : aliased Ownership.Byte_Budget) return Boolean;
    with function Release_Contents
      (Element : in out Element_Type;
-      Budget : aliased in out Ownership.Byte_Budget) return Boolean;
+      Budget : aliased in out Ownership.Byte_Budget)
+      return Cleanup.Cleanup_Outcome;
 package Giflib.Internal.Owned_Element_Vectors
   with Preelaborate
 is
@@ -22,24 +32,32 @@ is
 
    function Release
      (Object : in out Handle;
-      Budget : aliased in out Ownership.Byte_Budget) return Boolean;
+      Budget : aliased in out Ownership.Byte_Budget)
+      return Cleanup.Cleanup_Outcome;
 
    function Length (Object : Handle) return Natural;
    function Is_Allocated (Object : Handle) return Boolean;
+   function Is_Borrowed (Object : Handle) return Boolean;
+   function Is_Cleanup_In_Progress (Object : Handle) return Boolean;
    function Matches
      (Object : Handle;
       Budget : aliased Ownership.Byte_Budget) return Boolean;
 
-   function Element
-     (Object : Handle;
-      Index : Positive) return not null access constant Element_Type
-     with Pre => Index <= Length (Object);
+   procedure Query
+     (Object : in out Handle;
+      Index : Positive;
+      Process : not null access procedure (Value : Element_Type))
+     with Pre => Index <= Length (Object)
+                 and then not Is_Borrowed (Object)
+                 and then not Is_Cleanup_In_Progress (Object);
 
    procedure Update
      (Object : in out Handle;
       Index : Positive;
       Process : not null access procedure (Value : in out Element_Type))
-     with Pre => Index <= Length (Object);
+     with Pre => Index <= Length (Object)
+                 and then not Is_Borrowed (Object)
+                 and then not Is_Cleanup_In_Progress (Object);
 
 private
    type Element_Access is access all Element_Type;
@@ -52,5 +70,8 @@ private
    type Handle is limited record
       Entries : Indexes.Handle;
       Borrow : aliased Borrow_Guards.State;
+      Cleanup_Active : Boolean := False;
+      Cleanup_Position : Natural := 0;
+      Cleanup_Status : Cleanup.Cleanup_Status := Cleanup.Cleanup_Complete;
    end record;
 end Giflib.Internal.Owned_Element_Vectors;

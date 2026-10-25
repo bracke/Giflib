@@ -29,10 +29,8 @@ is
    end Run_Failure;
 begin
    Options.Retention := Giflib.Metadata.Retain_All_Bounded;
-   Run_Failure (0, "metadata extension-index", Check_Empty => False);
-   Run_Failure (1, "metadata node");
-   Run_Failure (2, "metadata chunk-index");
-   Run_Failure (3, "metadata chunk");
+   Run_Failure (0, "metadata node-vector");
+   Run_Failure (1, "metadata chunk-vector");
 exception
    when others =>
       Finish_Scenario (Decoder);

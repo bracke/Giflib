@@ -89,9 +89,6 @@ package Giflib.Internal.Ownership is
       Budget : aliased in out Byte_Budget;
       Amount : Byte_Count) return Boolean;
 
-   generic
-      with function Release_Operation return Boolean;
-   procedure Attempt_Release (Failed : in out Boolean);
 private
    type Budget_Identity is new Interfaces.Unsigned_64;
    function Fresh_Identity return Budget_Identity;

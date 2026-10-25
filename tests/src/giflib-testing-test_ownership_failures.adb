@@ -1,8 +1,10 @@
 with AUnit.Assertions;
+with Ada.Assertions;
 with System;
 
 with Giflib.Errors;
 with Giflib.Internal.Ownership;
+with Giflib.Internal.Cleanup;
 with Giflib.Internal.Resource_Cleanup;
 with Giflib.Internal.Resource_Diagnostics;
 with Giflib.Internal.Ownership.Testing;
@@ -10,6 +12,7 @@ with Giflib.Internal.Ownership_Arithmetic;
 with Giflib.Internal.Work_Budgets;
 with Giflib.Internal.Owned_Arrays;
 with Giflib.Internal.Owned_Buffers;
+with Giflib.Internal.Owned_Element_Vectors;
 with Giflib.Internal.Owned_Objects;
 with Giflib.Internal.Owned_Vectors;
 with Giflib.Streams;
@@ -19,6 +22,7 @@ package body Giflib.Testing.Test_Ownership_Failures is
    use type Giflib.Errors.Error_Code;
    use type Giflib.Internal.Ownership_Arithmetic.Injection_State;
    use type Giflib.Internal.Ownership.Allocation_Status;
+   use type Giflib.Internal.Cleanup.Cleanup_Status;
 
    type Test_Array is array (Natural range <>) of Integer;
    package Test_Array_Ownership is new Giflib.Internal.Owned_Arrays
@@ -30,6 +34,92 @@ package body Giflib.Testing.Test_Ownership_Failures is
      (Element_Type => Integer,
       Storage => Test_Vector_Storage,
       Initial_Capacity => 2);
+
+   type Cleanup_Test_Element is limited record
+      Value : Natural := 0;
+      Releasable : Boolean := True;
+      Cleanup_Succeeds : Boolean := True;
+      Preflight_Raises : Boolean := False;
+      Cleanup_Raises : Boolean := False;
+   end record;
+   Released_Element_Contents : Natural := 0;
+
+   function Can_Release_Element_Contents
+     (Element : Cleanup_Test_Element;
+      Budget : aliased Giflib.Internal.Ownership.Byte_Budget) return Boolean
+   is
+      pragma Unreferenced (Budget);
+   begin
+      if Element.Preflight_Raises then
+         raise Program_Error with "preflight callback probe";
+      end if;
+      return Element.Releasable;
+   end Can_Release_Element_Contents;
+
+   function Release_Element_Contents
+     (Element : in out Cleanup_Test_Element;
+      Budget : aliased in out Giflib.Internal.Ownership.Byte_Budget)
+      return Giflib.Internal.Cleanup.Cleanup_Outcome
+   is
+      pragma Unreferenced (Budget);
+   begin
+      Released_Element_Contents := Released_Element_Contents + 1;
+      if Element.Cleanup_Raises then
+         Element.Cleanup_Raises := False;
+         raise Program_Error with "cleanup callback probe";
+      end if;
+      return
+        (if Element.Cleanup_Succeeds
+         then Giflib.Internal.Cleanup.Success
+         else (Status => Giflib.Internal.Cleanup.Cleanup_Callback_Failed));
+   end Release_Element_Contents;
+
+   package Cleanup_Elements is new Giflib.Internal.Owned_Element_Vectors
+     (Element_Type => Cleanup_Test_Element,
+      Contents_Releasable => Can_Release_Element_Contents,
+      Release_Contents => Release_Element_Contents);
+
+   procedure Initialize_Cleanup_Element
+     (Value : in out Cleanup_Test_Element) is
+   begin
+      Value.Value := 11;
+   end Initialize_Cleanup_Element;
+
+   procedure Block_Element_Release
+     (Value : in out Cleanup_Test_Element) is
+   begin
+      Value.Releasable := False;
+   end Block_Element_Release;
+
+   procedure Allow_Element_Release
+     (Value : in out Cleanup_Test_Element) is
+   begin
+      Value.Releasable := True;
+   end Allow_Element_Release;
+
+   procedure Report_Element_Cleanup_Failure
+     (Value : in out Cleanup_Test_Element) is
+   begin
+      Value.Cleanup_Succeeds := False;
+   end Report_Element_Cleanup_Failure;
+
+   procedure Arm_Element_Preflight_Exception
+     (Value : in out Cleanup_Test_Element) is
+   begin
+      Value.Preflight_Raises := True;
+   end Arm_Element_Preflight_Exception;
+
+   procedure Clear_Element_Preflight_Exception
+     (Value : in out Cleanup_Test_Element) is
+   begin
+      Value.Preflight_Raises := False;
+   end Clear_Element_Preflight_Exception;
+
+   procedure Arm_Element_Cleanup_Exception
+     (Value : in out Cleanup_Test_Element) is
+   begin
+      Value.Cleanup_Raises := True;
+   end Arm_Element_Cleanup_Exception;
 
    procedure Ownership_Transitions_Are_Exact
      (T : in out AUnit.Test_Cases.Test_Case'Class);
@@ -44,6 +134,14 @@ package body Giflib.Testing.Test_Ownership_Failures is
    procedure Owned_Vector_Ownership_Is_Exact
      (T : in out AUnit.Test_Cases.Test_Case'Class);
    procedure Scoped_Borrows_Block_Reentrant_Mutation
+     (T : in out AUnit.Test_Cases.Test_Case'Class);
+   procedure Element_Borrows_Block_Reentrant_Mutation
+     (T : in out AUnit.Test_Cases.Test_Case'Class);
+   procedure Element_Cleanup_Preflight_Is_Transactional
+     (T : in out AUnit.Test_Cases.Test_Case'Class);
+   procedure Interrupted_Element_Cleanup_Is_Retryable
+     (T : in out AUnit.Test_Cases.Test_Case'Class);
+   procedure Element_Cleanup_Outcomes_Are_Structured
      (T : in out AUnit.Test_Cases.Test_Case'Class);
 
    overriding function Name (T : Test) return AUnit.Message_String is
@@ -76,6 +174,18 @@ package body Giflib.Testing.Test_Ownership_Failures is
       Register_Routine
         (T, Scoped_Borrows_Block_Reentrant_Mutation'Access,
          "allocation_failures.scoped_borrow");
+      Register_Routine
+        (T, Element_Borrows_Block_Reentrant_Mutation'Access,
+         "allocation_failures.element_borrow");
+      Register_Routine
+        (T, Element_Cleanup_Preflight_Is_Transactional'Access,
+         "allocation_failures.element_preflight");
+      Register_Routine
+        (T, Interrupted_Element_Cleanup_Is_Retryable'Access,
+         "allocation_failures.element_cleanup_retry");
+      Register_Routine
+        (T, Element_Cleanup_Outcomes_Are_Structured'Access,
+         "allocation_failures.element_cleanup_outcome");
    end Register_Tests;
 
    procedure Ownership_Transitions_Are_Exact
@@ -95,6 +205,22 @@ package body Giflib.Testing.Test_Ownership_Failures is
    is separate;
 
    procedure Scoped_Borrows_Block_Reentrant_Mutation
+     (T : in out AUnit.Test_Cases.Test_Case'Class)
+   is separate;
+
+   procedure Element_Borrows_Block_Reentrant_Mutation
+     (T : in out AUnit.Test_Cases.Test_Case'Class)
+   is separate;
+
+   procedure Element_Cleanup_Preflight_Is_Transactional
+     (T : in out AUnit.Test_Cases.Test_Case'Class)
+   is separate;
+
+   procedure Interrupted_Element_Cleanup_Is_Retryable
+     (T : in out AUnit.Test_Cases.Test_Case'Class)
+   is separate;
+
+   procedure Element_Cleanup_Outcomes_Are_Structured
      (T : in out AUnit.Test_Cases.Test_Case'Class)
    is separate;
 

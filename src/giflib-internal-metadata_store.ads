@@ -1,8 +1,10 @@
 with Giflib.Metadata;
 with Giflib.Results;
 with Giflib.Streams;
-with Giflib.Internal.Owned_Element_Vectors;
+with Giflib.Internal.Owned_Arrays;
+with Giflib.Internal.Owned_Vectors;
 with Giflib.Internal.Ownership;
+with Giflib.Internal.Cleanup;
 
 package Giflib.Internal.Metadata_Store is
    pragma Preelaborate;
@@ -11,10 +13,12 @@ package Giflib.Internal.Metadata_Store is
 
    function Release
      (Object : in out Store;
-      Budget : aliased in out Ownership.Byte_Budget) return Boolean;
-   --  A foreign Budget returns False without changing Object, so cleanup can
-   --  be retried with the owning ledger. A same-ledger bookkeeping failure
-   --  still frees and clears Object and is recorded by the ledger.
+      Budget : aliased in out Ownership.Byte_Budget)
+      return Cleanup.Cleanup_Outcome;
+   --  A foreign Budget reports Cleanup_Owner_Mismatch without changing Object,
+   --  so cleanup can be retried with the owning ledger. A same-ledger
+   --  bookkeeping failure still frees and clears Object and is recorded by the
+   --  ledger and the returned cleanup status.
 
    function Start
      (Object             : in out Store;
@@ -67,24 +71,35 @@ private
       Length : Natural range 1 .. 255 := 1;
       Data : Streams.Byte_Array (1 .. 255) := [others => 0];
    end record;
-   function Release_Payload
-     (Element : in out Payload_Chunk;
-      Budget : aliased in out Ownership.Byte_Budget) return Boolean;
-   package Payload_Chunks is new Owned_Element_Vectors
-     (Element_Type => Payload_Chunk,
-      Release_Contents => Release_Payload);
+   type Payload_Chunk_Array is
+     array (Positive range <>) of Payload_Chunk;
+   package Payload_Storage is new Owned_Arrays
+     (Positive, Payload_Chunk, Payload_Chunk_Array,
+      (Length => 1, Data => [others => 0]));
+   package Payload_Chunks is new Owned_Vectors
+     (Element_Type => Payload_Chunk, Storage => Payload_Storage);
 
-   type Extension_Node is limited record
+   type Extension_Node is record
       Info : Metadata.Extension_Info;
-      Chunks : Payload_Chunks.Handle;
+      First_Chunk : Natural := 0;
+      Chunk_Count : Natural := 0;
       Retained_Length : Byte_Count := 0;
    end record;
-   function Release_Node
-     (Element : in out Extension_Node;
-      Budget : aliased in out Ownership.Byte_Budget) return Boolean;
-   package Extension_Nodes is new Owned_Element_Vectors
-     (Element_Type => Extension_Node,
-      Release_Contents => Release_Node);
+   type Extension_Node_Array is
+     array (Positive range <>) of Extension_Node;
+   package Extension_Storage is new Owned_Arrays
+     (Positive, Extension_Node, Extension_Node_Array,
+      (Info =>
+         (Kind => Metadata.Unknown_Extension,
+          Offset => 0,
+          Before_Frame => 0,
+          Payload_Length => 0,
+          Sub_Block_Count => 0,
+          Label => 0),
+       First_Chunk => 0, Chunk_Count => 0,
+       Retained_Length => 0));
+   package Extension_Nodes is new Owned_Vectors
+     (Element_Type => Extension_Node, Storage => Extension_Storage);
 
    type Transaction_State is (Idle, Ignoring, Building);
    type Pending_Extension (State : Transaction_State := Idle) is record
@@ -98,8 +113,8 @@ private
 
    type Store is limited record
       Entries : Extension_Nodes.Handle;
+      Chunks : Payload_Chunks.Handle;
       Retained_Bytes : Byte_Count := 0;
       Pending : Pending_Extension;
-      Owner : Ownership.Budget_Owner;
    end record;
 end Giflib.Internal.Metadata_Store;

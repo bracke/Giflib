@@ -1,6 +1,7 @@
 with Giflib.Internal.Resource_Cleanup;
 
 package body Giflib.Internal.Encoder_Storage is
+   use type Cleanup.Cleanup_Status;
    function Ensure_Truecolor_Pixels
      (Object : in out Resources;
       Fault : in out Ownership.Fault_State;
@@ -22,7 +23,7 @@ package body Giflib.Internal.Encoder_Storage is
    function LZW_Allocated (Object : Resources) return Boolean is
      (LZW_Encoding.Is_Allocated (Object.LZW_Data));
    function Cleanup_Succeeded (Object : Resources) return Boolean is
-     (not Object.Cleanup_Failed
+     (Object.Cleanup_State = Cleanup.Cleanup_Complete
       and then Is_Released (Object)
       and then Allocated_Bytes (Object) = 0);
    function Is_Released (Object : Resources) return Boolean is
@@ -36,17 +37,28 @@ package body Giflib.Internal.Encoder_Storage is
 
    procedure Release (Object : in out Resources) is
       Status : Resource_Cleanup.Guard
-        (Object.Allocation_Budget'Access, Object.Cleanup_Failed'Access);
-      function Release_Buffer return Boolean is
-        (Owned_Buffers.Release
-           (Object.Truecolor_Buffer, Object.Allocation_Budget));
-      function Release_LZW return Boolean is
-        (LZW_Encoding.Release
-           (Object.LZW_Data, Object.Allocation_Budget));
-      function Release_Quantizer return Boolean is
+        (Object.Allocation_Budget'Access, Object.Cleanup_State'Access);
+      function Release_Buffer return Cleanup.Cleanup_Outcome is
+         Released : constant Boolean := Owned_Buffers.Release
+           (Object.Truecolor_Buffer, Object.Allocation_Budget);
+      begin
+         return Cleanup.From_Release
+           (Released, Owned_Buffers.Is_Allocated (Object.Truecolor_Buffer));
+      end Release_Buffer;
+      function Release_LZW return Cleanup.Cleanup_Outcome is
+         Released : constant Boolean := LZW_Encoding.Release
+           (Object.LZW_Data, Object.Allocation_Budget);
+      begin
+         return Cleanup.From_Release
+           (Released, LZW_Encoding.Is_Allocated (Object.LZW_Data));
+      end Release_LZW;
+      function Release_Quantizer return Cleanup.Cleanup_Outcome is
       begin
          Quantization.Finalize (Object.Quantizer_Data);
-         return Quantization.Cleanup_Succeeded (Object.Quantizer_Data);
+         return
+           (if Quantization.Cleanup_Succeeded (Object.Quantizer_Data)
+            then Cleanup.Success
+            else (Status => Cleanup.Cleanup_Accounting_Failed));
       end Release_Quantizer;
       procedure Try_Buffer is new Resource_Cleanup.Attempt (Release_Buffer);
       procedure Try_LZW is new Resource_Cleanup.Attempt (Release_LZW);

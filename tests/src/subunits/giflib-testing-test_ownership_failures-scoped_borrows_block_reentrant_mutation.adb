@@ -19,6 +19,7 @@ is
    Nested_Borrow_Rejected : Boolean := False;
    Value_Remained_Valid : Boolean := False;
    Object_Release_Rejected : Boolean := False;
+   Object_Exception_Propagated : Boolean := False;
 
    procedure Inspect (Value : Giflib.Streams.Byte_Array) is
       procedure Nested_Inspect (Nested : Giflib.Streams.Byte_Array) is
@@ -30,7 +31,7 @@ is
       begin
          Buffers.Query (Buffer, Nested_Inspect'Access);
       exception
-         when others =>
+         when Ada.Assertions.Assertion_Error | Program_Error =>
             Nested_Borrow_Rejected := True;
       end;
       Release_Rejected := not Buffers.Release (Buffer, Budget);
@@ -82,9 +83,11 @@ begin
    begin
       Objects.Update (Object, Raise_From_Object'Access);
    exception
-      when Constraint_Error => null;
+      when Constraint_Error => Object_Exception_Propagated := True;
    end;
    Assert
-     (not Objects.Is_Borrowed (Object) and then Objects.Release (Object, Budget),
+     (Object_Exception_Propagated
+      and then not Objects.Is_Borrowed (Object)
+      and then Objects.Release (Object, Budget),
       "owned-object borrow was not released during exceptional unwind");
 end Scoped_Borrows_Block_Reentrant_Mutation;

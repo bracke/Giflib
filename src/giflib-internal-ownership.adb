@@ -226,14 +226,4 @@ package body Giflib.Internal.Ownership is
       end;
    end Release_Owned;
 
-   procedure Attempt_Release (Failed : in out Boolean) is
-   begin
-      if not Release_Operation then
-         Failed := True;
-      end if;
-   exception
-      when others =>
-         Failed := True;
-   end Attempt_Release;
-
 end Giflib.Internal.Ownership;

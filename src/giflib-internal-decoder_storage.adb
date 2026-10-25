@@ -1,6 +1,7 @@
 with Giflib.Internal.Resource_Cleanup;
 
 package body Giflib.Internal.Decoder_Storage is
+   use type Cleanup.Cleanup_Status;
    function Ensure_Frame_Scratch
      (Object : in out Resources;
       Fault : in out Ownership.Fault_State;
@@ -46,7 +47,7 @@ package body Giflib.Internal.Decoder_Storage is
    function Frame_Scratch_Length (Object : Resources) return Byte_Count is
      (Owned_Buffers.Length (Object.Frame_Scratch_Buffer));
    function Cleanup_Succeeded (Object : Resources) return Boolean is
-     (not Object.Cleanup_Failed
+     (Object.Cleanup_State = Cleanup.Cleanup_Complete
       and then Is_Released (Object)
       and then Allocated_Bytes (Object) = 0);
    function Is_Released (Object : Resources) return Boolean is
@@ -60,19 +61,39 @@ package body Giflib.Internal.Decoder_Storage is
 
    procedure Release (Object : in out Resources) is
       Status : Resource_Cleanup.Guard
-        (Object.Allocation_Budget'Access, Object.Cleanup_Failed'Access);
-      function Release_Metadata return Boolean is
+        (Object.Allocation_Budget'Access, Object.Cleanup_State'Access);
+      function Release_Metadata return Cleanup.Cleanup_Outcome is
         (Metadata_Store.Release
            (Object.Metadata_Storage, Object.Allocation_Budget));
-      function Release_Canvas return Boolean is
-        (Owned_Buffers.Release (Object.Canvas_Buffer, Object.Allocation_Budget));
-      function Release_Snapshot return Boolean is
-        (Owned_Buffers.Release (Object.Snapshot_Buffer, Object.Allocation_Budget));
-      function Release_Frame_Scratch return Boolean is
-        (Owned_Buffers.Release
-           (Object.Frame_Scratch_Buffer, Object.Allocation_Budget));
-      function Release_LZW return Boolean is
-        (LZW.Release (Object.LZW_Data, Object.Allocation_Budget));
+      function Release_Canvas return Cleanup.Cleanup_Outcome is
+         Released : constant Boolean := Owned_Buffers.Release
+           (Object.Canvas_Buffer, Object.Allocation_Budget);
+      begin
+         return Cleanup.From_Release
+           (Released, Owned_Buffers.Is_Allocated (Object.Canvas_Buffer));
+      end Release_Canvas;
+      function Release_Snapshot return Cleanup.Cleanup_Outcome is
+         Released : constant Boolean := Owned_Buffers.Release
+           (Object.Snapshot_Buffer, Object.Allocation_Budget);
+      begin
+         return Cleanup.From_Release
+           (Released, Owned_Buffers.Is_Allocated (Object.Snapshot_Buffer));
+      end Release_Snapshot;
+      function Release_Frame_Scratch return Cleanup.Cleanup_Outcome is
+         Released : constant Boolean := Owned_Buffers.Release
+           (Object.Frame_Scratch_Buffer, Object.Allocation_Budget);
+      begin
+         return Cleanup.From_Release
+           (Released,
+            Owned_Buffers.Is_Allocated (Object.Frame_Scratch_Buffer));
+      end Release_Frame_Scratch;
+      function Release_LZW return Cleanup.Cleanup_Outcome is
+         Released : constant Boolean :=
+           LZW.Release (Object.LZW_Data, Object.Allocation_Budget);
+      begin
+         return Cleanup.From_Release
+           (Released, LZW.Is_Allocated (Object.LZW_Data));
+      end Release_LZW;
       procedure Try_Metadata is new Resource_Cleanup.Attempt (Release_Metadata);
       procedure Try_Canvas is new Resource_Cleanup.Attempt (Release_Canvas);
       procedure Try_Snapshot is new Resource_Cleanup.Attempt (Release_Snapshot);

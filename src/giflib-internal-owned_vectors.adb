@@ -50,6 +50,14 @@ package body Giflib.Internal.Owned_Vectors is
       Storage.Set_Element (Object.Data, Object.Count, Value);
    end Append;
 
+   procedure Replace
+     (Object : in out Handle;
+      Index : Positive;
+      Value : Element_Type) is
+   begin
+      Storage.Set_Element (Object.Data, Index, Value);
+   end Replace;
+
    function Release
      (Object : in out Handle;
       Budget : aliased in out Ownership.Byte_Budget) return Boolean

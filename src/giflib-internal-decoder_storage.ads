@@ -1,5 +1,6 @@
 with Ada.Finalization;
 with Giflib.Internal.LZW;
+with Giflib.Internal.Cleanup;
 with Giflib.Internal.Metadata_Store;
 with Giflib.Internal.Owned_Buffers;
 with Giflib.Internal.Ownership;
@@ -68,6 +69,7 @@ private
       Snapshot_Buffer : Owned_Buffers.Handle;
       Frame_Scratch_Buffer : Owned_Buffers.Handle;
       LZW_Data : LZW.Workspace_Handle;
-      Cleanup_Failed : aliased Boolean := False;
+      Cleanup_State : aliased Cleanup.Cleanup_Status :=
+        Cleanup.Cleanup_Complete;
    end record;
 end Giflib.Internal.Decoder_Storage;

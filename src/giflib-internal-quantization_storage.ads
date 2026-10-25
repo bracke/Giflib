@@ -1,4 +1,5 @@
 with Ada.Finalization;
+with Giflib.Internal.Cleanup;
 with Giflib.Internal.Ownership;
 private with Giflib.Internal.Owned_Arrays;
 private with Giflib.Internal.Owned_Objects;
@@ -66,6 +67,7 @@ private
       Nearest_Cache_Data : Nearest_Cache_Ownership.Handle;
       Error_Data : Error_Ownership.Handle;
       Allocation_Budget : aliased Ownership.Byte_Budget;
-      Cleanup_Failed : aliased Boolean := False;
+      Cleanup_State : aliased Cleanup.Cleanup_Status :=
+        Cleanup.Cleanup_Complete;
    end record;
 end Giflib.Internal.Quantization_Storage;

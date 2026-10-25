@@ -34,6 +34,13 @@ package Giflib.Internal.Owned_Vectors is
      with Pre => Length (Object) < Capacity (Object),
           Post => Length (Object) = Length (Object)'Old + 1;
 
+   procedure Replace
+     (Object : in out Handle;
+      Index : Positive;
+      Value : Element_Type)
+     with Pre => Index <= Length (Object),
+          Post => Length (Object) = Length (Object)'Old;
+
    function Release
      (Object : in out Handle;
       Budget : aliased in out Ownership.Byte_Budget) return Boolean;
