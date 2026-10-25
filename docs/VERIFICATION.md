@@ -49,6 +49,7 @@ The following production units are in SPARK mode:
   row/channel spans, and two-row error-buffer indices used by the production
   quantizer.
 - `Giflib.Decoding.State_Arithmetic`: private decoder lifecycle guards.
+- `Giflib.Decoding.Session_Arithmetic`: complete header/frame session transitions.
 - `Giflib.Encoding.State_Arithmetic`: private encoder lifecycle guards.
 - `Giflib.Internal.Session_Arithmetic`: shared extension-count and warning
   capacity arithmetic without codec dependencies.

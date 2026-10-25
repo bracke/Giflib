@@ -102,9 +102,13 @@ Giflib.Internal.Quantization_Buffer_Arithmetic -- proved dither-buffer indices
 Giflib.Internal.Quantization_Pixels -- pixel-format access and transparency policy
 Giflib.Internal.Quantization_Dithering -- Floyd-Steinberg row state and diffusion
 Giflib.Internal.Quantization_Palette -- median-cut palette construction
+Giflib.Internal.Quantization_Mapping -- nearest-color selection and cache policy
+Giflib.Internal.Quantization_Storage.*_Operations -- checked workspace services
 Giflib.Internal.Interlacing   -- pass addressing
 Giflib.Internal.Stream_Arithmetic -- proved transfer windows/progress
 Giflib.Decoding.State_Arithmetic -- private proved decoder lifecycle guards
+Giflib.Decoding.Session_Arithmetic -- proved complete decoder state transitions
+Giflib.Decoding.Session_Transitions -- private complete decoder state commits
 Giflib.Encoding.State_Arithmetic -- private proved encoder lifecycle guards
 Giflib.Encoding.Frame_Pipeline -- private shared indexed-frame orchestration
 Giflib.Internal.Session_Arithmetic -- proved shared count/warning capacity
@@ -399,6 +403,10 @@ Workspace services distinguish unavailable/corrupt storage from exhausted work
 budgets. They never return a plausible palette index after a failed charge, and
 callers construct work-limit diagnostics only after the meter has recorded that
 failure.
+Workspace service contracts state that a work-limit outcome implies a failed
+work meter. Cache capacity and slot selection remain private to the cache
+service. Pixel access validates coordinates and byte extent without raising
+before reading caller-owned storage.
 
 Optimization is a separate opt-in layer: trim unchanged regions, select subrectangles, consider transparent unchanged pixels, deduplicate safe frame segments, and optimize LZW/palette size. Its contract is *rendered equivalence*, not necessarily exact preservation of frame structure or extensions. Disposal and delay semantics must remain observably equivalent under the documented reference renderer. Lossless indexed pass-through must be available independently of optimization.
 
