@@ -1,8 +1,7 @@
 with Giflib.Metadata;
 with Giflib.Results;
 with Giflib.Streams;
-with Giflib.Internal.Owned_Arrays;
-with Giflib.Internal.Owned_Vectors;
+with Giflib.Internal.Owned_Element_Vectors;
 with Giflib.Internal.Ownership;
 
 package Giflib.Internal.Metadata_Store is
@@ -68,26 +67,24 @@ private
       Length : Natural range 1 .. 255 := 1;
       Data : Streams.Byte_Array (1 .. 255) := [others => 0];
    end record;
-   type Payload_Chunk_Access is access Payload_Chunk;
-   type Chunk_Index_Array is array (Positive range <>) of Payload_Chunk_Access;
-   package Chunk_Index_Storage is new Owned_Arrays
-     (Positive, Payload_Chunk_Access, Chunk_Index_Array, null);
-   package Chunk_Indexes is new Owned_Vectors
-     (Element_Type => Payload_Chunk_Access,
-      Storage => Chunk_Index_Storage);
+   function Release_Payload
+     (Element : in out Payload_Chunk;
+      Budget : aliased in out Ownership.Byte_Budget) return Boolean;
+   package Payload_Chunks is new Owned_Element_Vectors
+     (Element_Type => Payload_Chunk,
+      Release_Contents => Release_Payload);
 
    type Extension_Node is limited record
       Info : Metadata.Extension_Info;
-      Chunks : Chunk_Indexes.Handle;
+      Chunks : Payload_Chunks.Handle;
       Retained_Length : Byte_Count := 0;
    end record;
-   type Extension_Node_Access is access Extension_Node;
-   type Extension_Index_Array is array (Positive range <>) of Extension_Node_Access;
-   package Extension_Index_Storage is new Owned_Arrays
-     (Positive, Extension_Node_Access, Extension_Index_Array, null);
-   package Extension_Indexes is new Owned_Vectors
-     (Element_Type => Extension_Node_Access,
-      Storage => Extension_Index_Storage);
+   function Release_Node
+     (Element : in out Extension_Node;
+      Budget : aliased in out Ownership.Byte_Budget) return Boolean;
+   package Extension_Nodes is new Owned_Element_Vectors
+     (Element_Type => Extension_Node,
+      Release_Contents => Release_Node);
 
    type Transaction_State is (Idle, Ignoring, Building);
    type Pending_Extension (State : Transaction_State := Idle) is record
@@ -100,7 +97,7 @@ private
    end record;
 
    type Store is limited record
-      Entries : Extension_Indexes.Handle;
+      Entries : Extension_Nodes.Handle;
       Retained_Bytes : Byte_Count := 0;
       Pending : Pending_Extension;
       Owner : Ownership.Budget_Owner;

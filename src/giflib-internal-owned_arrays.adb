@@ -51,7 +51,7 @@ package body Giflib.Internal.Owned_Arrays is
       New_Charge : Byte_Count;
       Old_Charge : Byte_Count := 0;
    begin
-      if Object.Borrowed then
+      if Borrow_Guards.Is_Active (Object.Borrow) then
          return
            (Status => Ownership.Allocation_Borrow_Error,
             Attempted => Ownership.Used (Budget));
@@ -134,7 +134,7 @@ package body Giflib.Internal.Owned_Arrays is
    is
       Released : Boolean;
    begin
-      if Object.Borrowed then
+      if Borrow_Guards.Is_Active (Object.Borrow) then
          return False;
       elsif not Ownership.Matches (Object.Owner, Budget) then
          return False;
@@ -153,7 +153,7 @@ package body Giflib.Internal.Owned_Arrays is
      (Object.Pointer /= null);
 
    function Is_Borrowed (Object : Handle) return Boolean is
-     (Object.Borrowed);
+     (Borrow_Guards.Is_Active (Object.Borrow));
 
    function Matches
      (Object : Handle;
@@ -173,42 +173,26 @@ package body Giflib.Internal.Owned_Arrays is
      (Object : in out Handle;
       Process : not null access procedure (Value : Element_Array))
    is
-      Acquired : Boolean := False;
    begin
-      if Object.Borrowed then
-         raise Program_Error with "owned array is already borrowed";
-      end if;
-      Object.Borrowed := True;
-      Acquired := True;
-      Process (Object.Pointer.all);
-      Object.Borrowed := False;
-   exception
-      when others =>
-         if Acquired then
-            Object.Borrowed := False;
-         end if;
-         raise;
+      declare
+         Lease : Borrow_Guards.Guard (Object.Borrow'Access);
+         pragma Unreferenced (Lease);
+      begin
+         Process (Object.Pointer.all);
+      end;
    end Query;
 
    procedure Update
      (Object : in out Handle;
       Process : not null access procedure (Value : in out Element_Array))
    is
-      Acquired : Boolean := False;
    begin
-      if Object.Borrowed then
-         raise Program_Error with "owned array is already borrowed";
-      end if;
-      Object.Borrowed := True;
-      Acquired := True;
-      Process (Object.Pointer.all);
-      Object.Borrowed := False;
-   exception
-      when others =>
-         if Acquired then
-            Object.Borrowed := False;
-         end if;
-         raise;
+      declare
+         Lease : Borrow_Guards.Guard (Object.Borrow'Access);
+         pragma Unreferenced (Lease);
+      begin
+         Process (Object.Pointer.all);
+      end;
    end Update;
 
    procedure Query_Update
@@ -218,30 +202,17 @@ package body Giflib.Internal.Owned_Arrays is
         (Source_Value : Element_Array;
          Target_Value : in out Element_Array))
    is
-      Source_Acquired : Boolean := False;
-      Target_Acquired : Boolean := False;
    begin
-      if Source.Borrowed or else Target.Borrowed then
-         raise Program_Error with "owned array is already borrowed";
-      elsif Source.Pointer = Target.Pointer then
+      if Source.Pointer = Target.Pointer then
          raise Program_Error with "owned array cannot borrow itself twice";
       end if;
-      Source.Borrowed := True;
-      Source_Acquired := True;
-      Target.Borrowed := True;
-      Target_Acquired := True;
-      Process (Source.Pointer.all, Target.Pointer.all);
-      Target.Borrowed := False;
-      Source.Borrowed := False;
-   exception
-      when others =>
-         if Target_Acquired then
-            Target.Borrowed := False;
-         end if;
-         if Source_Acquired then
-            Source.Borrowed := False;
-         end if;
-         raise;
+      declare
+         Source_Lease : Borrow_Guards.Guard (Source.Borrow'Access);
+         Target_Lease : Borrow_Guards.Guard (Target.Borrow'Access);
+         pragma Unreferenced (Source_Lease, Target_Lease);
+      begin
+         Process (Source.Pointer.all, Target.Pointer.all);
+      end;
    end Query_Update;
 
    function Element
@@ -255,7 +226,7 @@ package body Giflib.Internal.Owned_Arrays is
       Value : Element_Type)
    is
    begin
-      if Object.Borrowed then
+      if Borrow_Guards.Is_Active (Object.Borrow) then
          raise Program_Error with "owned array is already borrowed";
       end if;
       Object.Pointer (Index) := Value;

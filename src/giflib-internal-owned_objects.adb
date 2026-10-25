@@ -18,7 +18,7 @@ package body Giflib.Internal.Owned_Objects is
       Outcome : Ownership.Allocation_Outcome;
 
    begin
-      if Object.Borrowed then
+      if Borrow_Guards.Is_Active (Object.Borrow) then
          return
            (Status => Ownership.Allocation_Borrow_Error,
             Attempted => Ownership.Used (Budget));
@@ -53,7 +53,7 @@ package body Giflib.Internal.Owned_Objects is
    is
       Released : Boolean;
    begin
-      if Object.Borrowed then
+      if Borrow_Guards.Is_Active (Object.Borrow) then
          return False;
       elsif not Ownership.Matches (Object.Owner, Budget) then
          return False;
@@ -72,47 +72,55 @@ package body Giflib.Internal.Owned_Objects is
      (Object.Pointer /= null);
 
    function Is_Borrowed (Object : Handle) return Boolean is
-     (Object.Borrowed);
+     (Borrow_Guards.Is_Active (Object.Borrow));
 
    procedure Query
      (Object : in out Handle;
       Process : not null access procedure (Value : Element_Type))
    is
-      Acquired : Boolean := False;
    begin
-      if Object.Borrowed then
-         raise Program_Error with "owned object is already borrowed";
-      end if;
-      Object.Borrowed := True;
-      Acquired := True;
-      Process (Object.Pointer.all);
-      Object.Borrowed := False;
-   exception
-      when others =>
-         if Acquired then
-            Object.Borrowed := False;
-         end if;
-         raise;
+      declare
+         Lease : Borrow_Guards.Guard (Object.Borrow'Access);
+         pragma Unreferenced (Lease);
+      begin
+         Process (Object.Pointer.all);
+      end;
    end Query;
 
    procedure Update
      (Object : in out Handle;
       Process : not null access procedure (Value : in out Element_Type))
    is
-      Acquired : Boolean := False;
    begin
-      if Object.Borrowed then
-         raise Program_Error with "owned object is already borrowed";
-      end if;
-      Object.Borrowed := True;
-      Acquired := True;
-      Process (Object.Pointer.all);
-      Object.Borrowed := False;
-   exception
-      when others =>
-         if Acquired then
-            Object.Borrowed := False;
-         end if;
-         raise;
+      declare
+         Lease : Borrow_Guards.Guard (Object.Borrow'Access);
+         pragma Unreferenced (Lease);
+      begin
+         Process (Object.Pointer.all);
+      end;
    end Update;
+
+   package body Result_Operations is
+      function Query
+        (Object : in out Handle;
+         Process : not null access function
+           (Value : Element_Type) return Result_Type) return Result_Type
+      is
+         Lease : Borrow_Guards.Guard (Object.Borrow'Access);
+         pragma Unreferenced (Lease);
+      begin
+         return Process (Object.Pointer.all);
+      end Query;
+
+      function Update
+        (Object : in out Handle;
+         Process : not null access function
+           (Value : in out Element_Type) return Result_Type) return Result_Type
+      is
+         Lease : Borrow_Guards.Guard (Object.Borrow'Access);
+         pragma Unreferenced (Lease);
+      begin
+         return Process (Object.Pointer.all);
+      end Update;
+   end Result_Operations;
 end Giflib.Internal.Owned_Objects;

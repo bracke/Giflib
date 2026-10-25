@@ -1,4 +1,5 @@
 with Giflib.Internal.Ownership;
+with Giflib.Internal.Borrow_Guards;
 
 generic
    type Index_Type is range <>;
@@ -94,6 +95,6 @@ private
    type Handle is limited record
       Pointer : Element_Array_Access := null;
       Owner : Ownership.Budget_Owner;
-      Borrowed : Boolean := False;
+      Borrow : aliased Borrow_Guards.State;
    end record;
 end Giflib.Internal.Owned_Arrays;

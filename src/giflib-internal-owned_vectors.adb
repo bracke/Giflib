@@ -70,6 +70,11 @@ package body Giflib.Internal.Owned_Vectors is
    function Capacity (Object : Handle) return Natural is
      (Storage.Length (Object.Data));
 
+   function Matches
+     (Object : Handle;
+      Budget : aliased Ownership.Byte_Budget) return Boolean
+   is (Storage.Matches (Object.Data, Budget));
+
    function Element
      (Object : Handle;
       Index : Positive) return Element_Type

@@ -75,6 +75,7 @@ Giflib.Streams
 Giflib.Version
 Giflib.Internal
 Giflib.Internal.Blocks
+Giflib.Internal.Borrow_Guards
 Giflib.Internal.Budget_Arithmetic
 Giflib.Internal.Decoder_Storage
 Giflib.Internal.Encoder_Storage
@@ -84,6 +85,7 @@ Giflib.Internal.LZW_Encoding
 Giflib.Internal.Metadata_Store
 Giflib.Internal.Owned_Arrays
 Giflib.Internal.Owned_Buffers
+Giflib.Internal.Owned_Element_Vectors
 Giflib.Internal.Owned_Objects
 Giflib.Internal.Owned_Vectors
 Giflib.Internal.Ownership

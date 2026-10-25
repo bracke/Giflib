@@ -24,6 +24,9 @@ package Giflib.Internal.Owned_Vectors is
    function Is_Allocated (Object : Handle) return Boolean;
    function Length (Object : Handle) return Natural;
    function Capacity (Object : Handle) return Natural;
+   function Matches
+     (Object : Handle;
+      Budget : aliased Ownership.Byte_Budget) return Boolean;
 
    procedure Append
      (Object : in out Handle;

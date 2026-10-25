@@ -1,4 +1,5 @@
 with Giflib.Internal.Ownership;
+with Giflib.Internal.Borrow_Guards;
 
 generic
    type Element_Type is limited private;
@@ -34,11 +35,27 @@ package Giflib.Internal.Owned_Objects is
       Process : not null access procedure (Value : in out Element_Type))
      with Pre => Is_Allocated (Object) and then not Is_Borrowed (Object);
 
+   generic
+      type Result_Type is private;
+   package Result_Operations is
+      function Query
+        (Object : in out Handle;
+         Process : not null access function
+           (Value : Element_Type) return Result_Type) return Result_Type
+        with Pre => Is_Allocated (Object) and then not Is_Borrowed (Object);
+
+      function Update
+        (Object : in out Handle;
+         Process : not null access function
+           (Value : in out Element_Type) return Result_Type) return Result_Type
+        with Pre => Is_Allocated (Object) and then not Is_Borrowed (Object);
+   end Result_Operations;
+
 private
    type Element_Access is access all Element_Type;
    type Handle is limited record
       Pointer : Element_Access := null;
       Owner : Ownership.Budget_Owner;
-      Borrowed : Boolean := False;
+      Borrow : aliased Borrow_Guards.State;
    end record;
 end Giflib.Internal.Owned_Objects;
