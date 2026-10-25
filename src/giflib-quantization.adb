@@ -4,9 +4,8 @@ with Giflib.Internal.Work_Budgets;
 with Giflib.Internal.Geometry_Arithmetic;
 with Giflib.Internal.Quantization_Arithmetic;
 with Giflib.Internal.Quantization_Buffer_Arithmetic;
-with Giflib.Internal.Quantization_Dithering;
-with Giflib.Internal.Quantization_Palette;
 with Giflib.Internal.Quantization_Pixels;
+with Giflib.Internal.Quantization_Storage.Operations;
 
 package body Giflib.Quantization is
    use type Internal.Ownership.Allocation_Status;
@@ -14,18 +13,11 @@ package body Giflib.Quantization is
 
    package Arithmetic renames Internal.Quantization_Arithmetic;
    package Buffer_Arithmetic renames Internal.Quantization_Buffer_Arithmetic;
-   package Dithering renames Internal.Quantization_Dithering;
-   package Palette_Builder renames Internal.Quantization_Palette;
    package Pixels renames Internal.Quantization_Pixels;
    package Storage renames Internal.Quantization_Storage;
-   package Histogram_Ownership renames Storage.Histogram_Ownership;
-   package Nearest_Cache_Ownership renames Storage.Nearest_Cache_Ownership;
-   package Error_Ownership renames Storage.Error_Ownership;
-   subtype Histogram_State_Access is Storage.Histogram_State_Access;
-   subtype Nearest_Cache_Access is Storage.Nearest_Cache_Access;
-   subtype Error_Array_Access is Storage.Error_Array_Access;
-   Nearest_Cache_Size : constant := Storage.Nearest_Cache_Size;
-   subtype Histogram_Index is Palette_Builder.Histogram_Index;
+   package Storage_Operations renames
+     Internal.Quantization_Storage.Operations;
+   subtype Histogram_Index is Arithmetic.Histogram_Index;
 
    subtype Work_Tracker is Internal.Work_Budgets.Meter;
 
@@ -38,8 +30,6 @@ package body Giflib.Quantization is
       Internal.Work_Budgets.Try_Charge (Tracker, Amount, Accepted);
       return Accepted;
    end Charge;
-
-   Nearest_Cache_Probe_Limit : constant := 8;
 
    function Allocated_Bytes (Context : Workspace) return Byte_Count is
    begin
@@ -71,20 +61,14 @@ package body Giflib.Quantization is
       Constraints : Limits.Limit_Set) return Results.Result
    is
       Outcome : Internal.Ownership.Allocation_Outcome;
-      Budget : Internal.Ownership.Byte_Budget renames
-        Storage.Budget (Context.Resources).all;
-      Fault : Internal.Ownership.Fault_State renames Context.Allocation_Fault;
 
    begin
-      if Nearest_Cache_Ownership.Is_Allocated
-        (Storage.Nearest_Cache (Context.Resources).all)
-      then
+      if Storage.Nearest_Cache_Allocated (Context.Resources) then
          return Results.Success;
       end if;
-      Outcome := Nearest_Cache_Ownership.Ensure
-        (Storage.Nearest_Cache (Context.Resources).all,
-         Budget,
-         Fault,
+      Outcome := Storage.Ensure_Nearest_Cache
+        (Context.Resources,
+         Context.Allocation_Fault,
          Constraints.Max_Allocation_Bytes);
       if Outcome.Status /= Internal.Ownership.Allocation_Ready then
          return Allocation_Result (Constraints, Outcome);
@@ -97,20 +81,14 @@ package body Giflib.Quantization is
       Constraints : Limits.Limit_Set) return Results.Result
    is
       Outcome : Internal.Ownership.Allocation_Outcome;
-      Budget : Internal.Ownership.Byte_Budget renames
-        Storage.Budget (Context.Resources).all;
-      Fault : Internal.Ownership.Fault_State renames Context.Allocation_Fault;
 
    begin
-      if Histogram_Ownership.Is_Allocated
-        (Storage.Histogram (Context.Resources).all)
-      then
+      if Storage.Histogram_Allocated (Context.Resources) then
          return Results.Success;
       end if;
-      Outcome := Histogram_Ownership.Ensure
-        (Storage.Histogram (Context.Resources).all,
-         Budget,
-         Fault,
+      Outcome := Storage.Ensure_Histogram
+        (Context.Resources,
+         Context.Allocation_Fault,
          Constraints.Max_Allocation_Bytes);
       if Outcome.Status /= Internal.Ownership.Allocation_Ready then
          return Allocation_Result (Constraints, Outcome);
@@ -126,21 +104,15 @@ package body Giflib.Quantization is
       Required_Length : constant Positive :=
         Buffer_Arithmetic.Error_Buffer_Length (Width);
       Outcome : Internal.Ownership.Allocation_Outcome;
-      Budget : Internal.Ownership.Byte_Budget renames
-        Storage.Budget (Context.Resources).all;
-      Fault : Internal.Ownership.Fault_State renames Context.Allocation_Fault;
 
    begin
-      if Error_Ownership.Length (Storage.Errors (Context.Resources).all)
-        >= Required_Length
+      if Storage.Error_Length (Context.Resources) >= Required_Length
       then
          return Results.Success;
       end if;
-      Outcome := Error_Ownership.Ensure
-        (Storage.Errors (Context.Resources).all,
-         Budget,
-         Fault,
-         First => 0,
+      Outcome := Storage.Ensure_Errors
+        (Context.Resources,
+         Context.Allocation_Fault,
          Last => Required_Length - 1,
          Maximum => Constraints.Max_Allocation_Bytes);
       if Outcome.Status /= Internal.Ownership.Allocation_Ready then

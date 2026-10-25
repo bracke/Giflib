@@ -20,7 +20,7 @@ begin
    if not Object.Has_Pending_Frame then
       return Fail (Object, Errors.Make (Errors.Internal_Invariant_Failed));
    end if;
-   State_Arithmetic.Begin_Frame (Object.Current_State);
+   State_Arithmetic.Begin_Frame (Object);
    Outcome := Internal.Bytes.Read_Byte
      (Object.Input.all, Minimum_Code_Size, Image_Data_Block);
    if not Results.Succeeded (Outcome) then

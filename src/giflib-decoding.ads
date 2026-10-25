@@ -157,7 +157,7 @@ private
       Total_Decoded_Pixels : Pixel_Count := 0;
       Total_Compressed_Bytes : Byte_Count := 0;
       Extensions_Seen : Natural := 0;
-      Resources : aliased Decoder_Resources;
+      Resources : Decoder_Resources;
       Pending_Control : Frames.Graphic_Control := Frames.Default_Control;
       Has_Pending_Control : Boolean := False;
       Pending_Frame : Prepared_Frame;

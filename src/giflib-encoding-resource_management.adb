@@ -1,13 +1,10 @@
 with Giflib.Internal.Budget_Arithmetic;
 with Giflib.Internal.Diagnostics;
-with Giflib.Internal.LZW_Encoding;
-with Giflib.Internal.Owned_Buffers;
 with Giflib.Internal.Resource_Diagnostics;
 
 package body Giflib.Encoding.Resource_Management is
    use type Internal.Ownership.Allocation_Status;
    use type Errors.Error_Code;
-   package Buffers renames Internal.Owned_Buffers;
 
    procedure Release (Resources : in out Encoder_Resources) is
    begin
@@ -66,9 +63,8 @@ package body Giflib.Encoding.Resource_Management is
       if Required > Byte_Count (Natural'Last) then
          return Results.Failure (Errors.Make (Errors.Integer_Overflow));
       end if;
-      Allocation := Buffers.Ensure
-        (Internal.Encoder_Storage.Truecolor_Pixels (Object.Resources).all,
-         Internal.Encoder_Storage.Budget (Object.Resources).all,
+      Allocation := Internal.Encoder_Storage.Ensure_Truecolor_Pixels
+        (Object.Resources,
          Object.Allocation_Fault,
          Required,
          Outer_Maximum (Object));
@@ -83,14 +79,12 @@ package body Giflib.Encoding.Resource_Management is
    is
       Allocation : Internal.Ownership.Allocation_Outcome;
    begin
-      if Internal.LZW_Encoding.Is_Allocated
-        (Internal.Encoder_Storage.LZW_Workspace (Object.Resources).all)
+      if Internal.Encoder_Storage.LZW_Allocated (Object.Resources)
       then
          return Results.Success;
       end if;
-      Allocation := Internal.LZW_Encoding.Ensure
-        (Internal.Encoder_Storage.LZW_Workspace (Object.Resources).all,
-         Internal.Encoder_Storage.Budget (Object.Resources).all,
+      Allocation := Internal.Encoder_Storage.Ensure_LZW
+        (Object.Resources,
          Object.Allocation_Fault,
          Outer_Maximum (Object));
       if Allocation.Status /= Internal.Ownership.Allocation_Ready then

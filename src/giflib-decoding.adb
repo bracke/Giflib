@@ -1,13 +1,12 @@
 with Giflib.Decoding.Extensions;
 with Giflib.Decoding.Resource_Management;
+with Giflib.Internal.Decoder_Storage.Image_Operations;
+with Giflib.Internal.Decoder_Storage.Metadata_Operations;
 with Giflib.Internal.Blocks;
 with Giflib.Internal.Bytes;
 with Giflib.Internal.Diagnostics;
-with Giflib.Internal.Compositing;
 with Giflib.Internal.Container;
 with Giflib.Internal.Geometry_Arithmetic;
-with Giflib.Internal.Image_Data;
-with Giflib.Internal.Owned_Buffers;
 with Giflib.Internal.Pixel_Arithmetic;
 with Giflib.Decoding.State_Arithmetic;
 with Giflib.Internal.Stream_Arithmetic;
@@ -280,14 +279,13 @@ package body Giflib.Decoding is
                Boolean'Pos (Parsed.Has_Global_Palette)));
       end if;
       Header := Parsed;
-      Object.Header_Data := Parsed;
       if Object.Options.Mode = Composited_RGBA then
-         Outcome := Resource_Management.Setup_Canvas (Object);
+         Outcome := Resource_Management.Setup_Canvas (Object, Parsed);
          if not Results.Succeeded (Outcome) then
             return Fail (Object, Outcome.First_Error);
          end if;
       end if;
-      State_Arithmetic.Header_Parsed (Object.Current_State);
+      State_Arithmetic.Header_Parsed (Object, Parsed);
       return Results.Success;
    end Read_Header;
 
@@ -388,15 +386,14 @@ package body Giflib.Decoding is
                       Limit => Frame_Count_Limit,
                       others => <>)));
             end if;
-            State_Arithmetic.Frame_Discovered (Object.Current_State);
+            State_Arithmetic.Frame_Discovered (Object);
             Outcome := Prepare_Frame (Object);
             if not Results.Succeeded (Outcome) then
                return Fail (Object, Outcome.First_Error);
             end if;
-            Object.Has_Pending_Frame := True;
             Pixels := Internal.Geometry_Arithmetic.Area
               (Object.Pending_Frame.Width, Object.Pending_Frame.Height);
-            State_Arithmetic.Await_Frame_Decision (Object.Current_State);
+            State_Arithmetic.Await_Frame_Decision (Object);
             return Deliver_Event
               (Object,
                Event,
@@ -535,11 +532,7 @@ package body Giflib.Decoding is
             Control => Prepared.Control));
    begin
       Info := Produced;
-      Object.Pending_Control := Frames.Default_Control;
-      Object.Has_Pending_Control := False;
-      Object.Has_Pending_Frame := False;
-      Object.Frames_Seen := Object.Frames_Seen + 1;
-      State_Arithmetic.Complete_Frame (Object.Current_State);
+      State_Arithmetic.Complete_Frame (Object);
       return Results.Success;
    end Complete_Frame;
 
@@ -619,7 +612,7 @@ package body Giflib.Decoding is
    end Looping;
 
    function Retained_Extension_Count (Object : Decoder) return Natural is
-     (Internal.Decoder_Storage.Metadata_Count (Object.Resources));
+     (Internal.Decoder_Storage.Metadata_Operations.Count (Object.Resources));
 
    function Retained_Extension_Info
      (Object : Decoder;
@@ -627,7 +620,7 @@ package body Giflib.Decoding is
       Info : out Metadata.Extension_Info) return Results.Result
    is
    begin
-      return Internal.Decoder_Storage.Metadata_Info
+      return Internal.Decoder_Storage.Metadata_Operations.Info_At
         (Object.Resources, Index, Info);
    end Retained_Extension_Info;
 
@@ -638,7 +631,7 @@ package body Giflib.Decoding is
       Count : out Byte_Count) return Results.Result
    is
    begin
-      return Internal.Decoder_Storage.Copy_Metadata_Payload
+      return Internal.Decoder_Storage.Metadata_Operations.Copy_Payload
         (Object.Resources, Index, Target, Count);
    end Copy_Retained_Extension_Payload;
 
@@ -648,7 +641,7 @@ package body Giflib.Decoding is
       Count : out Natural) return Results.Result
    is
    begin
-      return Internal.Decoder_Storage.Metadata_Chunk_Count
+      return Internal.Decoder_Storage.Metadata_Operations.Chunk_Count
         (Object.Resources, Index, Count);
    end Retained_Extension_Chunk_Count;
 
@@ -660,7 +653,7 @@ package body Giflib.Decoding is
       Count : out Byte_Count) return Results.Result
    is
    begin
-      return Internal.Decoder_Storage.Copy_Metadata_Chunk
+      return Internal.Decoder_Storage.Metadata_Operations.Copy_Chunk
         (Object.Resources, Index, Chunk_Index, Target, Count);
    end Copy_Retained_Extension_Chunk;
 

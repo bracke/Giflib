@@ -1,3 +1,5 @@
+with Giflib.Internal.Encoder_Storage.Quantization_Operations;
+
 separate (Giflib.Encoding)
 function Add_Truecolor_Frame
   (Object : in out Encoder;
@@ -12,6 +14,19 @@ is
    Adjusted : Frame_Info := Info;
    Selection : Palette_Selection := Use_Local_Palette;
    Outcome : Results.Result;
+
+   function Add_Quantized
+     (Pixels : Streams.Byte_Array) return Results.Result
+   is (Add_Indexed_Frame
+         (Object,
+          Adjusted,
+          (if Selection = Use_Local_Palette
+           then (Selection => Use_Local_Palette, Value => Quantized.Palette)
+           else Global_Frame_Palette),
+          Pixels));
+   function Consume_Quantized is new
+     Internal.Encoder_Storage.Quantization_Operations
+       .Consume_Truecolor_Pixels (Add_Quantized);
 begin
    if not State_Arithmetic.Can_Accept_Data (Object.Current_State) then
       return Invalid_Transition (Object);
@@ -58,12 +73,8 @@ begin
    if not Results.Succeeded (Outcome) then
       return Fail_Frame (Object, Outcome.First_Error);
    end if;
-   Outcome := Quantization.Quantize
-     (Internal.Encoder_Storage.Quantizer (Object.Resources).all, Source,
-      Buffers.Value
-        (Internal.Encoder_Storage.Truecolor_Pixels (Object.Resources).all).all
-          (1 .. Natural (Total)),
-      Quantized, Quantize_Options,
+   Outcome := Internal.Encoder_Storage.Quantization_Operations.Quantize
+     (Object.Resources, Source, Total, Quantized, Quantize_Options,
       Resource_Management.Quantization_Constraints (Object));
    if not Results.Succeeded (Outcome) then
       return Fail_Frame
@@ -87,13 +98,5 @@ begin
    then
       Selection := Use_Global_Palette;
    end if;
-   return Add_Indexed_Frame
-     (Object,
-      Adjusted,
-      (if Selection = Use_Local_Palette
-       then (Selection => Use_Local_Palette, Value => Quantized.Palette)
-       else Global_Frame_Palette),
-      Buffers.Value
-        (Internal.Encoder_Storage.Truecolor_Pixels (Object.Resources).all).all
-          (1 .. Natural (Total)));
+   return Consume_Quantized (Object.Resources, Total);
 end Add_Truecolor_Frame;

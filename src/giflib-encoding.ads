@@ -145,7 +145,7 @@ private
       Extensions_Written : Natural := 0;
       Bytes_Written : Byte_Count := 0;
       Compressed_Bytes_Written : Byte_Count := 0;
-      Resources : aliased Encoder_Resources;
+      Resources : Encoder_Resources;
       Diagnostic : Errors.Error := Errors.Make (Errors.No_Error);
       Allocation_Fault : aliased Internal.Ownership.Fault_State;
    end record;

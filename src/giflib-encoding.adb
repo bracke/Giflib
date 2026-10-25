@@ -7,8 +7,6 @@ with Giflib.Internal.Encoding_Arithmetic;
 with Giflib.Encoding.State_Arithmetic;
 with Giflib.Internal.Geometry_Arithmetic;
 with Giflib.Internal.Loop_Extensions;
-with Giflib.Internal.LZW_Encoding;
-with Giflib.Internal.Owned_Buffers;
 with Giflib.Internal.Session_Arithmetic;
 with Giflib.Internal.Wire_Format;
 
@@ -18,7 +16,6 @@ package body Giflib.Encoding is
    use type Errors.Position_State;
    use type Frames.Graphic_Control;
    use type Metadata.Extension_Kind;
-   package Buffers renames Internal.Owned_Buffers;
    package Encoding_Arithmetic renames Internal.Encoding_Arithmetic;
    package Geometry_Arithmetic renames Internal.Geometry_Arithmetic;
    package Session_Arithmetic renames Internal.Session_Arithmetic;
@@ -247,7 +244,7 @@ package body Giflib.Encoding is
             Internal.Loop_Extensions.Encode_Netscape
               (Animations.Raw_Count (Object.Loop_Data)));
          if Results.Succeeded (Outcome) then
-            Object.Extensions_Written := Object.Extensions_Written + 1;
+            State_Arithmetic.Record_Extension (Object);
          end if;
       end if;
       if Results.Succeeded (Outcome) then
@@ -314,8 +311,7 @@ package body Giflib.Encoding is
                                  (Expected => Byte_Count (Object.Constraints.Max_Canvas_Pixels),
                                   Actual => Pixels, Limit => Canvas_Pixel_Limit, others => <>)));
       end if;
-      Object.Screen := Screen;
-      State_Arithmetic.Define_Screen (Object.Current_State);
+      State_Arithmetic.Define_Screen (Object, Screen);
       return Results.Success;
    end Define_Screen;
 

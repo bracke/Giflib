@@ -3,8 +3,8 @@ with Giflib.Internal.Bytes;
 with Giflib.Internal.Diagnostics;
 with Giflib.Internal.Extension_Arithmetic;
 with Giflib.Internal.Loop_Extensions;
-with Giflib.Internal.Metadata_Store;
 with Giflib.Internal.Metadata_Arithmetic;
+with Giflib.Internal.Decoder_Storage.Metadata_Operations;
 
 package body Giflib.Decoding.Extensions is
    use type Errors.Error_Code;
@@ -17,12 +17,11 @@ package body Giflib.Decoding.Extensions is
       return Results.Result
    is
    begin
-      return Internal.Metadata_Store.Start
-        (Internal.Decoder_Storage.Metadata (Object.Resources).all,
+      return Internal.Decoder_Storage.Metadata_Operations.Start
+        (Object.Resources,
+         Object.Allocation_Fault,
          Object.Options.Retention,
          Object.Constraints.Max_Allocation_Bytes,
-         Internal.Decoder_Storage.Budget (Object.Resources).all,
-         Object.Allocation_Fault,
          Info);
    end Start_Retention;
 
@@ -31,13 +30,12 @@ package body Giflib.Decoding.Extensions is
       Data : Streams.Byte_Array) return Results.Result
    is
    begin
-      return Internal.Metadata_Store.Append
-        (Internal.Decoder_Storage.Metadata (Object.Resources).all,
+      return Internal.Decoder_Storage.Metadata_Operations.Append
+        (Object.Resources,
+         Object.Allocation_Fault,
          Data,
          Object.Constraints.Max_Retained_Metadata_Bytes,
-         Object.Constraints.Max_Allocation_Bytes,
-         Internal.Decoder_Storage.Budget (Object.Resources).all,
-         Object.Allocation_Fault);
+         Object.Constraints.Max_Allocation_Bytes);
    end Retain_Chunk;
 
    function Truncated
@@ -282,8 +280,8 @@ package body Giflib.Decoding.Extensions is
       end case;
 
       if Results.Succeeded (Outcome) then
-         Outcome := Internal.Metadata_Store.Finish
-           (Internal.Decoder_Storage.Metadata (Object.Resources).all, Info);
+         Outcome := Internal.Decoder_Storage.Metadata_Operations.Finish
+           (Object.Resources, Info);
       end if;
       return Outcome;
    end Read;

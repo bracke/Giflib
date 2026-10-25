@@ -1,15 +1,11 @@
-with Giflib.Internal.Disposal;
 with Giflib.Internal.Diagnostics;
+with Giflib.Internal.Decoder_Storage.Image_Operations;
 with Giflib.Internal.Resource_Diagnostics;
 with Giflib.Internal.Geometry_Arithmetic;
-with Giflib.Internal.LZW;
-with Giflib.Internal.Owned_Buffers;
-with Giflib.Internal.Pixel_Arithmetic;
 with Giflib.Palettes;
 
 package body Giflib.Decoding.Resource_Management is
    use type Internal.Ownership.Allocation_Status;
-   package Buffers renames Internal.Owned_Buffers;
 
    procedure Release (Resources : in out Decoder_Resources) is
    begin
@@ -56,9 +52,8 @@ package body Giflib.Decoding.Resource_Management is
       if Required > Byte_Count (Natural'Last) then
          return Results.Failure (Errors.Make (Errors.Integer_Overflow));
       end if;
-      Allocation := Buffers.Ensure
-        (Internal.Decoder_Storage.Frame_Scratch (Object.Resources).all,
-         Internal.Decoder_Storage.Budget (Object.Resources).all,
+      Allocation := Internal.Decoder_Storage.Ensure_Frame_Scratch
+        (Object.Resources,
          Object.Allocation_Fault,
          Required,
          Object.Constraints.Max_Allocation_Bytes);
@@ -73,9 +68,8 @@ package body Giflib.Decoding.Resource_Management is
    is
       Allocation : Internal.Ownership.Allocation_Outcome;
    begin
-      Allocation := Internal.LZW.Ensure
-        (Internal.Decoder_Storage.LZW_Workspace (Object.Resources).all,
-         Internal.Decoder_Storage.Budget (Object.Resources).all,
+      Allocation := Internal.Decoder_Storage.Ensure_LZW
+        (Object.Resources,
          Object.Allocation_Fault,
          Object.Constraints.Max_Allocation_Bytes);
       if Allocation.Status /= Internal.Ownership.Allocation_Ready then
@@ -84,14 +78,15 @@ package body Giflib.Decoding.Resource_Management is
       return Results.Success;
    end Ensure_LZW_Workspace;
 
-   function Setup_Canvas (Object : in out Decoder) return Results.Result is
+   function Setup_Canvas
+     (Object : in out Decoder;
+      Header : Header_Info) return Results.Result is
       Pixels : constant Byte_Count :=
         Internal.Geometry_Arithmetic.Area
-          (Object.Header_Data.Width, Object.Header_Data.Height);
+          (Header.Width, Header.Height);
       Bytes : constant Byte_Count := Pixels * 4;
       Background : Palettes.RGB_Color := (others => 0);
       Has_Background : Boolean := False;
-      Position : Natural;
       Allocation : Internal.Ownership.Allocation_Outcome;
    begin
       if Pixels > Byte_Count (Object.Constraints.Max_Canvas_Pixels) then
@@ -120,31 +115,24 @@ package body Giflib.Decoding.Resource_Management is
               (Errors.Integer_Overflow,
                Internal.Diagnostics.At_Source (Object.Input.all)));
       end if;
-      Allocation := Buffers.Ensure
-        (Internal.Decoder_Storage.Canvas (Object.Resources).all,
-         Internal.Decoder_Storage.Budget (Object.Resources).all,
+      Allocation := Internal.Decoder_Storage.Ensure_Canvas
+        (Object.Resources,
          Object.Allocation_Fault,
          Bytes,
          Object.Constraints.Max_Allocation_Bytes);
       if Allocation.Status /= Internal.Ownership.Allocation_Ready then
          return Allocation_Result (Object, Allocation, Include_Frame => False);
       end if;
-      if Object.Header_Data.Has_Global_Palette
+      if Header.Has_Global_Palette
         and then Palettes.Contains
-          (Object.Header_Data.Global_Palette, Object.Header_Data.Background_Index)
+          (Header.Global_Palette, Header.Background_Index)
       then
-         Background := Object.Header_Data.Global_Palette.Colors (Object.Header_Data.Background_Index);
+         Background := Header.Global_Palette.Colors (Header.Background_Index);
          Has_Background := True;
       end if;
-      for Pixel in 0 .. Natural (Pixels) - 1 loop
-         Position := Natural (Internal.Pixel_Arithmetic.Component_Offset (Pixel, 4));
-         Buffers.Value (Internal.Decoder_Storage.Canvas (Object.Resources).all) (1 + Position) := Background.Red;
-         Buffers.Value (Internal.Decoder_Storage.Canvas (Object.Resources).all) (2 + Position) := Background.Green;
-         Buffers.Value (Internal.Decoder_Storage.Canvas (Object.Resources).all) (3 + Position) := Background.Blue;
-         Buffers.Value (Internal.Decoder_Storage.Canvas (Object.Resources).all) (4 + Position) :=
-           (if Has_Background then 255 else 0);
-      end loop;
-      return Results.Success;
+      return Internal.Decoder_Storage.Image_Operations.Initialize_Canvas
+        (Object.Resources, Pixels, Background,
+         (if Has_Background then 255 else 0));
    end Setup_Canvas;
 
    function Fill_Background
@@ -161,12 +149,8 @@ package body Giflib.Decoding.Resource_Management is
          Color := Object.Header_Data.Global_Palette.Colors (Object.Header_Data.Background_Index);
          Alpha := 255;
       end if;
-      return Internal.Disposal.Fill_Rectangle
-        (Buffers.Value (Internal.Decoder_Storage.Canvas (Object.Resources).all).all,
-         Object.Header_Data.Width,
-         Rectangle,
-         Color,
-         Alpha);
+      return Internal.Decoder_Storage.Image_Operations.Fill_Canvas_Rectangle
+        (Object.Resources, Object.Header_Data.Width, Rectangle, Color, Alpha);
    end Fill_Background;
 
    function Apply_Previous_Disposal (Object : in out Decoder) return Results.Result is
@@ -182,7 +166,7 @@ package body Giflib.Decoding.Resource_Management is
                return Outcome;
             end if;
          when 3 =>
-            if not Buffers.Is_Allocated (Internal.Decoder_Storage.Snapshot (Object.Resources).all) then
+            if not Internal.Decoder_Storage.Snapshot_Allocated (Object.Resources) then
                return Results.Failure
                  (Errors.Make
                     (Errors.Internal_Invariant_Failed,
@@ -191,11 +175,10 @@ package body Giflib.Decoding.Resource_Management is
                         (Frame => Errors.Frame_At (Object.Frames_Seen),
                          others => <>))));
             end if;
-            Outcome := Internal.Disposal.Restore_Rectangle
-              (Buffers.Value (Internal.Decoder_Storage.Canvas (Object.Resources).all).all,
-               Object.Header_Data.Width,
-               Object.Snapshot_Rectangle,
-               Buffers.Value (Internal.Decoder_Storage.Snapshot (Object.Resources).all).all);
+            Outcome :=
+              Internal.Decoder_Storage.Image_Operations.Restore_Snapshot
+                (Object.Resources, Object.Header_Data.Width,
+                 Object.Snapshot_Rectangle);
             if not Results.Succeeded (Outcome) then
                return Outcome;
             end if;
@@ -230,9 +213,8 @@ package body Giflib.Decoding.Resource_Management is
          return Results.Failure (Errors.Make (Errors.Integer_Overflow));
       end if;
 
-      Allocation := Buffers.Ensure
-        (Internal.Decoder_Storage.Snapshot (Object.Resources).all,
-         Internal.Decoder_Storage.Budget (Object.Resources).all,
+      Allocation := Internal.Decoder_Storage.Ensure_Snapshot
+        (Object.Resources,
          Object.Allocation_Fault,
          Bytes,
          Object.Constraints.Max_Allocation_Bytes);
@@ -240,11 +222,8 @@ package body Giflib.Decoding.Resource_Management is
          return Allocation_Result (Object, Allocation);
       end if;
       Object.Snapshot_Rectangle := Rectangle;
-      Outcome := Internal.Disposal.Capture_Rectangle
-        (Buffers.Value (Internal.Decoder_Storage.Canvas (Object.Resources).all).all,
-         Object.Header_Data.Width,
-         Rectangle,
-         Buffers.Value (Internal.Decoder_Storage.Snapshot (Object.Resources).all).all);
+      Outcome := Internal.Decoder_Storage.Image_Operations.Capture_Snapshot
+        (Object.Resources, Object.Header_Data.Width, Rectangle);
       return Outcome;
    end Save_Snapshot;
 

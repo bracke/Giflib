@@ -32,13 +32,13 @@ begin
    if not Results.Succeeded (Outcome) then
       return Outcome;
    end if;
-   State_Arithmetic.Begin_Frame (Object.Current_State);
+   State_Arithmetic.Begin_Frame (Object);
    Outcome := Resource_Management.Ensure_LZW_Workspace (Object);
    if not Results.Succeeded (Outcome) then
       return Fail (Object, Outcome.First_Error);
    end if;
-   Outcome := Internal.Image_Data.Decode_Indices
-     (Internal.Decoder_Storage.LZW_Workspace (Object.Resources).all,
+   Outcome := Internal.Decoder_Storage.Image_Operations.Decode_Indices
+     (Object.Resources,
       Object.Input.all,
       Prepared.Width,
       Prepared.Height,

@@ -20,8 +20,7 @@ begin
               (Object.Input.all,
                (Frame => Errors.Frame_At (Object.Frames_Seen),
                 others => <>))));
-   elsif not Internal.Owned_Buffers.Is_Allocated
-     (Internal.Decoder_Storage.Canvas (Object.Resources).all)
+   elsif not Internal.Decoder_Storage.Canvas_Allocated (Object.Resources)
    then
       return Fail (Object, Errors.Make (Errors.Internal_Invariant_Failed));
    elsif not Object.Has_Pending_Frame then
@@ -30,8 +29,7 @@ begin
    Outcome := Validate_Frame_Output
      (Object,
       Byte_Count (Target'Length),
-      Internal.Owned_Buffers.Length
-        (Internal.Decoder_Storage.Canvas (Object.Resources).all),
+      Internal.Decoder_Storage.Canvas_Length (Object.Resources),
       Info'Constrained,
       (if Info'Constrained
        then Info.Has_Local_Palette
@@ -44,7 +42,7 @@ begin
    if not Results.Succeeded (Outcome) then
       return Fail (Object, Outcome.First_Error);
    end if;
-   State_Arithmetic.Begin_Frame (Object.Current_State);
+   State_Arithmetic.Begin_Frame (Object);
    if Prepared.Control.Disposal > 3
      and then Object.Options.Strictness = Strict
    then
@@ -92,8 +90,8 @@ begin
    if not Results.Succeeded (Outcome) then
       return Fail (Object, Outcome.First_Error);
    end if;
-   Outcome := Internal.Image_Data.Decode_Indices
-     (Internal.Decoder_Storage.LZW_Workspace (Object.Resources).all,
+   Outcome := Internal.Decoder_Storage.Image_Operations.Decode_Frame_Scratch
+     (Object.Resources,
       Object.Input.all,
       Prepared.Width,
       Prepared.Height,
@@ -101,29 +99,23 @@ begin
       Prepared.Palette,
       Object.Constraints,
       Object.Total_Decoded_Pixels, Object.Total_Compressed_Bytes,
-      Internal.Owned_Buffers.Value
-        (Internal.Decoder_Storage.Frame_Scratch (Object.Resources).all).all
-        (1 .. Natural (Pixel_Bytes)),
+      Pixel_Bytes,
       Object.Frames_Seen);
    if not Results.Succeeded (Outcome) then
       return Fail (Object, Outcome.First_Error);
    end if;
 
-   Outcome := Internal.Compositing.Overlay
-     (Internal.Owned_Buffers.Value
-        (Internal.Decoder_Storage.Canvas (Object.Resources).all).all,
-      Object.Header_Data.Width,
-      Rectangle,
-      Internal.Owned_Buffers.Value
-        (Internal.Decoder_Storage.Frame_Scratch (Object.Resources).all).all
-        (1 .. Natural (Pixel_Bytes)),
-      Prepared.Palette,
-      Prepared.Control);
+   Outcome := Internal.Decoder_Storage.Image_Operations.Overlay_Frame_Scratch
+     (Object.Resources, Object.Header_Data.Width, Rectangle, Pixel_Bytes,
+      Prepared.Palette, Prepared.Control);
    if not Results.Succeeded (Outcome) then
       return Fail (Object, Outcome.First_Error);
    end if;
-   Target := Internal.Owned_Buffers.Value
-     (Internal.Decoder_Storage.Canvas (Object.Resources).all).all;
+   Outcome := Internal.Decoder_Storage.Image_Operations.Copy_Canvas
+     (Object.Resources, Target);
+   if not Results.Succeeded (Outcome) then
+      return Fail (Object, Outcome.First_Error);
+   end if;
    Object.Previous_Rectangle := Rectangle;
    Object.Previous_Control := Prepared.Control;
    Object.Has_Previous_Frame := True;

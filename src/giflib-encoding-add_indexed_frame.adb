@@ -1,3 +1,5 @@
+with Giflib.Internal.Encoder_Storage.Frame_Operations;
+
 separate (Giflib.Encoding)
 function Add_Indexed_Frame
   (Object : in out Encoder;
@@ -59,7 +61,7 @@ begin
       if not Results.Succeeded (Outcome) then
          return Fail_Frame (Object, Outcome.First_Error);
       end if;
-      Object.Extensions_Written := Object.Extensions_Written + 1;
+      State_Arithmetic.Record_Extension (Object);
    end if;
    Palette_Length := Natural
      (Encoding_Arithmetic.Encoded_Palette_Length
@@ -95,8 +97,8 @@ begin
       return Fail_Frame (Object, Outcome.First_Error);
    end if;
    Remaining_Output := Object.Constraints.Max_Output_Bytes - Object.Bytes_Written;
-   Outcome := Internal.LZW_Encoding.Encode
-     (Internal.Encoder_Storage.LZW_Workspace (Object.Resources).all,
+   Outcome := Internal.Encoder_Storage.Frame_Operations.Encode_LZW
+     (Object.Resources,
       Object.Output.all, Pixels, Minimum,
       Object.Constraints.Max_LZW_Work,
       Object.Constraints.Max_Compressed_Bytes - Object.Compressed_Bytes_Written,
@@ -109,7 +111,6 @@ begin
    if not Results.Succeeded (Outcome) then
       return Fail_Frame (Object, Outcome.First_Error);
    end if;
-   Object.Frames_Written := Object.Frames_Written + 1;
-   State_Arithmetic.Accept_Data (Object.Current_State);
+   State_Arithmetic.Frame_Accepted (Object);
    return Results.Success;
 end Add_Indexed_Frame;

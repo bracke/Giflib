@@ -9,7 +9,6 @@ function Quantize_With_Resources
 is
    Pixel_Total : constant Byte_Count :=
      Internal.Geometry_Arithmetic.Area (Source.Width, Source.Height);
-   Histogram : Histogram_State_Access := null;
    Exact_Colors : Palettes.Color_Array := [others => (others => 0)];
    Exact_Count : Natural := 0;
    Exact_Overflow : Boolean := False;
@@ -86,18 +85,14 @@ begin
       if not Results.Succeeded (Outcome) then
          return Outcome;
       end if;
-      Histogram := Histogram_Ownership.Value
-        (Storage.Histogram (Context.Resources).all);
-      if not Charge (Tracker, Byte_Count (Histogram.Counts'Length))
+      if not Storage_Operations.Reset_Histogram
+        (Context.Resources, Tracker)
       then
          return Fail
            (Giflib.Errors.Limit_Exceeded,
             Internal.Resource_Diagnostics.With_Work_Limit
               (Tracker, Quantization_Work_Limit));
       end if;
-      Histogram.Counts := [others => 0];
-      Histogram.Occupied_Count := 0;
-
       for Y in 0 .. Natural (Source.Height) - 1 loop
          for X in 0 .. Natural (Source.Width) - 1 loop
             if not Charge (Tracker)
@@ -118,11 +113,8 @@ begin
                Has_Transparency := True;
             else
                Bucket := Arithmetic.Histogram_Of (Pixel.Color);
-               if Histogram.Counts (Bucket) = 0 then
-                  Histogram.Occupied_Count := Histogram.Occupied_Count + 1;
-                  Histogram.Occupied (Histogram.Occupied_Count) := Bucket;
-               end if;
-               Histogram.Counts (Bucket) := Histogram.Counts (Bucket) + 1;
+               Storage_Operations.Add_Histogram_Sample
+                 (Context.Resources, Bucket);
                if not Exact_Overflow then
                   Found := False;
                   for I in 0 .. Exact_Count - 1 loop
@@ -163,8 +155,8 @@ begin
          end loop;
          Output_Palette.Length := Generated_Start + Exact_Count;
       else
-         Outcome := Palette_Builder.Build_Median_Cut
-           (Histogram.all,
+         Outcome := Storage_Operations.Build_Median_Cut
+           (Context.Resources,
             Generated_Start,
             Opaque_Capacity,
             Tracker,

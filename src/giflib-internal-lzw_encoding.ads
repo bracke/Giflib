@@ -19,7 +19,6 @@ package Giflib.Internal.LZW_Encoding is
      (Object : in out Workspace_Handle;
       Budget : aliased in out Ownership.Byte_Budget) return Boolean;
    function Is_Allocated (Object : Workspace_Handle) return Boolean;
-
    function Encode
      (Context : in out Workspace;
       Object : in out Streams.Destination'Class;

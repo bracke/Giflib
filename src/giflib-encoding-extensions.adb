@@ -39,8 +39,8 @@ package body Giflib.Encoding.Extensions is
       if not Results.Succeeded (Final_Outcome) then
          return Fail (Object, Final_Outcome.First_Error);
       end if;
-      Object.Extensions_Written := Object.Extensions_Written + 1;
-      State_Arithmetic.Accept_Data (Object.Current_State);
+      State_Arithmetic.Record_Extension (Object);
+      State_Arithmetic.Accept_Data (Object);
       return Results.Success;
    end Complete_Extension;
 
