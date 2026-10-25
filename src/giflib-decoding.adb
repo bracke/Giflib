@@ -1,5 +1,6 @@
 with Giflib.Decoding.Extensions;
 with Giflib.Decoding.Resource_Management;
+with Giflib.Decoding.Session_Transitions;
 with Giflib.Internal.Decoder_Storage.Image_Operations;
 with Giflib.Internal.Decoder_Storage.Metadata_Operations;
 with Giflib.Internal.Blocks;
@@ -285,8 +286,7 @@ package body Giflib.Decoding is
             return Fail (Object, Outcome.First_Error);
          end if;
       end if;
-      Object.Header_Data := Parsed;
-      State_Arithmetic.Header_Parsed (Object.Current_State);
+      Session_Transitions.Commit_Header (Object, Parsed);
       return Results.Success;
    end Read_Header;
 
@@ -388,12 +388,7 @@ package body Giflib.Decoding is
             Control => Prepared.Control));
    begin
       Info := Produced;
-      State_Arithmetic.Complete_Frame
-        (Object.Current_State,
-         Object.Has_Pending_Control,
-         Object.Has_Pending_Frame,
-         Object.Frames_Seen);
-      Object.Pending_Control := Frames.Default_Control;
+      Session_Transitions.Complete_Frame (Object);
       return Results.Success;
    end Complete_Frame;
 
