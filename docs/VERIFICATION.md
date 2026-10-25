@@ -25,8 +25,9 @@ The following production units are in SPARK mode:
 - `Giflib.Internal.Image_Arithmetic`: row-byte and strided-buffer extent
   calculation used by `Giflib.Images.Required_Bytes`.
 - `Giflib.Internal.LZW_Arithmetic`: code-table initialization, decoder and
-  encoder width transitions, bounded encoder hash probing, and dictionary
-  stack/traversal/insertion guards used by both production LZW paths.
+  encoder width transitions, encoder hash start/next-slot arithmetic, and
+  dictionary stack/traversal/insertion guards used by both production LZW
+  paths.
 - `Giflib.Internal.LZW_Bit_Arithmetic`: exact LSB-first bit-buffer packing,
   extraction, byte removal, and first-byte recovery used by both production
   LZW paths.
@@ -48,8 +49,8 @@ The following production units are in SPARK mode:
 - `Giflib.Internal.Quantization_Buffer_Arithmetic`: dither-buffer allocation,
   row/channel spans, and two-row error-buffer indices used by the production
   quantizer.
-- `Giflib.Decoding.State_Arithmetic`: private decoder lifecycle guards.
-- `Giflib.Decoding.Session_Arithmetic`: complete header/frame session transitions.
+- `Giflib.Decoding.State_Arithmetic`: private lifecycle and count transitions
+  used by the atomic decoder session commit gateway.
 - `Giflib.Encoding.State_Arithmetic`: private encoder lifecycle guards.
 - `Giflib.Internal.Session_Arithmetic`: shared extension-count and warning
   capacity arithmetic without codec dependencies.
@@ -67,11 +68,19 @@ alr exec -- gnatprove -P giflib.gpr \
   --level=2 --prover=cvc5 --report=all -j1
 ```
 
-`Giflib.Internal.Ownership`, `Owned_Arrays`, `Owned_Buffers`, and
-`Owned_Objects` are runtime-checked Ada. They provide scoped reservation
+`Giflib.Internal.Ownership`, `Owned_Arrays`, `Owned_Buffers`, `Owned_Vectors`,
+`Owned_Element_Vectors`, and `Owned_Objects` are runtime-checked Ada. They provide scoped reservation
 rollback, ledger-identity-checked ownership, and callback-scoped storage
 access, but are outside the SPARK
 subset because they manage controlled types and heap allocation.
+The LZW decoder/encoder dictionaries, readers, output/input adapters, writer,
+and orchestration are also runtime-checked Ada. Their work meters and bounded
+arithmetic are proved, while generation/occupancy state, the dictionary probe
+loop, transport callbacks, and writer lifecycle are enforced by contracts and
+adversarial tests rather than by SPARK proof.
+Repository tooling also enforces the architectural write boundary around
+decoder and encoder session-transition fields; this is a structural source
+check, not a SPARK proof.
 Decoder, encoder, and quantizer resource representations are consolidated in
 their respective `Internal.*_Storage` packages. The tooling check requires
 those semantic-closure units in `Library_Interface` and rejects direct owned-
@@ -141,8 +150,9 @@ Classwide stream dispatch, the mutable I/O loops around sub-block state,
 bounded-string construction, actual pointer mutation and allocation/deallocation
 for metadata, images, and sessions, protected synchronization, quantizer
 heap-object lifecycle and median-cut loops, decoder/encoder object mutation,
-and LZW dictionary array storage and traversal loops remain outside the current
-SPARK subset. Their controlling transfer, index, bit-buffer, lifecycle,
+and LZW dictionary array storage, generation state, probing, and traversal loops
+remain outside the current SPARK subset. Their controlling transfer, index,
+bit-buffer, lifecycle,
 retention, allocation-accounting, and traversal-bound transitions are now in
 proved helpers. The remaining safety boundary is explicit checks, fixed limits,
 runtime assertions/overflow checks, adversarial tests, deterministic

@@ -52,7 +52,16 @@ The GIF format has a logical screen and zero or more graphic rendering blocks. A
 - Decoder orchestration separates code reading, output placement, and
   dictionary expansion. Encoder orchestration separates code writing,
   dictionary lookup/update, and the logical input view. Each component owns its
-  transport state while sharing the operation's bounded work meter.
+  transport state while sharing the operation's bounded work meter. Encoder
+  dictionaries must be initialized by an explicit clear before lookup,
+  insertion, or code access; successful lookup reports a slot containing the
+  requested prefix/suffix pair. The code-writer lifecycle is observable to its
+  orchestrator and its contracts preserve open/finished/failed state. Decoder
+  dictionary access is defined only for entries committed since the most recent
+  clear. Sequential and interlaced traversal are represented by a discriminated
+  layout rather than width/height sentinel values. Production codec entry
+  points accept only allocation-accounted workspace handles; direct workspace
+  access is confined to package private parts and white-box testing children.
 - Support interlace passes in this order (zero-based rows): `(0,8)`, `(4,8)`, `(2,4)`, `(1,2)` and inverse reordering on encode. Include heights smaller than eight in tests.
 
 ### 3.3 Palettes, transparency, disposal and looping
@@ -100,8 +109,15 @@ Giflib.Internal.Geometry_Arithmetic -- proved areas and rectangle containment
 Giflib.Internal.Image_Arithmetic   -- proved row/stride extent arithmetic
 Giflib.Internal.LZW_Arithmetic     -- proved table/width/hash arithmetic
 Giflib.Internal.LZW_Bit_Arithmetic -- proved LSB-first bit-buffer state
-Giflib.Internal.LZW           -- decoder orchestration over code-reader/output components
-Giflib.Internal.LZW_Encoding  -- encoder orchestration over code-writer/dictionary components
+Giflib.Internal.LZW_Decoder_Reader -- bounded sub-block/code transport
+Giflib.Internal.LZW_Decoder_Output -- checked palette/interlace output placement
+Giflib.Internal.LZW_Decoder_Dictionary -- decoder prefix/suffix/stack ownership
+Giflib.Internal.LZW           -- decoder dictionary-machine orchestration
+Giflib.Internal.LZW_Encoder_Writer -- bounded bit/sub-block code transport
+Giflib.Internal.LZW_Encoder_Input -- checked row/interlace input addressing
+Giflib.Internal.LZW_Encoder_Dictionary -- encoder hash-table ownership/search
+Giflib.Internal.LZW_Encoding  -- encoder dictionary-machine orchestration
+Giflib.Internal.LZW_Work      -- shared direction-aware work charging/diagnostics
 Giflib.Internal.Quantization_Arithmetic -- proved color/index arithmetic
 Giflib.Internal.Quantization_Buffer_Arithmetic -- proved dither-buffer indices
 Giflib.Internal.Quantization_Pixels -- pixel-format access and transparency policy
@@ -118,8 +134,8 @@ Giflib.Internal.Stream_Arithmetic -- proved transfer windows/progress
 Giflib.Internal.Stream_Dispatch -- exception-safe callback and position dispatch
 Giflib.Internal.Stream_Transfers -- exact read/skip/write progress algorithms
 Giflib.Decoding.State_Arithmetic -- private proved decoder lifecycle guards
-Giflib.Decoding.Session_Arithmetic -- proved complete decoder state transitions
 Giflib.Decoding.Session_Transitions -- private complete decoder state commits
+Giflib.Decoding.Frame_Pipeline -- private shared decode/skip validation and frame-start path
 Giflib.Encoding.State_Arithmetic -- private proved encoder lifecycle guards
 Giflib.Encoding.Session_Transitions -- private complete encoder state commits
 Giflib.Encoding.Frame_Pipeline -- private shared indexed-frame orchestration
@@ -201,10 +217,21 @@ A palette is a bounded count and array of at most 256 RGB entries; tables writte
   A same-ledger bookkeeping failure still destroys the owned storage, records a
   sticky ledger fault, and reports failure. Public indexed
   extension and chunk access must not repeatedly scan from the head; the store
-  maintains bounded, allocation-accounted indexes with amortized constant-time
-  lookup. Nodes and chunks are allocated and destroyed only by the shared
-  owned-element-vector layer; the metadata store performs no direct access-type
-  allocation, deallocation, or ledger reservation. The shared owned-array layer
+  maintains bounded, allocation-accounted node and chunk vectors with
+  amortized constant-time lookup. Public indexed observers accept a read-only
+  decoder view. Nodes contain value indexes into the store-wide chunk vector,
+  so observers copy values without exposing access values or acquiring a
+  mutable borrow through the public API. Nodes and chunks are allocated and
+  destroyed only by the shared ownership layers; both use contiguous
+  owned-vector storage. The metadata store performs no direct access-type
+  allocation, deallocation, or ledger reservation. Cleanup first verifies the
+  ledger identity of every owned vector, then consumes all storage and reports
+  a structured status. A foreign ledger leaves the complete store unchanged;
+  a same-ledger accounting failure still frees and clears it. The shared
+  cleanup protocol is used end-to-end by resource aggregators and distinguishes
+  borrow conflicts, owner mismatch, preflight refusal, callback failure, and
+  accounting failure instead of reducing nested failures to Boolean values.
+  The shared owned-array layer
   provides preserve-on-growth storage for these indexes and default-initializes every newly allocated capacity slot;
   callers never observe an uninitialized scalar or access value. Each retained
   node tracks its stored payload length itself;
@@ -331,9 +358,39 @@ Required decoder states: `Uninitialized`, `Initialized`, `Header_Ready`, `Awaiti
 `Decoding.Session_Transitions` and `Encoding.Session_Transitions` are the sole
 mutation gateways for lifecycle state and the session fields committed with a
 transition (screen/header readiness, pending-frame flags, frame/extension
-counters, completion, failure, reset, and cancellation). Orchestrators may ask
+counters, retained-warning state, compositor history/snapshot state,
+completion, failure, reset, and cancellation). Orchestrators may ask
 the proved state-arithmetic packages whether an operation is legal, but must not
 invoke their mutating operations directly or duplicate a multi-field commit.
+The repository structure check mechanically rejects assignments to those fields
+outside the transition units, rejects direct use of mutating state-arithmetic
+operations there, and covers every session-owned field, including indexed
+warning storage. Public lifecycle operations state
+success-conditioned postconditions without turning invalid calls into raising
+preconditions.
+Decoder frame entry, including skip, is validated and begun atomically through
+`Decoding.Frame_Pipeline`. The pipeline validates lifecycle and pending-frame
+state before reading staged frame fields or deriving mode-specific output sizes.
+Image-data prefix parsing, minimum-code-size validation, compressed-budget
+checking, sub-block setup, compressed-byte accounting and truncation
+diagnostics are shared by decode and skip paths. The shared setup and accounting
+helpers state their remaining-budget and addition-safety preconditions and
+postconditions explicitly. Completing a frame atomically clears both the
+pending-frame flag and its staged payload.
+
+LZW dictionary clearing is represented by a bounded generation change rather
+than a full unmetered table sweep.  A generation wrap performs a metered table
+reset.  Dictionary lookup detects a complete probe cycle; lookup, insertion,
+and code access require an initialized generation, and successful lookup
+identifies a slot matching the requested prefix/suffix pair. Code writers have
+an observable open/finished/failed lifecycle and reject use after termination
+with a structured diagnostic. Decoder orchestration retains the constrained LZW
+code, width and next-code types; absence of a previous code is represented by
+state rather than an out-of-range sentinel.
+Component interfaces group stable decode context rather than repeating long
+positional parameter lists. Successful code reads advance the reader ordinal,
+and successful output emission advances the logical output position by exactly
+one; these state transitions are stated as contracts.
 
 Calling `Cancel` on a failed decoder or encoder returns the preserved first
 diagnostic rather than replacing it with `Invalid_State`; repeated cancellation
