@@ -85,7 +85,7 @@ package body Giflib.Decoding.Frame_Pipeline is
      (Object : in out Decoder;
       Output : out Streams.Byte_Array) return Results.Result
    is
-      Prepared : Prepared_Frame renames Object.Pending_Frame;
+      Prepared : constant Prepared_Frame := Object.Pending_Frame;
       Decoded_Pixels : Pixel_Count := Object.Total_Decoded_Pixels;
       Compressed_Bytes : Byte_Count := Object.Total_Compressed_Bytes;
       Outcome : Results.Result;
@@ -107,7 +107,7 @@ package body Giflib.Decoding.Frame_Pipeline is
      (Object : in out Decoder;
       Pixel_Bytes : Byte_Count) return Results.Result
    is
-      Prepared : Prepared_Frame renames Object.Pending_Frame;
+      Prepared : constant Prepared_Frame := Object.Pending_Frame;
       Decoded_Pixels : Pixel_Count := Object.Total_Decoded_Pixels;
       Compressed_Bytes : Byte_Count := Object.Total_Compressed_Bytes;
       Outcome : Results.Result;

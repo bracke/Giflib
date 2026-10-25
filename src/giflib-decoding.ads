@@ -180,6 +180,8 @@ private
    type Decoder
      (Input : not null access Streams.Source'Class)
       is limited record
+      --  Transition-owned fields begin. The structure check derives its
+      --  protected-field manifest from these markers.
       Current_State : Decoder_State := Uninitialized;
       Options : Decode_Options := Default_Options;
       Constraints : Limits.Limit_Set := Limits.Default_Limits;
@@ -188,7 +190,6 @@ private
       Total_Decoded_Pixels : Pixel_Count := 0;
       Total_Compressed_Bytes : Byte_Count := 0;
       Extensions_Seen : Natural := 0;
-      Resources : Decoder_Resources;
       Pending_Control : Frames.Graphic_Control := Frames.Default_Control;
       Has_Pending_Control : Boolean := False;
       Pending_Frame : Prepared_Frame;
@@ -201,6 +202,8 @@ private
       Warnings : Warning_Array;
       Stored_Warnings : Limits.Warning_Record_Limit := 0;
       Diagnostic : Errors.Error := Errors.Make (Errors.No_Error);
+      --  Transition-owned fields end.
+      Resources : Decoder_Resources;
       Allocation_Fault : Internal.Ownership.Fault_State;
    end record;
 

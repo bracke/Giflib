@@ -165,6 +165,8 @@ private
    type Encoder
      (Output : not null access Streams.Destination'Class)
       is limited record
+      --  Transition-owned fields begin. The structure check derives its
+      --  protected-field manifest from these markers.
       Current_State : Encoder_State := Uninitialized;
       Options : Encode_Options := Default_Options;
       Constraints : Limits.Limit_Set := Limits.Default_Limits;
@@ -177,8 +179,9 @@ private
       Extensions_Written : Natural := 0;
       Bytes_Written : Byte_Count := 0;
       Compressed_Bytes_Written : Byte_Count := 0;
-      Resources : Encoder_Resources;
       Diagnostic : Errors.Error := Errors.Make (Errors.No_Error);
+      --  Transition-owned fields end.
+      Resources : Encoder_Resources;
       Allocation_Fault : aliased Internal.Ownership.Fault_State;
    end record;
 

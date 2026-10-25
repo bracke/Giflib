@@ -4,7 +4,7 @@ function Decode_Expanded_Frame
    Target : out Streams.Byte_Array;
    Info : out Frame_Info) return Results.Result
 is
-   Prepared : Prepared_Frame renames Object.Pending_Frame;
+   Prepared : constant Prepared_Frame := Object.Pending_Frame;
    Pixels : Byte_Count;
    Outcome : Results.Result;
    Source_Position, Target_Position : Natural;

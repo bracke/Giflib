@@ -10,10 +10,30 @@ dependency_probe=$(mktemp)
 dependency_probe_output=$(mktemp)
 trap 'rm -f "$actual_interface" "$expected_interface" "$actual_dependencies" "$expected_dependencies" "$dependency_probe" "$dependency_probe_output"' EXIT HUP INT TERM
 
+transition_fields() {
+    spec=$1
+    awk '
+      /Transition-owned fields begin/ { inside = 1; next }
+      /Transition-owned fields end/ { inside = 0 }
+      inside && /^[[:space:]]*[[:alpha:]][[:alnum:]_]*[[:space:]]*:/ {
+        field = $0
+        sub(/^[[:space:]]*/, "", field)
+        sub(/[[:space:]]*:.*/, "", field)
+        fields = fields (fields == "" ? "" : "|") field
+      }
+      END { print fields }
+    ' "$root/src/$spec"
+}
+
 check_transition_writes() {
     prefix=$1
     allowed=$2
-    fields=$3
+    spec=$3
+    fields=$(transition_fields "$spec")
+    if [ -z "$fields" ]; then
+        echo "$prefix transition field manifest is empty" >&2
+        exit 1
+    fi
     violations=$(find "$root/src" -type f -name "giflib-$prefix*.adb" \
       ! -name "$allowed" -print | while IFS= read -r source_file; do
         awk -v file="$source_file" -v fields="$fields" '
@@ -28,6 +48,9 @@ check_transition_writes() {
               pattern = "[[:alnum:]_]+[.](" fields ")" \
                         "([[:space:]]*[(][^)]*[)])?[[:space:]]*:="
               if (clause ~ pattern) print file ":" clause ";"
+              rename_pattern = "renames[[:space:]]+[[:alnum:]_]+[.](" \
+                               fields ")([^[:alnum:]_]|$)"
+              if (clause ~ rename_pattern) print file ":" clause ";"
             }
           }
         ' "$source_file"
@@ -71,11 +94,11 @@ check_transition_calls() {
 check_transition_writes \
   decoding \
   giflib-decoding-session_transitions.adb \
-  'Current_State|Options|Constraints|Header_Data|Frames_Seen|Total_Decoded_Pixels|Total_Compressed_Bytes|Extensions_Seen|Pending_Control|Has_Pending_Control|Pending_Frame|Has_Pending_Frame|Loop_Data|Snapshot_Rectangle|Previous_Rectangle|Previous_Control|Has_Previous_Frame|Warnings|Stored_Warnings|Diagnostic'
+  giflib-decoding.ads
 check_transition_writes \
   encoding \
   giflib-encoding-session_transitions.adb \
-  'Current_State|Options|Constraints|Screen|Global_Palette|Has_Global_Palette|Loop_Data|Header_Written|Frames_Written|Extensions_Written|Bytes_Written|Compressed_Bytes_Written|Diagnostic'
+  giflib-encoding.ads
 check_transition_calls \
   decoding \
   giflib-decoding-session_transitions.adb \

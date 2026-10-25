@@ -337,7 +337,7 @@ package body Giflib.Decoding is
      (Object : in out Decoder;
       Info : out Frame_Info) return Results.Result
    is
-      Prepared : Prepared_Frame renames Object.Pending_Frame;
+      Prepared : constant Prepared_Frame := Object.Pending_Frame;
       Produced : constant Frame_Info :=
         (if Prepared.Has_Local_Palette
          then
