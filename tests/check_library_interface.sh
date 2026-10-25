@@ -6,7 +6,42 @@ actual_interface=$(mktemp)
 expected_interface=$(mktemp)
 actual_dependencies=$(mktemp)
 expected_dependencies=$(mktemp)
-trap 'rm -f "$actual_interface" "$expected_interface" "$actual_dependencies" "$expected_dependencies"' EXIT HUP INT TERM
+dependency_probe=$(mktemp)
+dependency_probe_output=$(mktemp)
+trap 'rm -f "$actual_interface" "$expected_interface" "$actual_dependencies" "$expected_dependencies" "$dependency_probe" "$dependency_probe_output"' EXIT HUP INT TERM
+
+extract_internal_dependencies() {
+    source_file=$1
+    display_name=$2
+    awk -v file="$display_name" '
+      {
+        sub(/--.*/, "")
+        statement = statement " " $0
+        while (index(statement, ";") != 0) {
+          stop = index(statement, ";")
+          clause = substr(statement, 1, stop - 1)
+          statement = substr(statement, stop + 1)
+          gsub(/[[:space:]]+/, " ", clause)
+          sub(/^ /, "", clause)
+          sub(/ $/, "", clause)
+          if (clause ~ /^((limited|private) )*with / &&
+              clause ~ /Giflib[.]Internal([^[:alnum:]_]|$)/) {
+            print file ":" clause ";"
+          }
+        }
+      }
+    ' "$source_file"
+}
+
+cat >"$dependency_probe" <<'EOF'
+with Giflib.Internal;
+private with Giflib.Internal.Ownership;
+EOF
+extract_internal_dependencies "$dependency_probe" probe.ads >"$dependency_probe_output"
+if [ "$(wc -l <"$dependency_probe_output")" -ne 2 ]; then
+    echo "internal dependency scanner missed a parent or child unit" >&2
+    exit 1
+fi
 
 awk '
   /for[[:space:]]+Library_Interface[[:space:]]+use/ { inside = 1 }
@@ -66,18 +101,18 @@ if ! cmp -s "$expected_interface" "$actual_interface"; then
     exit 1
 fi
 
-for spec in giflib-decoding.ads giflib-encoding.ads giflib-quantization.ads; do
-    awk -v file="$spec" '
-      {
-        sub(/--.*/, "")
-        if ($0 ~ /^[[:space:]]*private[[:space:]]+with[[:space:]]+Giflib\.Internal\.[A-Za-z0-9_]+[[:space:]]*;/) {
-          line = $0
-          sub(/^[[:space:]]*/, "", line)
-          print file ":" line
-        }
-      }
-    ' "$root/src/$spec"
-done >"$actual_dependencies"
+: >"$actual_dependencies"
+while IFS= read -r unit; do
+    case "$unit" in
+        Giflib.Internal*) break ;;
+    esac
+    spec=$(printf '%s\n' "$unit" | awk '{ name = tolower($0); gsub(/\./, "-", name); print name ".ads" }')
+    if [ ! -f "$root/src/$spec" ]; then
+        echo "library interface source is missing: $spec" >&2
+        exit 1
+    fi
+    extract_internal_dependencies "$root/src/$spec" "$spec" >>"$actual_dependencies"
+done <"$actual_interface"
 
 sed -n '/^giflib-decoding.ads:/,/^giflib-quantization.ads:private with Giflib.Internal.Quantization_Storage;$/p' <<'EOF' >"$expected_dependencies"
 giflib-decoding.ads:private with Giflib.Internal.Decoder_Storage;
