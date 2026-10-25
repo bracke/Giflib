@@ -85,15 +85,15 @@ package body Giflib.Decoding.Frame_Pipeline is
      (Object : in out Decoder;
       Output : out Streams.Byte_Array) return Results.Result
    is
-      Prepared : constant Prepared_Frame := Object.Pending_Frame;
       Decoded_Pixels : Pixel_Count := Object.Total_Decoded_Pixels;
       Compressed_Bytes : Byte_Count := Object.Total_Compressed_Bytes;
       Outcome : Results.Result;
    begin
       Outcome := Internal.Decoder_Storage.Image_Operations.Decode_Indices
         (Object.Resources, Object.Input.all,
-         Prepared.Width, Prepared.Height, Prepared.Interlaced,
-         Prepared.Palette, Object.Constraints,
+         Object.Pending_Frame.Width, Object.Pending_Frame.Height,
+         Object.Pending_Frame.Interlaced, Object.Pending_Frame.Palette,
+         Object.Constraints,
          Decoded_Pixels, Compressed_Bytes, Output, Object.Frames_Seen);
       Session_Transitions.Commit_Resource_Usage
         (Object, Decoded_Pixels, Compressed_Bytes);
@@ -107,15 +107,15 @@ package body Giflib.Decoding.Frame_Pipeline is
      (Object : in out Decoder;
       Pixel_Bytes : Byte_Count) return Results.Result
    is
-      Prepared : constant Prepared_Frame := Object.Pending_Frame;
       Decoded_Pixels : Pixel_Count := Object.Total_Decoded_Pixels;
       Compressed_Bytes : Byte_Count := Object.Total_Compressed_Bytes;
       Outcome : Results.Result;
    begin
       Outcome := Internal.Decoder_Storage.Image_Operations.Decode_Frame_Scratch
         (Object.Resources, Object.Input.all,
-         Prepared.Width, Prepared.Height, Prepared.Interlaced,
-         Prepared.Palette, Object.Constraints,
+         Object.Pending_Frame.Width, Object.Pending_Frame.Height,
+         Object.Pending_Frame.Interlaced, Object.Pending_Frame.Palette,
+         Object.Constraints,
          Decoded_Pixels, Compressed_Bytes, Pixel_Bytes, Object.Frames_Seen);
       Session_Transitions.Commit_Resource_Usage
         (Object, Decoded_Pixels, Compressed_Bytes);

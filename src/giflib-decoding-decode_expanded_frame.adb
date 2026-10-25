@@ -4,7 +4,6 @@ function Decode_Expanded_Frame
    Target : out Streams.Byte_Array;
    Info : out Frame_Info) return Results.Result
 is
-   Prepared : constant Prepared_Frame := Object.Pending_Frame;
    Pixels : Byte_Count;
    Outcome : Results.Result;
    Source_Position, Target_Position : Natural;
@@ -23,7 +22,7 @@ begin
       return Outcome;
    end if;
    Pixels := Internal.Geometry_Arithmetic.Area
-     (Prepared.Width, Prepared.Height);
+     (Object.Pending_Frame.Width, Object.Pending_Frame.Height);
    Outcome := Frame_Pipeline.Decode_Indices
      (Object, Target (Target'First .. Target'First + Natural (Pixels) - 1));
    if not Results.Succeeded (Outcome) then
@@ -34,13 +33,13 @@ begin
       Target_Position := Target'First
         + Natural (Internal.Pixel_Arithmetic.Component_Offset (Pixel, 4));
       Index := Palette_Index (Target (Source_Position));
-      Color := Prepared.Palette.Colors (Index);
+      Color := Object.Pending_Frame.Palette.Colors (Index);
       Target (Target_Position) := Color.Red;
       Target (Target_Position + 1) := Color.Green;
       Target (Target_Position + 2) := Color.Blue;
       Target (Target_Position + 3) :=
-        (if Prepared.Control.Has_Transparency
-             and then Index = Prepared.Control.Transparent_Index
+        (if Object.Pending_Frame.Control.Has_Transparency
+             and then Index = Object.Pending_Frame.Control.Transparent_Index
          then 0
          else 255);
    end loop;

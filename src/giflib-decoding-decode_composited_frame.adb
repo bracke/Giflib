@@ -4,7 +4,6 @@ function Decode_Composited_Frame
    Target : out Streams.Byte_Array;
    Info : out Frame_Info) return Results.Result
 is
-   Prepared : constant Prepared_Frame := Object.Pending_Frame;
    Rectangle : Frames.Rectangle;
    Pixel_Bytes : Byte_Count;
    Outcome : Results.Result;
@@ -25,7 +24,7 @@ begin
    if not Results.Succeeded (Outcome) then
       return Fail (Object, Outcome.First_Error);
    end if;
-   if Prepared.Control.Disposal > 3
+   if Object.Pending_Frame.Control.Disposal > 3
      and then Object.Options.Strictness = Strict
    then
       return Fail
@@ -36,9 +35,9 @@ begin
               (Object.Input.all,
                (Block => Graphic_Control_Extension_Block,
                 Frame => Errors.Frame_At (Object.Frames_Seen),
-                Actual => Byte_Count (Prepared.Control.Disposal),
+                Actual => Byte_Count (Object.Pending_Frame.Control.Disposal),
                 others => <>))));
-   elsif Prepared.Control.Disposal > 3 then
+   elsif Object.Pending_Frame.Control.Disposal > 3 then
       Add_Warning
         (Object,
          Errors.Reserved_Value_Accepted,
@@ -47,15 +46,15 @@ begin
            (Object.Input.all,
             (Block => Graphic_Control_Extension_Block,
              Frame => Errors.Frame_At (Object.Frames_Seen),
-             Actual => Byte_Count (Prepared.Control.Disposal),
+             Actual => Byte_Count (Object.Pending_Frame.Control.Disposal),
              others => <>)));
    end if;
    Rectangle :=
-     (Left => Prepared.Left,
-      Top => Prepared.Top,
-      Width => Prepared.Width,
-      Height => Prepared.Height);
-   if Prepared.Control.Disposal = 3 then
+     (Left => Object.Pending_Frame.Left,
+      Top => Object.Pending_Frame.Top,
+      Width => Object.Pending_Frame.Width,
+      Height => Object.Pending_Frame.Height);
+   if Object.Pending_Frame.Control.Disposal = 3 then
       Outcome := Resource_Management.Save_Snapshot (Object, Rectangle);
       if not Results.Succeeded (Outcome) then
          return Fail (Object, Outcome.First_Error);
@@ -63,7 +62,7 @@ begin
    end if;
 
    Pixel_Bytes := Internal.Geometry_Arithmetic.Area
-     (Prepared.Width, Prepared.Height);
+     (Object.Pending_Frame.Width, Object.Pending_Frame.Height);
    Outcome := Resource_Management.Ensure_Frame_Scratch (Object, Pixel_Bytes);
    if not Results.Succeeded (Outcome) then
       return Fail (Object, Outcome.First_Error);
@@ -75,7 +74,7 @@ begin
 
    Outcome := Internal.Decoder_Storage.Image_Operations.Overlay_Frame_Scratch
      (Object.Resources, Object.Header_Data.Width, Rectangle, Pixel_Bytes,
-      Prepared.Palette, Prepared.Control);
+      Object.Pending_Frame.Palette, Object.Pending_Frame.Control);
    if not Results.Succeeded (Outcome) then
       return Fail (Object, Outcome.First_Error);
    end if;
@@ -85,6 +84,6 @@ begin
       return Fail (Object, Outcome.First_Error);
    end if;
    Session_Transitions.Commit_Composited_Frame
-     (Object, Rectangle, Prepared.Control);
+     (Object, Rectangle, Object.Pending_Frame.Control);
    return Complete_Frame (Object, Info);
 end Decode_Composited_Frame;

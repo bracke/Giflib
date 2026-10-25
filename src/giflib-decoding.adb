@@ -337,30 +337,29 @@ package body Giflib.Decoding is
      (Object : in out Decoder;
       Info : out Frame_Info) return Results.Result
    is
-      Prepared : constant Prepared_Frame := Object.Pending_Frame;
       Produced : constant Frame_Info :=
-        (if Prepared.Has_Local_Palette
+        (if Object.Pending_Frame.Has_Local_Palette
          then
            (Has_Local_Palette => True,
             Ordinal => Object.Frames_Seen,
-            Left => Prepared.Left,
-            Top => Prepared.Top,
-            Width => Prepared.Width,
-            Height => Prepared.Height,
-            Interlaced => Prepared.Interlaced,
-            Effective_Palette => Prepared.Palette,
-            Control => Prepared.Control,
-            Local_Palette_Sorted => Prepared.Local_Palette_Sorted)
+            Left => Object.Pending_Frame.Left,
+            Top => Object.Pending_Frame.Top,
+            Width => Object.Pending_Frame.Width,
+            Height => Object.Pending_Frame.Height,
+            Interlaced => Object.Pending_Frame.Interlaced,
+            Effective_Palette => Object.Pending_Frame.Palette,
+            Control => Object.Pending_Frame.Control,
+            Local_Palette_Sorted => Object.Pending_Frame.Local_Palette_Sorted)
          else
            (Has_Local_Palette => False,
             Ordinal => Object.Frames_Seen,
-            Left => Prepared.Left,
-            Top => Prepared.Top,
-            Width => Prepared.Width,
-            Height => Prepared.Height,
-            Interlaced => Prepared.Interlaced,
-            Effective_Palette => Prepared.Palette,
-            Control => Prepared.Control));
+            Left => Object.Pending_Frame.Left,
+            Top => Object.Pending_Frame.Top,
+            Width => Object.Pending_Frame.Width,
+            Height => Object.Pending_Frame.Height,
+            Interlaced => Object.Pending_Frame.Interlaced,
+            Effective_Palette => Object.Pending_Frame.Palette,
+            Control => Object.Pending_Frame.Control));
    begin
       Info := Produced;
       Session_Transitions.Complete_Frame (Object);
