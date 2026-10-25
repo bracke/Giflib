@@ -231,6 +231,8 @@ A palette is a bounded count and array of at most 256 RGB entries; tables writte
   cleanup protocol is used end-to-end by resource aggregators and distinguishes
   borrow conflicts, owner mismatch, preflight refusal, callback failure, and
   accounting failure instead of reducing nested failures to Boolean values.
+  Reusable quantization workspaces expose that structured release outcome while
+  retaining a Boolean aggregate-success observer for convenience.
   The shared owned-array layer
   provides preserve-on-growth storage for these indexes and default-initializes every newly allocated capacity slot;
   callers never observe an uninitialized scalar or access value. Each retained
@@ -362,10 +364,12 @@ counters, retained-warning state, compositor history/snapshot state,
 completion, failure, reset, and cancellation). Orchestrators may ask
 the proved state-arithmetic packages whether an operation is legal, but must not
 invoke their mutating operations directly or duplicate a multi-field commit.
-The repository structure check mechanically rejects assignments to those fields
-outside the transition units, rejects direct use of mutating state-arithmetic
-operations there, and covers every session-owned field, including indexed
-warning storage. Public lifecycle operations state
+The repository structure check derives the transition-owned field manifest from
+the decoder and encoder records, rejects assignments and renames of those fields
+outside the transition units, and rejects direct use of mutating
+state-arithmetic operations there. This includes indexed warning storage and
+prevents a newly added transition-owned field from silently escaping the check.
+Public lifecycle operations state
 success-conditioned postconditions without turning invalid calls into raising
 preconditions.
 Decoder frame entry, including skip, is validated and begun atomically through
