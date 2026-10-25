@@ -72,15 +72,20 @@ package body Giflib.Streams is
          return (Available => False);
    end Position;
 
-   function Read_Some_At
+   generic
+      with function Invoke return Source_Result;
+   function Invoke_Source
      (Object : in out Source'Class;
-      Buffer : out Byte_Array;
+      Start : out Source_Position_Result) return Source_Result;
+
+   function Invoke_Source
+     (Object : in out Source'Class;
       Start : out Source_Position_Result) return Source_Result
    is
       Result : Source_Result;
    begin
       Start := Position (Object);
-      Result := Object.Read (Buffer);
+      Result := Invoke;
       if Errors.Is_Fatal (Result.Error) then
          Result.Error := At_Source (Result.Error, Start);
       end if;
@@ -91,6 +96,65 @@ package body Giflib.Streams is
            (Error => At_Source (Errors.Make (Errors.Source_Read_Failed), Start),
             Count => 0,
             End_Of_Input => False);
+   end Invoke_Source;
+
+   generic
+      with function Invoke return Destination_Result;
+   function Invoke_Destination
+     (Object : in out Destination'Class;
+      Start : out Destination_Position_Result) return Destination_Result;
+
+   function Invoke_Destination
+     (Object : in out Destination'Class;
+      Start : out Destination_Position_Result) return Destination_Result
+   is
+      Result : Destination_Result;
+   begin
+      Start := Position (Object);
+      Result := Invoke;
+      if Errors.Is_Fatal (Result.Error) then
+         Result.Error := At_Destination (Result.Error, Start);
+      end if;
+      return Result;
+   exception
+      when others =>
+         return
+           (Error => At_Destination
+              (Errors.Make (Errors.Destination_Write_Failed), Start),
+            Count => 0);
+   end Invoke_Destination;
+
+   generic
+      with function Invoke return Errors.Error;
+   function Invoke_Flush
+     (Object : in out Destination'Class) return Errors.Error;
+
+   function Invoke_Flush
+     (Object : in out Destination'Class) return Errors.Error
+   is
+      Start : constant Destination_Position_Result := Position (Object);
+      Result : Errors.Error;
+   begin
+      Result := Invoke;
+      if Errors.Is_Fatal (Result) then
+         Result := At_Destination (Result, Start);
+      end if;
+      return Result;
+   exception
+      when others =>
+         return At_Destination
+           (Errors.Make (Errors.Destination_Write_Failed), Start);
+   end Invoke_Flush;
+
+   function Read_Some_At
+     (Object : in out Source'Class;
+      Buffer : out Byte_Array;
+      Start : out Source_Position_Result) return Source_Result
+   is
+      function Read return Source_Result is (Object.Read (Buffer));
+      function Call is new Invoke_Source (Read);
+   begin
+      return Call (Object, Start);
    end Read_Some_At;
 
    function Read_Some
@@ -107,20 +171,10 @@ package body Giflib.Streams is
       Count : Byte_Count;
       Start : out Source_Position_Result) return Source_Result
    is
-      Result : Source_Result;
+      function Skip return Source_Result is (Object.Skip (Count));
+      function Call is new Invoke_Source (Skip);
    begin
-      Start := Position (Object);
-      Result := Object.Skip (Count);
-      if Errors.Is_Fatal (Result.Error) then
-         Result.Error := At_Source (Result.Error, Start);
-      end if;
-      return Result;
-   exception
-      when others =>
-         return
-           (Error => At_Source (Errors.Make (Errors.Source_Read_Failed), Start),
-            Count => 0,
-            End_Of_Input => False);
+      return Call (Object, Start);
    end Skip_Some_At;
 
    function Skip_Some
@@ -137,20 +191,10 @@ package body Giflib.Streams is
       Buffer : Byte_Array;
       Start : out Destination_Position_Result) return Destination_Result
    is
-      Result : Destination_Result;
+      function Write return Destination_Result is (Object.Write (Buffer));
+      function Call is new Invoke_Destination (Write);
    begin
-      Start := Position (Object);
-      Result := Object.Write (Buffer);
-      if Errors.Is_Fatal (Result.Error) then
-         Result.Error := At_Destination (Result.Error, Start);
-      end if;
-      return Result;
-   exception
-      when others =>
-         return
-           (Error => At_Destination
-              (Errors.Make (Errors.Destination_Write_Failed), Start),
-            Count => 0);
+      return Call (Object, Start);
    end Write_Some_At;
 
    function Write_Some
@@ -165,18 +209,10 @@ package body Giflib.Streams is
    function Flush_Safely
      (Object : in out Destination'Class) return Errors.Error
    is
-      Start : constant Destination_Position_Result := Position (Object);
-      Result : Errors.Error;
+      function Flush return Errors.Error is (Object.Flush);
+      function Call is new Invoke_Flush (Flush);
    begin
-      Result := Object.Flush;
-      if Errors.Is_Fatal (Result) then
-         Result := At_Destination (Result, Start);
-      end if;
-      return Result;
-   exception
-      when others =>
-         return At_Destination
-           (Errors.Make (Errors.Destination_Write_Failed), Start);
+      return Call (Object);
    end Flush_Safely;
 
    function Read_Exact (Object : in out Source'Class; Buffer : out Byte_Array) return Results.Result is
