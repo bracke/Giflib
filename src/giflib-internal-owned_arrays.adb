@@ -160,9 +160,19 @@ package body Giflib.Internal.Owned_Arrays is
    function Length (Object : Handle) return Natural is
      (if Object.Pointer = null then 0 else Object.Pointer'Length);
 
-   function Value
-     (Object : in out Handle) return not null Element_Array_Access
-   is (Object.Pointer);
+   procedure Query
+     (Object : Handle;
+      Process : not null access procedure (Value : Element_Array)) is
+   begin
+      Process (Object.Pointer.all);
+   end Query;
+
+   procedure Update
+     (Object : in out Handle;
+      Process : not null access procedure (Value : in out Element_Array)) is
+   begin
+      Process (Object.Pointer.all);
+   end Update;
 
    function Element
      (Object : Handle;

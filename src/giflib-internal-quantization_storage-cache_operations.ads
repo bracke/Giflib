@@ -1,26 +1,34 @@
-with Giflib.Internal.Quantization_Storage.Operations;
+with Giflib.Internal.Quantization_Storage.Outcomes;
 with Giflib.Internal.Work_Budgets;
 
 package Giflib.Internal.Quantization_Storage.Cache_Operations is
    pragma Preelaborate;
-   use type Operations.Operation_Status;
-   subtype Operation_Status is Operations.Operation_Status;
-   subtype Probe_Result is Operations.Cache_Probe_Result;
+   use type Outcomes.Budgeted_Status;
+
+   type Probe_Result is record
+      Status : Outcomes.Budgeted_Status := Outcomes.Budgeted_Invariant_Failure;
+      Found : Boolean := False;
+      Value : Palette_Index := 0;
+      Store_Slot : Natural := 0;
+      Probe_Count : Natural := 0;
+   end record;
 
    function Reset
      (Object : in out Resources;
-      Work : in out Work_Budgets.Meter) return Operation_Status
+      Work : in out Work_Budgets.Meter) return Outcomes.Budgeted_Status
      with Post =>
-       (if Reset'Result = Operations.Operation_Work_Limit
+       (if Reset'Result = Outcomes.Budgeted_Work_Limit
         then Work_Budgets.Failed (Work));
    function Probe
-     (Object : in out Resources;
-      Key : Natural) return Probe_Result
-     with Post => Probe'Result.Status /= Operations.Operation_Work_Limit;
+     (Object : Resources;
+      Key : Natural;
+      Work : in out Work_Budgets.Meter) return Probe_Result
+     with Post =>
+       (if Probe'Result.Status = Outcomes.Budgeted_Work_Limit
+        then Work_Budgets.Failed (Work));
    function Store
      (Object : in out Resources;
       Slot : Natural;
       Key : Natural;
-      Value : Palette_Index) return Operation_Status
-     with Post => Store'Result /= Operations.Operation_Work_Limit;
+      Value : Palette_Index) return Outcomes.Storage_Status;
 end Giflib.Internal.Quantization_Storage.Cache_Operations;

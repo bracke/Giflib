@@ -328,20 +328,26 @@ package body Giflib.Internal.LZW_Encoding is
       Interlace_Width : Natural := 0;
       Interlace_Height : Natural := 0) return Results.Result
    is
+      Outcome : Results.Result;
+      procedure Run (Value : in out Workspace) is
+      begin
+         Outcome := Encode
+           (Value,
+            Object,
+            Input,
+            Minimum_Code_Size,
+            Max_Work,
+            Max_Compressed_Bytes,
+            Max_Wire_Bytes,
+            Compressed_Bytes,
+            Wire_Bytes,
+            Maximum_Index,
+            Interlace_Width,
+            Interlace_Height);
+      end Run;
    begin
-      return Encode
-        (Workspace_Ownership.Value (Context.Owner).all,
-         Object,
-         Input,
-         Minimum_Code_Size,
-         Max_Work,
-         Max_Compressed_Bytes,
-         Max_Wire_Bytes,
-         Compressed_Bytes,
-         Wire_Bytes,
-         Maximum_Index,
-         Interlace_Width,
-         Interlace_Height);
+      Workspace_Ownership.Update (Context.Owner, Run'Access);
+      return Outcome;
    end Encode;
 
    function Encode

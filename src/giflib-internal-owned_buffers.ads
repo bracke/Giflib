@@ -7,7 +7,6 @@ package Giflib.Internal.Owned_Buffers is
 
    package Storage is new Owned_Arrays
      (Positive, Byte, Streams.Byte_Array, 0);
-   subtype Byte_Array_Access is Storage.Element_Array_Access;
    type Handle is limited private;
    --  A successful Ensure binds the handle to Budget until Release.  The
    --  binding stores only the ledger identity; callers supply the ledger when
@@ -29,9 +28,15 @@ package Giflib.Internal.Owned_Buffers is
 
    function Is_Allocated (Buffer : Handle) return Boolean;
    function Length (Buffer : Handle) return Byte_Count;
-   function Value
-     (Buffer : in out Handle) return not null Byte_Array_Access
-   with Pre => Is_Allocated (Buffer);
+   procedure Query
+     (Buffer : Handle;
+      Process : not null access procedure (Value : Streams.Byte_Array))
+     with Pre => Is_Allocated (Buffer);
+   procedure Update
+     (Buffer : in out Handle;
+      Process : not null access procedure
+        (Value : in out Streams.Byte_Array))
+     with Pre => Is_Allocated (Buffer);
 
 private
    type Handle is limited record

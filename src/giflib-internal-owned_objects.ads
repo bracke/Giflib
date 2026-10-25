@@ -9,8 +9,6 @@ package Giflib.Internal.Owned_Objects is
    --  A successful Ensure binds the handle to Budget until Release.  The
    --  binding stores only the ledger identity; callers supply the ledger when
    --  releasing, so the handle never retains a potentially dangling access.
-   type Element_Access is access all Element_Type;
-
    function Ensure
      (Object : in out Handle;
       Budget : aliased in out Ownership.Byte_Budget;
@@ -26,10 +24,17 @@ package Giflib.Internal.Owned_Objects is
 
    function Is_Allocated (Object : Handle) return Boolean;
    function Allocation_Bytes return Byte_Count;
-   function Value (Object : in out Handle) return not null Element_Access
+   procedure Query
+     (Object : Handle;
+      Process : not null access procedure (Value : Element_Type))
+     with Pre => Is_Allocated (Object);
+   procedure Update
+     (Object : in out Handle;
+      Process : not null access procedure (Value : in out Element_Type))
      with Pre => Is_Allocated (Object);
 
 private
+   type Element_Access is access all Element_Type;
    type Handle is limited record
       Pointer : Element_Access := null;
       Owner : Ownership.Budget_Owner;

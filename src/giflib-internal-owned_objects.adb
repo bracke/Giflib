@@ -65,6 +65,17 @@ package body Giflib.Internal.Owned_Objects is
    function Is_Allocated (Object : Handle) return Boolean is
      (Object.Pointer /= null);
 
-   function Value (Object : in out Handle) return not null Element_Access is
-     (Object.Pointer);
+   procedure Query
+     (Object : Handle;
+      Process : not null access procedure (Value : Element_Type)) is
+   begin
+      Process (Object.Pointer.all);
+   end Query;
+
+   procedure Update
+     (Object : in out Handle;
+      Process : not null access procedure (Value : in out Element_Type)) is
+   begin
+      Process (Object.Pointer.all);
+   end Update;
 end Giflib.Internal.Owned_Objects;

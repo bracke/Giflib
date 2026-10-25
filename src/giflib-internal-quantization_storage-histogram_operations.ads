@@ -1,25 +1,23 @@
 with Giflib.Internal.Quantization_Arithmetic;
-with Giflib.Internal.Quantization_Storage.Operations;
+with Giflib.Internal.Quantization_Storage.Outcomes;
 with Giflib.Internal.Work_Budgets;
 with Giflib.Palettes;
 with Giflib.Results;
 
 package Giflib.Internal.Quantization_Storage.Histogram_Operations is
    pragma Preelaborate;
-   use type Operations.Operation_Status;
-   subtype Operation_Status is Operations.Operation_Status;
+   use type Outcomes.Budgeted_Status;
    subtype Histogram_Index is Quantization_Arithmetic.Histogram_Index;
 
    function Reset
      (Object : in out Resources;
-      Work : in out Work_Budgets.Meter) return Operation_Status
+      Work : in out Work_Budgets.Meter) return Outcomes.Budgeted_Status
      with Post =>
-       (if Reset'Result = Operations.Operation_Work_Limit
+       (if Reset'Result = Outcomes.Budgeted_Work_Limit
         then Work_Budgets.Failed (Work));
    function Add_Sample
      (Object : in out Resources;
-      Bucket : Histogram_Index) return Operation_Status
-     with Post => Add_Sample'Result /= Operations.Operation_Work_Limit;
+      Bucket : Histogram_Index) return Outcomes.Storage_Status;
    function Build_Median_Cut
      (Object : in out Resources;
       Generated_Start : Natural;

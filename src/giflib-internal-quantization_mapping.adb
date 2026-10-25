@@ -2,15 +2,16 @@ with Giflib.Errors;
 with Giflib.Internal.Quantization_Arithmetic;
 with Giflib.Internal.Quantization_Pixels;
 with Giflib.Internal.Quantization_Storage.Cache_Operations;
-with Giflib.Internal.Quantization_Storage.Operations;
+with Giflib.Internal.Quantization_Storage.Outcomes;
 with Giflib.Internal.Resource_Diagnostics;
 
 package body Giflib.Internal.Quantization_Mapping is
    package Arithmetic renames Quantization_Arithmetic;
    package Cache renames Quantization_Storage.Cache_Operations;
-   package Operations renames Quantization_Storage.Operations;
+   package Outcomes renames Quantization_Storage.Outcomes;
    package Pixels renames Quantization_Pixels;
-   use type Operations.Operation_Status;
+   use type Outcomes.Budgeted_Status;
+   use type Outcomes.Storage_Status;
 
    function Find
      (Object : in out Quantization_Storage.Resources;
@@ -23,12 +24,12 @@ package body Giflib.Internal.Quantization_Mapping is
       Chosen : out Palette_Index) return Results.Result
    is
       Key : constant Natural := Pixels.Color_Key (Color);
-      Probe : constant Cache.Probe_Result := Cache.Probe (Object, Key);
+      Probe : constant Cache.Probe_Result := Cache.Probe (Object, Key, Work);
       Best : Natural := First;
       Best_Distance : Natural := Natural'Last;
       Distance : Natural;
       Accepted : Boolean;
-      Status : Operations.Operation_Status;
+      Status : Outcomes.Storage_Status;
 
       function Work_Failure return Results.Result is
         (Results.Failure
@@ -40,13 +41,10 @@ package body Giflib.Internal.Quantization_Mapping is
         (Results.Failure (Errors.Make (Errors.Internal_Invariant_Failed)));
    begin
       Chosen := 0;
-      if Probe.Status /= Operations.Operation_Ready then
-         return Invariant_Failure;
-      end if;
-      Work_Budgets.Try_Charge
-        (Work, Byte_Count (Probe.Probe_Count), Accepted);
-      if not Accepted then
+      if Probe.Status = Outcomes.Budgeted_Work_Limit then
          return Work_Failure;
+      elsif Probe.Status /= Outcomes.Budgeted_Ready then
+         return Invariant_Failure;
       elsif Probe.Found then
          Chosen := Probe.Value;
          return Results.Success;
@@ -75,7 +73,7 @@ package body Giflib.Internal.Quantization_Mapping is
       Chosen := Palette_Index (Best);
       Status := Cache.Store (Object, Probe.Store_Slot, Key, Chosen);
       return
-        (if Status = Operations.Operation_Ready
+        (if Status = Outcomes.Storage_Ready
          then Results.Success else Invariant_Failure);
    end Find;
 end Giflib.Internal.Quantization_Mapping;

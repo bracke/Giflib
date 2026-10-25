@@ -361,18 +361,24 @@ package body Giflib.Internal.LZW is
       Interlace_Width : Natural := 0;
       Interlace_Height : Natural := 0) return Results.Result
    is
+      Outcome : Results.Result;
+      procedure Run (Value : in out Workspace) is
+      begin
+         Outcome := Decode
+           (Value,
+            Object,
+            Blocks_Reader,
+            Minimum_Code_Size,
+            Output,
+            Decoded_Count,
+            Max_Work,
+            Frame,
+            Maximum_Index,
+            Interlace_Width,
+            Interlace_Height);
+      end Run;
    begin
-      return Decode
-        (Workspace_Ownership.Value (Context.Owner).all,
-         Object,
-         Blocks_Reader,
-         Minimum_Code_Size,
-         Output,
-         Decoded_Count,
-         Max_Work,
-         Frame,
-         Maximum_Index,
-         Interlace_Width,
-         Interlace_Height);
+      Workspace_Ownership.Update (Context.Owner, Run'Access);
+      return Outcome;
    end Decode;
 end Giflib.Internal.LZW;

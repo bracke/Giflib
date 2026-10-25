@@ -25,7 +25,18 @@ package body Giflib.Internal.Owned_Buffers is
    function Length (Buffer : Handle) return Byte_Count is
      (Byte_Count (Storage.Length (Buffer.Owner)));
 
-   function Value
-     (Buffer : in out Handle) return not null Byte_Array_Access is
-     (Storage.Value (Buffer.Owner));
+   procedure Query
+     (Buffer : Handle;
+      Process : not null access procedure (Value : Streams.Byte_Array)) is
+   begin
+      Storage.Query (Buffer.Owner, Process);
+   end Query;
+
+   procedure Update
+     (Buffer : in out Handle;
+      Process : not null access procedure
+        (Value : in out Streams.Byte_Array)) is
+   begin
+      Storage.Update (Buffer.Owner, Process);
+   end Update;
 end Giflib.Internal.Owned_Buffers;

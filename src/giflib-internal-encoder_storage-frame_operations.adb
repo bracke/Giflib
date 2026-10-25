@@ -42,6 +42,23 @@ package body Giflib.Internal.Encoder_Storage.Frame_Operations is
       Interlace_Width : Natural := 0;
       Interlace_Height : Natural := 0) return Results.Result
    is
+      Outcome : Results.Result;
+      procedure Run (Pixels : Streams.Byte_Array) is
+      begin
+         Outcome := LZW_Encoding.Encode
+           (Object.LZW_Data,
+            Destination,
+            Pixels (1 .. Natural (Pixel_Count)),
+            Minimum_Code_Size,
+            Max_Work,
+            Max_Compressed_Bytes,
+            Max_Wire_Bytes,
+            Compressed_Bytes,
+            Wire_Bytes,
+            Maximum_Index,
+            Interlace_Width,
+            Interlace_Height);
+      end Run;
    begin
       if Pixel_Count = 0
         or else Pixel_Count > Byte_Count (Natural'Last)
@@ -58,12 +75,7 @@ package body Giflib.Internal.Encoder_Storage.Frame_Operations is
          return Results.Failure
            (Errors.Make (Errors.Internal_Invariant_Failed));
       end if;
-      return LZW_Encoding.Encode
-        (Object.LZW_Data, Destination,
-         Owned_Buffers.Value (Object.Truecolor_Buffer).all
-           (1 .. Natural (Pixel_Count)),
-         Minimum_Code_Size, Max_Work, Max_Compressed_Bytes, Max_Wire_Bytes,
-         Compressed_Bytes, Wire_Bytes, Maximum_Index,
-         Interlace_Width, Interlace_Height);
+      Owned_Buffers.Query (Object.Truecolor_Buffer, Run'Access);
+      return Outcome;
    end Encode_Stored_LZW;
 end Giflib.Internal.Encoder_Storage.Frame_Operations;

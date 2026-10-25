@@ -12,7 +12,6 @@ package Giflib.Internal.Owned_Arrays is
       or else Index_Type'Pos (Index_Type'Last) > Integer'Pos (Integer'Last),
       "Owned_Arrays index type must fit in Integer");
 
-   type Element_Array_Access is access all Element_Array;
    type Handle is limited private;
 
    function Ensure
@@ -59,12 +58,16 @@ package Giflib.Internal.Owned_Arrays is
    --  length before exposing their contents.
    function Length (Object : Handle) return Natural;
    function Allocation_Bytes (Length : Natural) return Byte_Count;
-   function Value
-     (Object : in out Handle) return not null Element_Array_Access
+   procedure Query
+     (Object : Handle;
+      Process : not null access procedure (Value : Element_Array))
      with Pre => Is_Allocated (Object);
-   --  Low-level scratch-storage borrow. The returned access becomes invalid
-   --  after Ensure, Grow, or Release; logical collections use Owned_Vectors
-   --  instead of exposing reserved capacity through this operation.
+   procedure Update
+     (Object : in out Handle;
+      Process : not null access procedure (Value : in out Element_Array))
+     with Pre => Is_Allocated (Object);
+   --  Scratch storage is visible only for the dynamic extent of Process.
+   --  Logical collections use Owned_Vectors instead of exposing capacity.
    function Element
      (Object : Handle;
       Index : Index_Type) return Element_Type
@@ -76,6 +79,7 @@ package Giflib.Internal.Owned_Arrays is
      with Pre => Contains (Object, Index);
 
 private
+   type Element_Array_Access is access all Element_Array;
    type Handle is limited record
       Pointer : Element_Array_Access := null;
       Owner : Ownership.Budget_Owner;

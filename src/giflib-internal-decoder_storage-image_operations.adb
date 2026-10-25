@@ -44,7 +44,22 @@ package body Giflib.Internal.Decoder_Storage.Image_Operations is
       Pixel_Bytes : Byte_Count;
       Frame : Frame_Ordinal := 0) return Results.Result
    is
-      Scratch : Owned_Buffers.Byte_Array_Access;
+      Outcome : Results.Result;
+      procedure Decode (Scratch : in out Streams.Byte_Array) is
+      begin
+         Outcome := Image_Data.Decode_Indices
+           (Object.LZW_Data,
+            Source,
+            Width,
+            Height,
+            Interlaced,
+            Palette,
+            Constraints,
+            Total_Decoded_Pixels,
+            Total_Compressed_Bytes,
+            Scratch (1 .. Natural (Pixel_Bytes)),
+            Frame);
+      end Decode;
    begin
       if Pixel_Bytes = 0
         or else Pixel_Bytes > Byte_Count (Natural'Last)
@@ -53,11 +68,8 @@ package body Giflib.Internal.Decoder_Storage.Image_Operations is
       then
          return Invariant_Failure;
       end if;
-      Scratch := Owned_Buffers.Value (Object.Frame_Scratch_Buffer);
-      return Image_Data.Decode_Indices
-        (Object.LZW_Data, Source, Width, Height, Interlaced, Palette,
-         Constraints, Total_Decoded_Pixels, Total_Compressed_Bytes,
-         Scratch.all (1 .. Natural (Pixel_Bytes)), Frame);
+      Owned_Buffers.Update (Object.Frame_Scratch_Buffer, Decode'Access);
+      return Outcome;
    end Decode_Frame_Scratch;
 
    function Initialize_Canvas
@@ -66,7 +78,18 @@ package body Giflib.Internal.Decoder_Storage.Image_Operations is
       Color : Palettes.RGB_Color;
       Alpha : Byte) return Results.Result
    is
-      Position : Natural;
+      procedure Fill (Canvas : in out Streams.Byte_Array) is
+         Position : Natural;
+      begin
+         for Pixel in 0 .. Natural (Pixels) - 1 loop
+            Position := Natural
+              (Pixel_Arithmetic.Component_Offset (Pixel, 4));
+            Canvas (1 + Position) := Color.Red;
+            Canvas (2 + Position) := Color.Green;
+            Canvas (3 + Position) := Color.Blue;
+            Canvas (4 + Position) := Alpha;
+         end loop;
+      end Fill;
    begin
       if Pixels = 0
         or else Pixels > Byte_Count (Natural'Last)
@@ -75,13 +98,7 @@ package body Giflib.Internal.Decoder_Storage.Image_Operations is
       then
          return Invariant_Failure;
       end if;
-      for Pixel in 0 .. Natural (Pixels) - 1 loop
-         Position := Natural (Pixel_Arithmetic.Component_Offset (Pixel, 4));
-         Owned_Buffers.Value (Object.Canvas_Buffer) (1 + Position) := Color.Red;
-         Owned_Buffers.Value (Object.Canvas_Buffer) (2 + Position) := Color.Green;
-         Owned_Buffers.Value (Object.Canvas_Buffer) (3 + Position) := Color.Blue;
-         Owned_Buffers.Value (Object.Canvas_Buffer) (4 + Position) := Alpha;
-      end loop;
+      Owned_Buffers.Update (Object.Canvas_Buffer, Fill'Access);
       return Results.Success;
    end Initialize_Canvas;
 
@@ -92,13 +109,18 @@ package body Giflib.Internal.Decoder_Storage.Image_Operations is
       Color : Palettes.RGB_Color;
       Alpha : Byte) return Results.Result
    is
+      Outcome : Results.Result;
+      procedure Fill (Canvas : in out Streams.Byte_Array) is
+      begin
+         Outcome := Disposal.Fill_Rectangle
+           (Canvas, Canvas_Width, Rectangle, Color, Alpha);
+      end Fill;
    begin
       if not Canvas_Allocated (Object) then
          return Invariant_Failure;
       end if;
-      return Disposal.Fill_Rectangle
-        (Owned_Buffers.Value (Object.Canvas_Buffer).all,
-         Canvas_Width, Rectangle, Color, Alpha);
+      Owned_Buffers.Update (Object.Canvas_Buffer, Fill'Access);
+      return Outcome;
    end Fill_Canvas_Rectangle;
 
    function Capture_Snapshot
@@ -106,14 +128,23 @@ package body Giflib.Internal.Decoder_Storage.Image_Operations is
       Canvas_Width : Image_Width;
       Rectangle : Frames.Rectangle) return Results.Result
    is
+      Outcome : Results.Result;
+      procedure Read_Canvas (Canvas : Streams.Byte_Array) is
+         procedure Write_Snapshot (Snapshot : in out Streams.Byte_Array) is
+         begin
+            Outcome := Disposal.Capture_Rectangle
+              (Canvas, Canvas_Width, Rectangle, Snapshot);
+         end Write_Snapshot;
+      begin
+         Owned_Buffers.Update
+           (Object.Snapshot_Buffer, Write_Snapshot'Access);
+      end Read_Canvas;
    begin
       if not Canvas_Allocated (Object) or else not Snapshot_Allocated (Object) then
          return Invariant_Failure;
       end if;
-      return Disposal.Capture_Rectangle
-        (Owned_Buffers.Value (Object.Canvas_Buffer).all,
-         Canvas_Width, Rectangle,
-         Owned_Buffers.Value (Object.Snapshot_Buffer).all);
+      Owned_Buffers.Query (Object.Canvas_Buffer, Read_Canvas'Access);
+      return Outcome;
    end Capture_Snapshot;
 
    function Restore_Snapshot
@@ -121,14 +152,23 @@ package body Giflib.Internal.Decoder_Storage.Image_Operations is
       Canvas_Width : Image_Width;
       Rectangle : Frames.Rectangle) return Results.Result
    is
+      Outcome : Results.Result;
+      procedure Write_Canvas (Canvas : in out Streams.Byte_Array) is
+         procedure Read_Snapshot (Snapshot : Streams.Byte_Array) is
+         begin
+            Outcome := Disposal.Restore_Rectangle
+              (Canvas, Canvas_Width, Rectangle, Snapshot);
+         end Read_Snapshot;
+      begin
+         Owned_Buffers.Query
+           (Object.Snapshot_Buffer, Read_Snapshot'Access);
+      end Write_Canvas;
    begin
       if not Canvas_Allocated (Object) or else not Snapshot_Allocated (Object) then
          return Invariant_Failure;
       end if;
-      return Disposal.Restore_Rectangle
-        (Owned_Buffers.Value (Object.Canvas_Buffer).all,
-         Canvas_Width, Rectangle,
-         Owned_Buffers.Value (Object.Snapshot_Buffer).all);
+      Owned_Buffers.Update (Object.Canvas_Buffer, Write_Canvas'Access);
+      return Outcome;
    end Restore_Snapshot;
 
    function Overlay_Frame_Scratch
@@ -139,6 +179,22 @@ package body Giflib.Internal.Decoder_Storage.Image_Operations is
       Palette : Palettes.Palette;
       Control : Frames.Graphic_Control) return Results.Result
    is
+      Outcome : Results.Result;
+      procedure Write_Canvas (Canvas : in out Streams.Byte_Array) is
+         procedure Read_Frame (Indices : Streams.Byte_Array) is
+         begin
+            Outcome := Compositing.Overlay
+              (Canvas,
+               Canvas_Width,
+               Rectangle,
+               Indices (1 .. Natural (Pixel_Bytes)),
+               Palette,
+               Control);
+         end Read_Frame;
+      begin
+         Owned_Buffers.Query
+           (Object.Frame_Scratch_Buffer, Read_Frame'Access);
+      end Write_Canvas;
    begin
       if not Canvas_Allocated (Object)
         or else Pixel_Bytes = 0
@@ -147,18 +203,18 @@ package body Giflib.Internal.Decoder_Storage.Image_Operations is
       then
          return Invariant_Failure;
       end if;
-      return Compositing.Overlay
-        (Owned_Buffers.Value (Object.Canvas_Buffer).all,
-         Canvas_Width, Rectangle,
-         Owned_Buffers.Value (Object.Frame_Scratch_Buffer).all
-           (1 .. Natural (Pixel_Bytes)),
-         Palette, Control);
+      Owned_Buffers.Update (Object.Canvas_Buffer, Write_Canvas'Access);
+      return Outcome;
    end Overlay_Frame_Scratch;
 
    function Copy_Canvas
      (Object : in out Resources;
       Target : out Streams.Byte_Array) return Results.Result
    is
+      procedure Read (Canvas : Streams.Byte_Array) is
+      begin
+         Target := Canvas;
+      end Read;
    begin
       if not Canvas_Allocated (Object) then
          return Invariant_Failure;
@@ -169,7 +225,7 @@ package body Giflib.Internal.Decoder_Storage.Image_Operations is
                (Expected => Canvas_Length (Object),
                 Actual => Byte_Count (Target'Length), others => <>)));
       end if;
-      Target := Owned_Buffers.Value (Object.Canvas_Buffer).all;
+      Owned_Buffers.Query (Object.Canvas_Buffer, Read'Access);
       return Results.Success;
    end Copy_Canvas;
 end Giflib.Internal.Decoder_Storage.Image_Operations;
