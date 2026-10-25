@@ -41,6 +41,14 @@ procedure Giflib_Check is
            ([Processes.Argument (Files.Join (Root, "tests/check_library_interface.sh")),
              Processes.Argument (Root)]),
          Quiet => True);
+      Processes.Run
+        ("session transition ownership",
+         Root,
+         Sh,
+         Processes.Arguments
+           ([Processes.Argument (Files.Join (Root, "tests/check_session_transitions.sh")),
+             Processes.Argument (Root)]),
+         Quiet => True);
       Project_Tools.Release_Checks.Require_Text
         (Checks,
          "tests/giflib_whitebox.gpr",
