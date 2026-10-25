@@ -1,4 +1,6 @@
 with Giflib.Internal.Ownership.Testing;
+with Giflib.Internal.LZW_Encoding;
+with Giflib.Internal.Owned_Buffers;
 with Giflib.Internal.Budget_Arithmetic;
 with Giflib.Quantization.Testing;
 

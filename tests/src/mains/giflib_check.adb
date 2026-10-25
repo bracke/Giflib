@@ -33,6 +33,25 @@ procedure Giflib_Check is
       Project_Tools.Release_Checks.Require_Text
         (Checks, "giflib.gpr", "with ""giflib_build.gpr"";", Quiet => False);
       Project_Tools.Release_Checks.Require_Text
+        (Checks, "giflib.gpr", "Giflib.Internal.Decoder_Storage", Quiet => False);
+      Project_Tools.Release_Checks.Require_Text
+        (Checks, "giflib.gpr", "Giflib.Internal.Encoder_Storage", Quiet => False);
+      Project_Tools.Release_Checks.Require_Text
+        (Checks, "giflib.gpr", "Giflib.Internal.Quantization_Storage", Quiet => False);
+      if Files.File_Contains
+        (Files.Join (Root, "src/giflib-decoding.ads"),
+         "private with Giflib.Internal.Owned")
+        or else Files.File_Contains
+          (Files.Join (Root, "src/giflib-encoding.ads"),
+           "private with Giflib.Internal.Owned")
+        or else Files.File_Contains
+          (Files.Join (Root, "src/giflib-quantization.ads"),
+           "private with Giflib.Internal.Owned")
+      then
+         Project_Tools.Release_Checks.Fail
+           ("giflib_check: public specs bypass subsystem storage packages");
+      end if;
+      Project_Tools.Release_Checks.Require_Text
         (Checks,
          "tests/giflib_whitebox.gpr",
          "with ""../giflib_build.gpr"";",
@@ -75,7 +94,7 @@ procedure Giflib_Check is
       Project_Tools.Release_Checks.Require_GPR_Main_Inventory
         (Project_File       => Files.Join (Root, "tests/unit_tests.gpr"),
          Documentation_File => Files.Join (Root, "docs/IMPLEMENTATION_PLAN.md"),
-         Source_Directory   => Files.Join (Root, "tests/src/mains"),
+         Source_Directory   => Files.Join (Root, "tests/src/test_mains"),
          Quiet              => False);
       Project_Tools.Release_Checks.Require_GPR_Main_Inventory
         (Project_File       => Files.Join (Root, "tests/tools.gpr"),
@@ -91,7 +110,7 @@ procedure Giflib_Check is
          Required_Stem_Suffix => "",
          Quiet                => False);
       Project_Tools.Release_Checks.Require_Text
-        (Checks, "tests/src/mains/giflib_tests.adb", "with Project_Tools.", Quiet => False);
+        (Checks, "tests/src/test_mains/giflib_tests.adb", "with Project_Tools.", Quiet => False);
       Project_Tools.Release_Checks.Require_Text
         (Checks, "tests/src/mains/giflib_check.adb", "with Project_Tools.", Quiet => False);
       Project_Tools.Release_Checks.Require_Text

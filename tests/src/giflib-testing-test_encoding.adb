@@ -422,18 +422,13 @@ package body Giflib.Testing.Test_Encoding is
       Assert (Outcome.First_Error.Code = Giflib.Errors.Unsupported_Feature,
               "GIF87a loop extension was silently dropped");
       Assert (Destination.Offset = 0, "invalid GIF87a feature wrote partial output");
-      Assert (Giflib.Encoding.State (Encoder) = Giflib.Encoding.Failed,
-              "invalid feature did not fail encoder");
-      declare
-         Original : constant Giflib.Errors.Error :=
-           Giflib.Encoding.First_Error (Encoder);
-      begin
-         Outcome := Giflib.Encoding.Cancel (Encoder);
-         Assert
-           (Outcome.First_Error.Code = Original.Code
-            and then Giflib.Encoding.First_Error (Encoder).Code = Original.Code,
-            "cancelling a failed encoder replaced its first diagnostic");
-      end;
+      Assert
+        (Giflib.Encoding.State (Encoder) = Giflib.Encoding.Screen_Defined
+         and then Giflib.Encoding.First_Error (Encoder).Code =
+           Giflib.Errors.No_Error,
+         "rejected preflight request made the encoder terminal");
+      Outcome := Giflib.Encoding.Finish (Encoder);
+      Giflib.Testing.Assertions.Require_Success (Outcome);
 
       Giflib.Encoding.Finalize (Encoder);
       Giflib.Streams.Open (Destination);
@@ -448,8 +443,15 @@ package body Giflib.Testing.Test_Encoding is
          [1 => 0]);
       Assert
         (Outcome.First_Error.Code = Giflib.Errors.Unsupported_Feature
-         and then Destination.Offset = 0,
+         and then Destination.Offset = 0
+         and then Giflib.Encoding.State (Encoder) =
+           Giflib.Encoding.Screen_Defined,
          "decoded graphic control bypassed frame-control encoding");
+      Outcome := Giflib.Encoding.Add_Extension
+        (Encoder,
+         (Kind => Giflib.Encoding.Comment_Extension),
+         [1 => 0]);
+      Giflib.Testing.Assertions.Require_Success (Outcome);
    end Rejects_GIF87a_Features_And_Bad_State;
 
    procedure Preserves_Extension_Payload_And_Placement (T : in out AUnit.Test_Cases.Test_Case'Class) is

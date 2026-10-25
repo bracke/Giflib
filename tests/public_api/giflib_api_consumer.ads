@@ -19,6 +19,9 @@ package Giflib_API_Consumer is
    Version : constant String := Giflib.Version.Current;
    Default_Mode : constant Giflib.Strictness_Mode := Giflib.Strict;
    Default_Limits : constant Giflib.Limits.Limit_Set := Giflib.Limits.Default_Limits;
+   subtype Warning_Record_Limit is Giflib.Limits.Warning_Record_Limit;
+   Warning_Capacity : constant Warning_Record_Limit :=
+     Giflib.Limits.Maximum_Warning_Records;
    No_Error : constant Giflib.Errors.Error := Giflib.Errors.Make (Giflib.Errors.No_Error);
    Success : constant Giflib.Results.Result := Giflib.Results.Success;
    Streams_Available : constant Boolean := Giflib.Capabilities.Memory_Streams;

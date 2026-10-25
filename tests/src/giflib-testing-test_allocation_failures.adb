@@ -104,6 +104,9 @@ package body Giflib.Testing.Test_Allocation_Failures is
       State : constant Arithmetic.Injection_State := Arithmetic.Arm (2);
       Result : Arithmetic.Check_Result;
       Budget : Giflib.Internal.Ownership.Byte_Budget;
+      Rollback_Budget : aliased Giflib.Internal.Ownership.Byte_Budget;
+      Rollback_Fault : Giflib.Internal.Ownership.Fault_State;
+      Rollback_Outcome : Giflib.Internal.Ownership.Allocation_Outcome;
       Reserved : Boolean;
       Work : Giflib.Internal.Work_Budgets.Meter (6);
       Accepted : Boolean;
@@ -150,6 +153,25 @@ package body Giflib.Testing.Test_Allocation_Failures is
         (Giflib.Internal.Ownership.Release (Budget, 6)
          and then Giflib.Internal.Ownership.Used (Budget) = 0,
               "allocation budget release is unbalanced");
+      Assert
+        (not Giflib.Internal.Ownership.Release (Budget, 1)
+         and then not Giflib.Internal.Ownership.Healthy (Budget),
+         "ledger underflow did not leave a sticky cleanup fault");
+      declare
+         Ticket : Giflib.Internal.Ownership.Reservation
+           (Rollback_Budget'Access);
+      begin
+         Rollback_Outcome := Giflib.Internal.Ownership.Reserve
+           (Ticket, Rollback_Fault, 4, 4);
+         Assert
+           (Rollback_Outcome.Status =
+              Giflib.Internal.Ownership.Allocation_Ready,
+            "rollback test reservation failed");
+         Giflib.Internal.Ownership.Testing.Set_Used (Rollback_Budget, 0);
+      end;
+      Assert
+        (not Giflib.Internal.Ownership.Healthy (Rollback_Budget),
+         "reservation finalizer discarded its rollback failure");
       Giflib.Internal.Work_Budgets.Try_Charge
         (Work, Amount => 6, Accepted => Accepted);
       Assert

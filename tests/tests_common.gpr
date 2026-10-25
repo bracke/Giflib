@@ -4,7 +4,6 @@ with "../giflib_build.gpr";
 abstract project Tests_Common is
    Selected_Build_Profile : Tests_Config.Build_Profile_Kind :=
      External ("GIFLIB_BUILD_PROFILE_OVERRIDE", Tests_Config.Build_Profile);
-   for Source_Dirs use ("src", "src/subunits", "src/mains");
    for Create_Missing_Dirs use "True";
 
    package Compiler is

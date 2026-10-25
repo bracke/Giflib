@@ -18,5 +18,6 @@ package body Giflib.Internal.Ownership.Testing is
    is
    begin
       Budget.Used_Bytes := Value;
+      Budget.Corrupted := False;
    end Set_Used;
 end Giflib.Internal.Ownership.Testing;

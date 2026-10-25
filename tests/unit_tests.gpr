@@ -1,7 +1,7 @@
 with "giflib_whitebox.gpr";
 
 project Unit_Tests extends "tests_common.gpr" is
-   for Source_Dirs use ("src", "src/subunits", "src/mains");
+   for Source_Dirs use ("src", "src/subunits", "src/test_mains");
    for Main use ("giflib_tests.adb");
    case Tests_Common.Selected_Build_Profile is
       when "release" =>

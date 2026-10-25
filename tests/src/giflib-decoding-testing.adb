@@ -1,4 +1,7 @@
 with Giflib.Internal.Ownership.Testing;
+with Giflib.Internal.LZW;
+with Giflib.Internal.Metadata_Store;
+with Giflib.Internal.Owned_Buffers;
 
 package body Giflib.Decoding.Testing is
    function Allocated_Bytes (Object : Decoder) return Byte_Count is

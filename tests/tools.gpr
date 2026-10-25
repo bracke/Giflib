@@ -1,7 +1,9 @@
 with "../giflib.gpr";
 
 project Tools extends "tests_common.gpr" is
-   for Source_Dirs use ("src", "src/subunits", "src/mains");
+   --  Keep repository tools on the supported production API.  White-box test
+   --  children live under src and are deliberately outside this source path.
+   for Source_Dirs use ("src/mains");
    for Main use
      ("giflib_generate_samples.adb", "giflib_generate_fixtures.adb",
       "giflib_external_checks.adb", "giflib_benchmark.adb",

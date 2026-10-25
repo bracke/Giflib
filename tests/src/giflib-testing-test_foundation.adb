@@ -146,8 +146,7 @@ package body Giflib.Testing.Test_Foundation is
           (Giflib.Byte_Count'Last, Giflib.Byte_Count'Last, 1);
    begin
       Assert
-        (Arithmetic.Warning_Capacity (Natural'Last) = 256
-         and then Arithmetic.Has_Natural_Capacity
+        (Arithmetic.Has_Natural_Capacity
            (Natural'Last - 1, Natural'Last, 1),
          "session count capacity is wrong");
       Assert

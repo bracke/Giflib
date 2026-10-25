@@ -280,6 +280,10 @@ package body Giflib.Testing.Test_Streams is
    procedure Destination_Limits_And_Failures (T : in out AUnit.Test_Cases.Test_Case'Class);
    procedure Callback_Exceptions_Are_Normalized
      (T : in out AUnit.Test_Cases.Test_Case'Class);
+   procedure Callback_Errors_Are_Decorated
+     (T : in out AUnit.Test_Cases.Test_Case'Class);
+   procedure Diagnostic_Positions_Are_Sampled_Once
+     (T : in out AUnit.Test_Cases.Test_Case'Class);
    procedure Stream_Arithmetic_Is_Bounded (T : in out AUnit.Test_Cases.Test_Case'Class);
 
    overriding function Name (T : Test) return AUnit.Message_String is
@@ -298,6 +302,10 @@ package body Giflib.Testing.Test_Streams is
                         "streams.destination.limit_zero_and_failure");
       Register_Routine (T, Callback_Exceptions_Are_Normalized'Access,
                         "streams.callback_exceptions");
+      Register_Routine (T, Callback_Errors_Are_Decorated'Access,
+                        "streams.callback_error_context");
+      Register_Routine (T, Diagnostic_Positions_Are_Sampled_Once'Access,
+                        "streams.position_sampling");
       Register_Routine (T, Stream_Arithmetic_Is_Bounded'Access,
                         "streams.arithmetic");
    end Register_Tests;
@@ -451,31 +459,9 @@ package body Giflib.Testing.Test_Streams is
       pragma Unreferenced (T);
       Source : Raising_Source;
       Destination : Raising_Destination;
-      Returned_Source : Error_Source;
-      Returned_Destination : Error_Destination;
       Buffer : Giflib.Streams.Byte_Array (1 .. 1);
-      Source_Step : Giflib.Streams.Source_Result;
-      Destination_Step : Giflib.Streams.Destination_Result;
       Outcome : Giflib.Results.Result;
       Flush_Error : Giflib.Errors.Error;
-      Source_Calls : aliased Natural := 0;
-      Destination_Calls : aliased Natural := 0;
-      Retry_Calls : aliased Natural := 0;
-      Truncated_Calls : aliased Natural := 0;
-      Sequenced_Calls : aliased Natural := 0;
-      Counted_Source : Counting_Source (Source_Calls'Access);
-      Counted_Destination : Counting_Destination
-        (Destination_Calls'Access, 0, False);
-      Retry_Destination : aliased Counting_Destination
-        (Retry_Calls'Access, 1, False);
-      Retry_Encoder : Giflib.Encoding.Encoder (Retry_Destination'Access);
-      Truncated_Source : aliased Counting_Source (Truncated_Calls'Access);
-      Truncated_Decoder : Giflib.Decoding.Decoder (Truncated_Source'Access);
-      Sequenced_Destination : aliased Counting_Destination
-        (Sequenced_Calls'Access, 1, True);
-      Sequenced_Encoder : Giflib.Encoding.Encoder
-        (Sequenced_Destination'Access);
-      Context : Giflib.Errors.Diagnostic_Context;
    begin
       Outcome := Giflib.Streams.Read_Exact (Source, Buffer);
       Assert
@@ -500,7 +486,19 @@ package body Giflib.Testing.Test_Streams is
       Assert
         (Flush_Error.Code = Giflib.Errors.Destination_Write_Failed,
          "raising destination flush escaped the stream facade");
+   end Callback_Exceptions_Are_Normalized;
 
+   procedure Callback_Errors_Are_Decorated
+     (T : in out AUnit.Test_Cases.Test_Case'Class)
+   is
+      pragma Unreferenced (T);
+      Returned_Source : Error_Source;
+      Returned_Destination : Error_Destination;
+      Buffer : Giflib.Streams.Byte_Array (1 .. 1);
+      Source_Step : Giflib.Streams.Source_Result;
+      Destination_Step : Giflib.Streams.Destination_Result;
+      Flush_Error : Giflib.Errors.Error;
+   begin
       Source_Step := Giflib.Streams.Read_Some (Returned_Source, Buffer);
       Assert
         (Source_Step.Error.Context.Source_Position.State =
@@ -526,7 +524,32 @@ package body Giflib.Testing.Test_Streams is
            Giflib.Errors.Position_Available
          and then Flush_Error.Context.Destination_Position.Value = 8,
          "flush callback position overwrote existing diagnostic context");
+   end Callback_Errors_Are_Decorated;
 
+   procedure Diagnostic_Positions_Are_Sampled_Once
+     (T : in out AUnit.Test_Cases.Test_Case'Class)
+   is
+      pragma Unreferenced (T);
+      Outcome : Giflib.Results.Result;
+      Source_Calls : aliased Natural := 0;
+      Destination_Calls : aliased Natural := 0;
+      Retry_Calls : aliased Natural := 0;
+      Truncated_Calls : aliased Natural := 0;
+      Sequenced_Calls : aliased Natural := 0;
+      Counted_Source : Counting_Source (Source_Calls'Access);
+      Counted_Destination : Counting_Destination
+        (Destination_Calls'Access, 0, False);
+      Retry_Destination : aliased Counting_Destination
+        (Retry_Calls'Access, 1, False);
+      Retry_Encoder : Giflib.Encoding.Encoder (Retry_Destination'Access);
+      Truncated_Source : aliased Counting_Source (Truncated_Calls'Access);
+      Truncated_Decoder : Giflib.Decoding.Decoder (Truncated_Source'Access);
+      Sequenced_Destination : aliased Counting_Destination
+        (Sequenced_Calls'Access, 1, True);
+      Sequenced_Encoder : Giflib.Encoding.Encoder
+        (Sequenced_Destination'Access);
+      Context : Giflib.Errors.Diagnostic_Context;
+   begin
       Context := Giflib.Internal.Diagnostics.At_Source (Counted_Source);
       Context := Giflib.Internal.Diagnostics.At_Source
         (Counted_Source, Context);
@@ -582,5 +605,5 @@ package body Giflib.Testing.Test_Streams is
          and then Outcome.First_Error.Context.Destination_Position.State =
            Giflib.Errors.Position_Unavailable,
          "zero-progress decoration resampled the destination position");
-   end Callback_Exceptions_Are_Normalized;
+   end Diagnostic_Positions_Are_Sampled_Once;
 end Giflib.Testing.Test_Streams;
