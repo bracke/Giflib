@@ -5,7 +5,10 @@ The following production units are in SPARK mode:
 - `Giflib.Internal.Block_Arithmetic`: exact bounded sub-block read and write
   transfer-state transitions used by the production block reader and writer.
 - `Giflib.Internal.Budget_Arithmetic`: bounded resource charging with
-  overflow-safe attempted totals, used by sub-block and LZW work accounting.
+  overflow-safe attempted totals, used by allocation accounting and the shared
+  work-meter abstraction.
+- `Giflib.Internal.Work_Budgets`: sticky stateful work meters built on the
+  bounded charging primitive and shared by LZW, quantization, and optimization.
 - `Giflib.Internal.Checked_Arithmetic`: checked count addition and
   multiplication, including success/failure postconditions.
 - `Giflib.Internal.Descriptor_Arithmetic`: logical-screen and image-descriptor
@@ -27,8 +30,8 @@ The following production units are in SPARK mode:
 - `Giflib.Internal.LZW_Bit_Arithmetic`: exact LSB-first bit-buffer packing,
   extraction, byte removal, and first-byte recovery used by both production
   LZW paths.
-- `Giflib.Internal.Metadata_Arithmetic`: extension-label classification,
-  retention decisions, block mapping, payload capacity, and count increments
+- `Giflib.Internal.Metadata_Arithmetic`: retention decisions, block mapping,
+  payload capacity, and count increments
   used by the production decoder.
 - `Giflib.Internal.Optimization_Arithmetic`: conservative control safety,
   changed-pixel bounds, rectangle dimensions, and bounded delay merging used
@@ -47,10 +50,6 @@ The following production units are in SPARK mode:
   quantizer.
 - `Giflib.Decoding.State_Arithmetic`: private decoder lifecycle guards.
 - `Giflib.Encoding.State_Arithmetic`: private encoder lifecycle guards.
-- `Giflib.Internal.Ownership`: scoped reservation transactions whose controlled
-  finalization rolls back every uncommitted allocation charge.
-- `Giflib.Internal.Owned_Buffers` and `Owned_Objects`: ledger-identity-checked,
-  budget-bound ownership without retained budget pointers.
 - `Giflib.Internal.Session_Arithmetic`: shared extension-count and warning
   capacity arithmetic without codec dependencies.
 - `Giflib.Internal.Interlacing`: GIF pass counting and row mapping.
@@ -67,6 +66,11 @@ alr exec -- gnatprove -P giflib.gpr \
   --level=2 --prover=cvc5 --report=all -j1
 ```
 
+`Giflib.Internal.Ownership`, `Owned_Arrays`, `Owned_Buffers`, and
+`Owned_Objects` are runtime-checked Ada. They provide scoped reservation
+rollback and ledger-identity-checked ownership, but are outside the SPARK
+subset because they manage controlled types and heap allocation.
+
 The test crate declares only `unit_tests.gpr` and `giflib_tests` as its default
 Alire project and executable inventory, so the root test action regenerates its
 development configuration and builds only the AUnit runner before executing
@@ -76,7 +80,10 @@ setup hashes before a generated `config/` tree is required.
 Generated Alire settings, configuration sources, and test logs are ignored and
 are not versioned repository inputs.
 `giflib_whitebox.gpr` compiles the workspace sources for internal tests without
-weakening the production library's supported `Library_Interface` boundary.
+weakening the production library's supported `Library_Interface` boundary;
+only `unit_tests.gpr` imports that project. Repository tools import the
+production `giflib.gpr`, so tool and unit-test builds never share library
+artifacts and the tools continuously exercise the supported interface.
 The white-box suite is a `Giflib.Testing` descendant hierarchy, which is allowed
 to test the private `Giflib.Internal` child without making it public. A separate
 consumer built through `public_api.gpr` compiles against the production project,
@@ -86,7 +93,7 @@ switches from `giflib_build.gpr`.
 Separate actions ensure that a compilation or test failure makes `alr test`
 fail, and selecting an exact executable prevents stale binaries for other
 profiles from making execution ambiguous. Repository workflow tools are
-isolated in `tools.gpr` and are built explicitly by the release gate rather than
+ isolated in `tools.gpr` and are built explicitly by the release gate rather than
 every unit-test invocation.
 The stream tests inject exceptions from every callback family (`Read`, `Skip`,
 `Write`, `Offset`, and `Flush`) and require structured, non-raising outcomes.
@@ -108,7 +115,7 @@ helper proves code initialization, width changes, and hash slots remain within
 their table bounds, and its stack and dictionary guards prevent invalid
 traversal and insertion; the LZW bit helper proves exact bounded LSB-first bit
 operations; the block helper proves exact sub-block transfer-state updates;
-the metadata helper proves extension classification, retention, capacity, and
+the metadata helper proves retention, capacity, and
 payload count transitions; the session helper proves lifecycle, extension
 capacity, and warning bounds; the rendering helper proves RGBA rectangle and
 buffer extents; the ownership helper proves allocation-failure injection transitions are bounded

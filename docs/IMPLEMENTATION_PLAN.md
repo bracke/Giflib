@@ -152,8 +152,9 @@ programs are `giflib_check`, `giflib_generate_samples`,
 action; `tools.gpr` builds the remaining workflow programs for release and
 tooling gates. Every entry point uses `project_tools`; the release gate validates
 both the workspace pin and both GPR/source inventories.
-Internal tests import the dedicated `giflib_whitebox.gpr`; production consumers
-remain limited to the units exported by `giflib.gpr`.
+Internal tests alone import the dedicated `giflib_whitebox.gpr`; workflow tools
+import the production `giflib.gpr`, use separate artifacts, and remain limited
+to the supported units exported by it.
 The white-box suite uses the `Giflib.Testing` descendant hierarchy so Ada's
 private-child rules remain intact. A production-project consumer compile and an
 expected-failure private-child import guard that boundary. The root and tests

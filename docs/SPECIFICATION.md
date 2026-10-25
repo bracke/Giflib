@@ -81,8 +81,13 @@ Giflib.Quantization           -- explicit truecolor-to-indexed conversion
 Giflib.Optimization           -- optional frame/palette optimization
 Giflib.Internal.Bytes         -- checked little-endian readers and writers
 Giflib.Internal.Blocks        -- container and sub-block parser/writer
+Giflib.Internal.Container     -- parsed header/image descriptors retained by decoder state
+Giflib.Internal.Container_Writer -- centralized fixed GIF block serialization
+Giflib.Internal.Loop_Extensions -- shared loop-application identifiers/encoding
 Giflib.Internal.Block_Arithmetic -- proved sub-block transfer state
 Giflib.Internal.Budget_Arithmetic -- proved bounded resource charging
+Giflib.Internal.Work_Budgets     -- proved stateful work meters
+Giflib.Internal.Resource_Diagnostics -- allocation/work failure presentation
 Giflib.Internal.Checked_Arithmetic -- proved count addition/multiplication
 Giflib.Internal.Descriptor_Arithmetic -- proved screen/image packed fields
 Giflib.Internal.Encoding_Arithmetic -- proved palette table/code sizing
@@ -110,8 +115,10 @@ Giflib.Decoding.Decode_* / Skip_Frame -- separate frame-operation subunits
 Giflib.Internal.Compositing   -- canvas overlay
 Giflib.Internal.Disposal      -- disposal and snapshots
 Giflib.Internal.Rendering_Arithmetic -- shared checked RGBA layout
-Giflib.Internal.Ownership     -- object-local allocation budgets and fault state
+Giflib.Internal.Ownership     -- shared allocation, owner and cleanup policy
 Giflib.Internal.Ownership_Arithmetic -- proved injection state transitions
+Giflib.Internal.Owned_Arrays  -- budget-bound reusable array ownership
+Giflib.Internal.Owned_Vectors -- budget-bound logical-length collections
 Giflib.Internal.Owned_Buffers -- budget-bound reusable byte-buffer ownership
 Giflib.Internal.Owned_Objects -- budget-bound fixed-object ownership
 Giflib.Internal.Optimization_Arithmetic -- proved optimizer decisions/bounds
@@ -137,13 +144,13 @@ Declare root `Byte` based on `Interfaces.Unsigned_8`, 64-bit-capacity byte offse
 
 ### 5.2 Streams
 
-Mirror `jpeglib` stream conventions: `Source` limited interface with `Read`, `Offset`, `Skip`; `Destination` limited interface with `Write`, `Offset`, `Flush`; explicit transfer counts and source EOF; memory and fixed-buffer adapters. `Read` can return short counts; zero count without EOF/failure must fail deterministically as `Source_Zero_Progress`. `Write` can return short counts; zero-progress writes must fail. Exceptions from `Read` or `Skip` callbacks must become `Source_Read_Failed`; exceptions from `Write` or `Flush` callbacks must become `Destination_Write_Failed`, including callbacks reached through LZW sub-block emission. An exception from `Offset` makes that diagnostic position unavailable and must not escape. Direct one-byte probes must validate the returned transfer count with the same rules as the public stream helpers. No seek required. Streaming GIF image-data sub-blocks must not require buffering all compressed bytes.
+Mirror `jpeglib` stream conventions: `Source` limited interface with `Read`, `Offset`, `Skip`; `Destination` limited interface with `Write`, `Offset`, `Flush`; explicit transfer counts and source EOF; memory and fixed-buffer adapters. Stream position results are discriminated so an unavailable position cannot carry a stale offset. `Read` can return short counts; zero count without EOF/failure must fail deterministically as `Source_Zero_Progress`. `Write` can return short counts; zero-progress writes must fail. Exceptions from `Read` or `Skip` callbacks must become `Source_Read_Failed`; exceptions from `Write` or `Flush` callbacks must become `Destination_Write_Failed`, including callbacks reached through LZW sub-block emission. An exception from `Offset` makes that diagnostic position unavailable and must not escape. Direct one-byte probes must validate the returned transfer count with the same rules as the public stream helpers. No seek required. Streaming GIF image-data sub-blocks must not require buffering all compressed bytes.
 
 ### 5.3 Image views and palettes
 
 Image formats are `Indexed_8`, `RGB_24`, `BGR_24`, `RGBA_32`, `BGRA_32`. Indexed views keep palette separate; RGB/RGBA views are derived rendering outputs. A view contains descriptor (width, height, stride, accessible bytes) and an access discriminant designating caller storage, so Ada checks the view/storage lifetime relationship. Image operations validate `stride >= width * bytes_per_pixel`, required buffer extent, and offset multiplication with checked arithmetic. Empty byte-array handling must be specified. No implicit allocation of image output by core decoding APIs.
 
-A palette is a bounded count and array of at most 256 RGB entries; tables written to GIF must be a power-of-two size, padded by deterministic explicit policy when quantizer output has an arbitrary number of colors. Transparent index is recorded in frame control, not as a permanent alpha member of the palette.
+A palette is a bounded count and array of at most 256 RGB entries; tables written to GIF must be a power-of-two size, padded by deterministic explicit policy when quantizer output has an arbitrary number of colors. Transparent index is recorded in the present variant of a discriminated frame control, not as a permanent alpha member of the palette. Decoded frame palette origin and optimization outcomes are likewise discriminated, so local-only fields, trim rectangles, and merged delays cannot coexist with an inapplicable state.
 
 ### 5.4 Ownership rules
 
@@ -162,11 +169,22 @@ A palette is a bounded count and array of at most 256 RGB entries; tables writte
 - Retained metadata storage owns its node and chunk representation behind an
   opaque store interface. An in-progress extension is store-local state rather
   than a transferable handle, and the store binds to the allocation ledger
-  that owns its first retained allocation. Operations and release through a
-  different ledger fail without mutation or accounting changes. Public indexed
+  that owns its first retained allocation through a stable ledger identity,
+  not a reusable storage address. Non-release operations through a
+  different ledger fail without mutation or accounting changes. Release must
+  never debit a foreign ledger, but it still destroys and
+  clears the owned storage and reports an ownership failure so terminal cleanup
+  remains leak-free. The original ledger can remain stale after this invariant
+  failure and must not be treated as usable accounting state. Public indexed
   extension and chunk access must not repeatedly scan from the head; the store
   maintains bounded, allocation-accounted indexes with amortized constant-time
-  lookup.
+  lookup. The shared owned-array layer provides preserve-on-growth storage for
+  these indexes and default-initializes every newly allocated capacity slot;
+  callers never observe an uninitialized scalar or access value. Each retained
+  node tracks its stored payload length itself;
+  `Finish` reconciles observational metadata to that owned length, and copy
+  operations validate against the owned length rather than trusting a caller
+  supplied value.
 - Initialization/reset/finalization must be idempotent where explicitly specified and must clean up all owned allocations on failures and cancellation. No dangling pointers or leakage on decoder/encoder reuse.
 - Cleanup bookkeeping is production state, not a test callback embedded in a
   resource record. Controlled finalizers must not propagate cleanup failures;
@@ -181,6 +199,11 @@ A palette is a bounded count and array of at most 256 RGB entries; tables writte
   quantization workspace (nearest-color cache, histogram, and optional dither
   rows) across frames. Retained capacities count against the session allocation
   limit and are released by failure, cancellation, or finalization.
+- Reallocation of reusable owned storage has a strong failure guarantee: when
+  reservation or allocation fails, the previous allocation, contents, and
+  ledger charge remain unchanged. Capacity-only arrays expose raw storage only
+  to scratch-buffer users; collection users keep logical length and append
+  invariants inside a dedicated owned-vector abstraction.
 - A reusable quantization workspace likewise owns a private controlled resource
   component: explicit finalization remains available, and automatic
   finalization releases retained histogram, cache, and dither storage at scope
@@ -215,7 +238,7 @@ Public API shall include operations equivalent to:
 Decoder : Decoder (Source'Access);
 Initialize (Decoder, Decode_Options, Decode_Limits);
 Read_Header (Decoder, Header_Info) -> Result;
-Next_Event (Decoder, Event) -> Result;  -- events include image, extension, end
+Next_Event (Decoder, Event) -> Result;  -- image events include prepared geometry
 Decode_Indexed_Frame (Decoder, Target, Frame_Info) -> Result;
 Decode_Composited_Frame (Decoder, Target, Frame_Info) -> Result;
 Skip_Frame (Decoder) -> Result;
@@ -224,7 +247,24 @@ Cancel (Decoder) -> Result;
 Finalize (Decoder);
 ```
 
-The exact final Ada signatures may use `out` parameters and a distinct event-result record; all must be specified in public `.ads` prior to implementation. `Next_Event` must not consume image data invisibly if subsequent frame-decoding is required. A higher-level convenience operation `Read_Next_Frame` may wrap event iteration but must define how it handles extension-only input and trailer. A parser must support unknown total frame count and discover metadata incrementally.
+The exact final Ada signatures may use `out` parameters and a distinct
+event-result record; all must be specified in public `.ads` prior to
+implementation. `Next_Event` parses and retains an image descriptor and local
+color table before returning an image event. The event reports the rectangle
+geometry and exact indexed and expanded output byte counts, so a forward-only
+caller can allocate output without prior knowledge of the file. It does not
+consume the image-data minimum code size or sub-block stream; the following
+decode or skip operation consumes those bytes from retained prepared-frame
+state. A higher-level convenience operation `Read_Next_Frame` may wrap event
+iteration but must define how it handles extension-only input and trailer. A
+parser must support unknown total frame count and discover metadata
+incrementally.
+
+Frame-output variant and buffer-size checks happen before image data, canvas
+disposal, or resource mutation. These caller-correctable failures leave the
+decoder in `Awaiting_Frame_Decision` and consume no source bytes, so the caller
+may retry the same frame with a suitable output object. Failures after frame
+processing starts are terminal.
 
 Every public decode event carries an exact source offset. Initialization fails
 non-raising with `Source_Read_Failed` when the source cannot report its offset;
@@ -255,8 +295,11 @@ Encoder : Encoder (Destination'Access);
 Initialize (Encoder, Encode_Options, Encode_Limits);
 Define_Screen (Encoder, Screen_Info) -> Result;
 Set_Global_Palette (Encoder, Palette) -> Result;
-Add_Extension (Encoder, Extension_Info, Payload) -> Result;
-Add_Indexed_Frame (Encoder, Frame_Info, Palette_Selection, Source_View) -> Result;
+Add_Extension (Encoder, Extension_Descriptor, Payload) -> Result;
+Add_Extension_Exact (Encoder, Extension_Descriptor, Payload, Chunk_Lengths) -> Result;
+Add_Decoded_Extension (Encoder, Extension_Info, Payload) -> Result;
+Add_Decoded_Extension_Exact (Encoder, Extension_Info, Payload, Chunk_Lengths) -> Result;
+Add_Indexed_Frame (Encoder, Frame_Info, Frame_Palette, Source_View) -> Result;
 Add_Truecolor_Frame (Encoder, Frame_Info, Source_View, Quantize_Options) -> Result;
 Finish (Encoder) -> Result;
 State (Encoder) -> Encoder_State;
@@ -265,6 +308,30 @@ Finalize (Encoder);
 ```
 
 Required states: `Uninitialized`, `Initialized`, `Screen_Defined`, `Accepting_Frames`, `Completed`, `Cancelled`, `Failed`, `Finalized`. Once bytes are written to a nonseekable destination, error/cancel is not transactional; no promise to undo partial output. `Finish` writes the trailer and flushes; repeated successful `Finish` must not write duplicate trailers. `Finalize` frees resources without implicitly claiming successful completion. Output is either GIF89a by default or explicit GIF87a if all requested features are representable.
+
+`Frame_Palette` is discriminated by global or local selection. The global
+variant carries no palette value; the local variant carries the required
+palette. Encoder byte accounting includes every byte accepted by the
+destination before either success or failure, including partial writes inside
+LZW sub-blocks. Compressed-byte accounting counts only compressed payload bytes
+accepted by the destination.
+
+`Extension_Descriptor` is a discriminated encoding command
+owned by `Giflib.Metadata` and reused by `Giflib.Encoding`.
+Its kind is limited to comment, application, plain-text, and unknown
+extensions; graphic-control extensions are encoded only from frame control.
+Known kinds derive their fixed GIF labels from one shared mapping, while only
+the unknown variant carries a caller-supplied label. Encoder validation rejects
+labels reserved for known extensions with a structured `Invalid_Extension`
+result; constructing a descriptor from untrusted input must not raise. For application and plain-text extensions,
+`Payload` contains the complete raw extension payload, including the fixed
+11-byte or 12-byte header. Distinct compatibility operations named
+`Add_Decoded_Extension` and `Add_Decoded_Extension_Exact` accept decoded
+`Extension_Info`; they reject graphic-control metadata and derive a valid
+descriptor from all other kinds. Decoded offsets, placement, counts, and
+parsed fields are observational metadata and are not encoding commands. They
+are deliberately not overloads of `Add_Extension`, so anonymous descriptor
+aggregates have unambiguous expected types.
 
 Extension validation and wire emission are isolated from the encoder session
 orchestrator and share its private bounded-write and failure helpers.
@@ -279,6 +346,12 @@ new transparency control extension, run again before wire output.
 ## 8. Quantization and optimization
 
 Required initial quantization algorithms: deterministic exact-palette mapping when source has <=256 distinct colors (with reserved transparent index as needed), and deterministic median-cut when too many colors. Optional later algorithm: perceptual quantizer (e.g. NeuQuant-style); avoid external runtime dependencies. Dithering choices: none and Floyd–Steinberg, with explicit handling of alpha/transparency boundaries. Palette choices: fixed supplied palette, generated per-frame local palette, generated global palette when the entire input can be analyzed, or a bounded explicit two-pass/spooled source option. Never claim a single-pass global optimal palette for unknown future streaming frames.
+
+Quantization configuration uses discriminated nested palette and transparency
+policies: generated-palette settings cannot coexist with a fixed palette, and a
+disabled alpha policy carries no threshold. Quantization returns one result
+record containing the palette and a discriminated transparency result, so an
+absent transparent index cannot retain a contradictory value.
 
 Quantization work structures must remain explicitly bounded and charged to the
 allocation/work limits. Once exact-palette discovery has exceeded its capacity,
@@ -301,17 +374,17 @@ Optimization is a separate opt-in layer: trim unchanged regions, select subrecta
 
 ## 9. Extension/metadata policy
 
-Offer `Discard_All`, `Parse_Known_Without_Retention`, `Retain_Selected`, `Retain_All_Bounded`, with optional callback for large payloads. Metadata event descriptors must report extension label, stream offset, ordering point, payload length, and decoded known properties. A truncated extension cannot produce a complete event and must instead return a structured `Truncated_Block` failure with extension context. Unknown extension labels and application identifiers remain opaque rather than being classified as unsupported. `Retain_All_Bounded` must fail on exhausted budgets rather than truncate silently. Application identifiers are fixed 8+3 bytes. Comments are arbitrary bytes, not assumed UTF-8. Netscape-style loop extension must be exposed as a separate semantic field while preserving raw metadata if requested. If exact extension sub-block preservation is offered, the writer must emit original chunk boundaries where valid.
+Offer `Discard_All`, `Parse_Known_Without_Retention`, `Retain_Selected`, `Retain_All_Bounded`, with optional callback for large payloads. Metadata and decoder event descriptors are discriminated by kind, so fields for another extension or event kind cannot coexist. Metadata storage owns both retention-policy selection and its `Start`, `Append`, `Finish` transaction state; callers do not repeat policy decisions. It rejects out-of-order calls while a valid ignored transaction accepts append/finish without allocation. Metadata event descriptors must report extension label, stream offset, ordering point, payload length, and decoded known properties. A truncated extension cannot produce a complete event and must instead return a structured `Truncated_Block` failure with extension context. Unknown extension labels and application identifiers remain opaque rather than being classified as unsupported. `Retain_All_Bounded` must fail on exhausted budgets rather than truncate silently. Application identifiers are fixed 8+3 bytes. Comments are arbitrary bytes, not assumed UTF-8. Netscape-style loop extension must be exposed as a discriminated semantic field while preserving raw metadata if requested. If exact extension sub-block preservation is offered, the writer must emit original chunk boundaries where valid.
 
 ## 10. Resource limits and security
 
-`Giflib.Limits.Limit_Set` shall include at minimum: maximum logical width/height, maximum canvas pixels/bytes, maximum frames, maximum per-frame pixels, maximum total decoded frame pixels, maximum compressed bytes, maximum extension count, maximum retained metadata bytes, maximum per-extension bytes, maximum allocation bytes, maximum output bytes, maximum LZW work (e.g. output pixels + code operations), maximum warning/diagnostic events, and maximum compositor snapshot bytes. Reasonable safe defaults must be documented and caller-adjustable; limits of the wire format are not memory-allocation permissions.
+`Giflib.Limits.Limit_Set` shall include at minimum: maximum logical width/height, maximum canvas pixels/bytes, maximum frames, maximum per-frame pixels, maximum total decoded frame pixels, maximum compressed bytes, maximum extension count, maximum retained metadata bytes, maximum per-extension bytes, maximum allocation bytes, maximum output bytes, maximum LZW work (e.g. output pixels + code operations), maximum retained warning records, and maximum compositor snapshot bytes. Reasonable safe defaults must be documented and caller-adjustable; limits of the wire format are not memory-allocation permissions.
 
 Reject overflow before allocating or multiplying geometry; bounds-check every palette lookup, bit shift, code-table reference, sub-block length, row/stride calculation and decoded output count. No unbounded recursion. Do not process untrusted lengths into unconstrained stack arrays. Dictionary reset must clear necessary state. Fuzz malformed GCE, misordered extensions, endless zero-progress streams, invalid widths, oversized chunk chains, truncated compressed data, dictionary exhaustion, invalid transparent index, undefined disposal, and compressed decompression bombs. Deterministic failures (no unhandled exceptions) for all malformed inputs under default limits.
 
 ## 11. Errors and diagnostics
 
-Retain `jpeglib`-style `Results.Result` (status and first error) and structured `Errors.Error` with stable machine-readable identifiers, e.g. `gif.invalid_signature`, `gif.truncated_block`, `gif.lzw.invalid_code`, `gif.palette.index_out_of_range`, `gif.frame.out_of_bounds`, `gif.limit.exceeded`, `gif.state.invalid`, `gif.stream.zero_progress`. Diagnostic context should include source/destination offsets, frame ordinal, block/extension label, compressed code location (when known), expected/actual values and limit implicated. Offset and frame fields carry explicit presence flags because zero is a valid position; every producer that knows a position must set its corresponding flag explicitly rather than inferring presence from a nonzero value. Warning records for compatibility fallbacks must be bounded. Public data errors must not be reported as internal invariants.
+Retain `jpeglib`-style `Results.Result` (status and first error) and structured `Errors.Error` with stable machine-readable identifiers, e.g. `gif.invalid_signature`, `gif.truncated_block`, `gif.lzw.invalid_code`, `gif.palette.index_out_of_range`, `gif.argument.index_out_of_range`, `gif.argument.buffer_size_mismatch`, `gif.argument.output_variant_mismatch`, `gif.frame.out_of_bounds`, `gif.limit.exceeded`, `gif.state.invalid`, `gif.stream.zero_progress`. Caller indexes outside an exposed collection return `Invalid_Index`; incorrectly sized caller-owned buffers return `Buffer_Size_Mismatch`. A constrained discriminated output whose discriminant cannot represent the produced value returns `Output_Variant_Mismatch`; no public operation may leak `Constraint_Error` for that case. `Limit_Exceeded` is reserved for configured resource budgets, and `Invalid_State` for lifecycle or protocol-state violations. Diagnostic context should include source/destination offsets, frame ordinal, block/extension label, compressed code location (when known), expected/actual values and limit implicated. Source position, destination position, frame, extension label, LZW details, and underlying callback code are discriminated optional values, so inactive alternatives cannot retain stale payload. Error decorators preserve an existing position state and never resample a position that a lower layer already checked. Public stream helpers attach the position captured for a callback when its returned or normalized error has not already checked that position. Stream-position decoration is isolated from allocation/work failure presentation. Warning records for compatibility fallbacks must be bounded. Public data errors must not be reported as internal invariants.
 
 ## 12. Crate and project structure
 
