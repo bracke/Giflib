@@ -60,8 +60,8 @@ the overload taking a limited-private `Workspace` retains bounded histogram,
 cache, and dither storage in a private controlled resource component until
 explicit finalization or scope exit, with
 `Allocated_Bytes` exposing its charge, `Release` returning the current call's
-structured cleanup status, and `Cleanup_Succeeded` exposing the sticky
-first-failure aggregate result.
+structured cleanup status, and `Cleanup_Succeeded` plus
+`First_Cleanup_Status` exposing the sticky first-failure aggregate result.
 Pixel-format access and Floyd–Steinberg row diffusion are isolated internal
 phases; median-cut palette construction is a separate deterministic, budgeted
 phase.

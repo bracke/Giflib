@@ -9,8 +9,6 @@ The following production units are in SPARK mode:
   work-meter abstraction.
 - `Giflib.Internal.Work_Budgets`: sticky stateful work meters built on the
   bounded charging primitive and shared by LZW, quantization, and optimization.
-- `Giflib.Internal.Checked_Arithmetic`: checked count addition and
-  multiplication, including success/failure postconditions.
 - `Giflib.Internal.Descriptor_Arithmetic`: logical-screen and image-descriptor
   packed flags, palette lengths, and color resolution used by the production
   parser and encoder.
@@ -69,7 +67,11 @@ alr exec -- gnatprove -P giflib.gpr \
 ```
 
 `Giflib.Internal.Ownership`, `Owned_Arrays`, `Owned_Buffers`, `Owned_Vectors`,
-`Owned_Element_Vectors`, and `Owned_Objects` are runtime-checked Ada. They provide scoped reservation
+and `Owned_Objects` are runtime-checked Ada. `Checked_Arithmetic` and the
+callback-driven `Owned_Element_Vectors` helper are test support compiled only
+into the white-box test library; the former remains in SPARK mode but is not
+part of the production release proof command above. The ownership packages
+provide scoped reservation
 rollback, ledger-identity-checked ownership, and callback-scoped storage
 access, but are outside the SPARK
 subset because they manage controlled types and heap allocation.

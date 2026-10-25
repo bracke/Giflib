@@ -79,6 +79,7 @@ The GIF format has a logical screen and zero or more graphic rendering blocks. A
 Giflib                        -- shared scalar types and enums
 Giflib.Version                -- semantic crate version
 Giflib.Capabilities           -- implemented, tested features
+Giflib.Cleanup                -- structured resource cleanup status
 Giflib.Errors                 -- error codes, diagnostic context, warnings
 Giflib.Results                -- deterministic success/failure results
 Giflib.Limits                 -- processing, allocation and work bounds
@@ -101,7 +102,7 @@ Giflib.Internal.Block_Arithmetic -- proved sub-block transfer state
 Giflib.Internal.Budget_Arithmetic -- proved bounded resource charging
 Giflib.Internal.Work_Budgets     -- proved stateful work meters
 Giflib.Internal.Resource_Diagnostics -- allocation/work failure presentation
-Giflib.Internal.Checked_Arithmetic -- proved count addition/multiplication
+Giflib.Internal.Checked_Arithmetic -- test-only proved count arithmetic
 Giflib.Internal.Descriptor_Arithmetic -- proved screen/image packed fields
 Giflib.Internal.Encoding_Arithmetic -- proved palette table/code sizing
 Giflib.Internal.Extension_Arithmetic -- proved GIF89a control/U16 fields
@@ -156,7 +157,7 @@ Giflib.Internal.Quantization_Storage -- quantizer workspace ownership
 Giflib.Internal.Ownership_Arithmetic -- proved injection state transitions
 Giflib.Internal.Owned_Arrays  -- budget-bound reusable array ownership
 Giflib.Internal.Owned_Vectors -- budget-bound logical-length collections
-Giflib.Internal.Owned_Element_Vectors -- budget-bound ownership of element objects
+Giflib.Internal.Owned_Element_Vectors -- test-only element-object ownership
 Giflib.Internal.Owned_Buffers -- budget-bound reusable byte-buffer ownership
 Giflib.Internal.Owned_Buffers.Result_Operations -- result-preserving scoped buffer access
 Giflib.Internal.Owned_Objects -- budget-bound fixed-object ownership
@@ -232,10 +233,10 @@ A palette is a bounded count and array of at most 256 RGB entries; tables writte
   borrow conflicts, owner mismatch, preflight refusal, callback failure, and
   accounting failure instead of reducing nested failures to Boolean values.
   Reusable quantization workspaces expose the current call's structured release
-  outcome while retaining the first cleanup failure in a Boolean
-  aggregate-success observer for later diagnostics. Cleanup status is one
-  shared public type; package-specific APIs may expose compatibility subtypes
-  but do not define or translate competing status enumerations.
+  outcome and the exact first cleanup failure for later diagnostics. Shared
+  cleanup status lives in the focused `Giflib.Cleanup` package rather than the
+  root namespace; package-specific APIs expose compatibility subtypes but do
+  not define competing status enumerations.
   The shared owned-array layer
   provides preserve-on-growth storage for these indexes and default-initializes every newly allocated capacity slot;
   callers never observe an uninitialized scalar or access value. Each retained
@@ -269,6 +270,9 @@ A palette is a bounded count and array of at most 256 RGB entries; tables writte
   `Internal_Invariant_Failed` when a release invariant fails and preserves any
   earlier fatal diagnostic.
 - Define memory budgeting for temporary canvas, restore snapshots, LZW tables, quantization and optional retained blocks independently from caller-owned buffers.
+- Encoder storage owns encoder-specific buffers only. The encoder session owns
+  its reusable quantization workspace alongside that storage, so internal
+  storage packages never depend upward on public algorithm façades.
 - A compositing decoder may retain one grow-only indexed-frame scratch buffer
   for reuse across frames. Its capacity counts as owned allocation until reset,
   cancellation, failure, or finalization releases it.
