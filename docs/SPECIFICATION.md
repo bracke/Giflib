@@ -106,6 +106,7 @@ Giflib.Internal.Interlacing   -- pass addressing
 Giflib.Internal.Stream_Arithmetic -- proved transfer windows/progress
 Giflib.Decoding.State_Arithmetic -- private proved decoder lifecycle guards
 Giflib.Encoding.State_Arithmetic -- private proved encoder lifecycle guards
+Giflib.Encoding.Frame_Pipeline -- private shared indexed-frame orchestration
 Giflib.Internal.Session_Arithmetic -- proved shared count/warning capacity
 Giflib.Internal.Metadata_Arithmetic -- proved retention/count accounting
 Giflib.Internal.Metadata_Store -- opaque retained-extension ownership and indexed access
@@ -116,6 +117,10 @@ Giflib.Internal.Compositing   -- canvas overlay
 Giflib.Internal.Disposal      -- disposal and snapshots
 Giflib.Internal.Rendering_Arithmetic -- shared checked RGBA layout
 Giflib.Internal.Ownership     -- shared allocation, owner and cleanup policy
+Giflib.Internal.Resource_Cleanup -- non-raising aggregate cleanup guard
+Giflib.Internal.Decoder_Storage -- decoder workspace ownership
+Giflib.Internal.Encoder_Storage -- encoder workspace ownership
+Giflib.Internal.Quantization_Storage -- quantizer workspace ownership
 Giflib.Internal.Ownership_Arithmetic -- proved injection state transitions
 Giflib.Internal.Owned_Arrays  -- budget-bound reusable array ownership
 Giflib.Internal.Owned_Vectors -- budget-bound logical-length collections
@@ -196,6 +201,8 @@ A palette is a bounded count and array of at most 256 RGB entries; tables writte
 - Cleanup bookkeeping is production state, not a test callback embedded in a
   resource record. Controlled finalizers must not propagate cleanup failures;
   cleanup aggregation is scope-bound so ledger reconciliation cannot be omitted;
+  cleanup succeeds only when every owned handle is released and the owning
+  allocation ledger has a zero balance, even when the ledger remains healthy;
   an explicit decoder or encoder lifecycle operation records
   `Internal_Invariant_Failed` when a release invariant fails and preserves any
   earlier fatal diagnostic.
@@ -216,6 +223,10 @@ A palette is a bounded count and array of at most 256 RGB entries; tables writte
   component: explicit finalization remains available, and automatic
   finalization releases retained histogram, cache, and dither storage at scope
   exit without exposing overrideable cleanup dispatch.
+- An owner-controlled workspace operation must not invoke client or session
+  code while a view of its owned storage is live. Algorithms receive storage
+  through focused workspace services, and re-entry into the owning resource is
+  forbidden by construction rather than callback convention.
 - Convert heap exhaustion to a bounded `Limit_Exceeded` result at every
   allocation site. Allocation accounting uses a shared budget abstraction and
   one overflow-safe charge operation; individual session/workspace resources
@@ -384,6 +395,10 @@ Pixel access, palette construction, nearest-color mapping, and dithering are
 separate internal phases. Each phase states its buffer and geometry invariants
 at its package boundary; malformed internal inputs return structured failures
 or are covered by proved preconditions rather than leaking bounds exceptions.
+Workspace services distinguish unavailable/corrupt storage from exhausted work
+budgets. They never return a plausible palette index after a failed charge, and
+callers construct work-limit diagnostics only after the meter has recorded that
+failure.
 
 Optimization is a separate opt-in layer: trim unchanged regions, select subrectangles, consider transparent unchanged pixels, deduplicate safe frame segments, and optimize LZW/palette size. Its contract is *rendered equivalence*, not necessarily exact preservation of frame structure or extensions. Disposal and delay semantics must remain observably equivalent under the documented reference renderer. Lossless indexed pass-through must be available independently of optimization.
 
