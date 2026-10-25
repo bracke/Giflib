@@ -5,6 +5,7 @@ with Giflib.Internal.Extension_Arithmetic;
 with Giflib.Internal.Loop_Extensions;
 with Giflib.Internal.Metadata_Arithmetic;
 with Giflib.Internal.Decoder_Storage.Metadata_Operations;
+with Giflib.Decoding.Session_Transitions;
 
 package body Giflib.Decoding.Extensions is
    use type Errors.Error_Code;
@@ -266,7 +267,7 @@ package body Giflib.Decoding.Extensions is
                 Limit => Extension_Count_Limit,
                 others => <>)));
       end if;
-      Object.Extensions_Seen := Object.Extensions_Seen + 1;
+      Session_Transitions.Record_Extension (Object);
 
       case Info.Kind is
          when Metadata.Graphic_Control_Extension =>

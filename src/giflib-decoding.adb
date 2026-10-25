@@ -47,7 +47,7 @@ package body Giflib.Decoding is
          Object.Diagnostic := Enriched;
       end if;
       Resource_Management.Release (Object);
-      State_Arithmetic.Fail (Object.Current_State);
+      Session_Transitions.Fail_Session (Object);
       return Results.Failure (Object.Diagnostic);
    end Fail;
 
@@ -214,7 +214,7 @@ package body Giflib.Decoding is
       Resource_Management.Release (Object);
       if not Internal.Decoder_Storage.Cleanup_Succeeded (Object.Resources) then
          Object.Diagnostic := Errors.Make (Errors.Internal_Invariant_Failed);
-         State_Arithmetic.Fail (Object.Current_State);
+         Session_Transitions.Fail_Session (Object);
          return Results.Failure (Object.Diagnostic);
       end if;
       if not Input_Position (Object).Available then
@@ -222,7 +222,7 @@ package body Giflib.Decoding is
            (Errors.Source_Read_Failed,
             (Source_Position => (State => Errors.Position_Unavailable),
              others => <>));
-         State_Arithmetic.Fail (Object.Current_State);
+         Session_Transitions.Fail_Session (Object);
          return Results.Failure (Object.Diagnostic);
       end if;
       Session_Transitions.Begin_Session (Object, Options, Constraints);
@@ -235,8 +235,7 @@ package body Giflib.Decoding is
       Constraints : Limits.Limit_Set := Limits.Default_Limits) return Results.Result
    is
    begin
-      State_Arithmetic.Reset (Object.Current_State);
-      Object.Diagnostic := Errors.Make (Errors.No_Error);
+      Session_Transitions.Reset_Session (Object);
       return Initialize (Object, Options, Constraints);
    end Reset;
 
@@ -404,12 +403,11 @@ package body Giflib.Decoding is
       if State_Arithmetic.Can_Cancel (Object.Current_State) then
          Resource_Management.Release (Object);
          if not Internal.Decoder_Storage.Cleanup_Succeeded (Object.Resources) then
-            State_Arithmetic.Fail (Object.Current_State);
+            Session_Transitions.Fail_Session (Object);
             Object.Diagnostic := Errors.Make (Errors.Internal_Invariant_Failed);
             return Results.Failure (Object.Diagnostic);
          end if;
-         State_Arithmetic.Cancel (Object.Current_State);
-         Object.Diagnostic := Errors.Make (Errors.Operation_Cancelled);
+         Session_Transitions.Cancel_Session (Object);
          return Results.Success;
       elsif Object.Current_State = Cancelled then
          return Results.Success;

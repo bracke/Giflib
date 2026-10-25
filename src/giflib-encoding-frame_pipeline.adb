@@ -65,7 +65,7 @@ package body Giflib.Encoding.Frame_Pipeline is
          if not Results.Succeeded (Outcome) then
             return Fail_Frame (Object, Outcome.First_Error);
          end if;
-         State_Arithmetic.Record_Extension (Object.Extensions_Written);
+         Session_Transitions.Record_Extension (Object);
       end if;
       Palette_Length := Natural
         (Encoding_Arithmetic.Encoded_Palette_Length

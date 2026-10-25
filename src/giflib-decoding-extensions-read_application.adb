@@ -38,11 +38,12 @@ begin
         (Is_Loop => True,
          Count => Internal.Extension_Arithmetic.Decode_U16_LE
            (First_Data (2), First_Data (3)));
-      Object.Loop_Data :=
-        (if Info.Loop_Info.Count = 0
-         then (State => Animations.Infinite_Looping)
-         else (State => Animations.Finite_Loop_Count,
-               Count => Info.Loop_Info.Count));
+      Session_Transitions.Set_Loop
+        (Object,
+         (if Info.Loop_Info.Count = 0
+          then (State => Animations.Infinite_Looping)
+          else (State => Animations.Finite_Loop_Count,
+                Count => Info.Loop_Info.Count)));
    end if;
    return Outcome;
 end Read_Application;

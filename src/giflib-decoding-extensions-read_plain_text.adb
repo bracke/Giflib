@@ -36,8 +36,7 @@ begin
         (Object, Info, First_Data, First_Length);
    end if;
    if Results.Succeeded (Outcome) then
-      Object.Pending_Control := Frames.Default_Control;
-      Object.Has_Pending_Control := False;
+      Session_Transitions.Clear_Pending_Control (Object);
    end if;
    return Outcome;
 end Read_Plain_Text;

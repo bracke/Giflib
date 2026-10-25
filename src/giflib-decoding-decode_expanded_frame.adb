@@ -7,6 +7,8 @@ is
    Prepared : Prepared_Frame renames Object.Pending_Frame;
    Pixels : Byte_Count;
    Outcome : Results.Result;
+   Decoded_Pixels : Pixel_Count := Object.Total_Decoded_Pixels;
+   Compressed_Bytes : Byte_Count := Object.Total_Compressed_Bytes;
    Source_Position, Target_Position : Natural;
    Index : Palette_Index;
    Color : Palettes.RGB_Color;
@@ -38,7 +40,7 @@ begin
    if not Results.Succeeded (Outcome) then
       return Outcome;
    end if;
-   State_Arithmetic.Begin_Frame (Object.Current_State);
+   Session_Transitions.Begin_Frame (Object);
    Outcome := Resource_Management.Ensure_LZW_Workspace (Object);
    if not Results.Succeeded (Outcome) then
       return Fail (Object, Outcome.First_Error);
@@ -51,10 +53,12 @@ begin
       Prepared.Interlaced,
       Prepared.Palette,
       Object.Constraints,
-      Object.Total_Decoded_Pixels,
-      Object.Total_Compressed_Bytes,
+      Decoded_Pixels,
+      Compressed_Bytes,
       Target (Target'First .. Target'First + Natural (Pixels) - 1),
       Object.Frames_Seen);
+   Session_Transitions.Commit_Resource_Usage
+     (Object, Decoded_Pixels, Compressed_Bytes);
    if not Results.Succeeded (Outcome) then
       return Fail (Object, Outcome.First_Error);
    end if;

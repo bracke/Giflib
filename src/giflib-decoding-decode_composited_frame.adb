@@ -8,6 +8,8 @@ is
    Rectangle : Frames.Rectangle;
    Pixel_Bytes : Byte_Count;
    Outcome : Results.Result;
+   Decoded_Pixels : Pixel_Count := Object.Total_Decoded_Pixels;
+   Compressed_Bytes : Byte_Count := Object.Total_Compressed_Bytes;
 begin
    if not State_Arithmetic.Can_Process_Frame (Object.Current_State)
    then
@@ -42,7 +44,7 @@ begin
    if not Results.Succeeded (Outcome) then
       return Fail (Object, Outcome.First_Error);
    end if;
-   State_Arithmetic.Begin_Frame (Object.Current_State);
+   Session_Transitions.Begin_Frame (Object);
    if Prepared.Control.Disposal > 3
      and then Object.Options.Strictness = Strict
    then
@@ -98,9 +100,11 @@ begin
       Prepared.Interlaced,
       Prepared.Palette,
       Object.Constraints,
-      Object.Total_Decoded_Pixels, Object.Total_Compressed_Bytes,
+      Decoded_Pixels, Compressed_Bytes,
       Pixel_Bytes,
       Object.Frames_Seen);
+   Session_Transitions.Commit_Resource_Usage
+     (Object, Decoded_Pixels, Compressed_Bytes);
    if not Results.Succeeded (Outcome) then
       return Fail (Object, Outcome.First_Error);
    end if;

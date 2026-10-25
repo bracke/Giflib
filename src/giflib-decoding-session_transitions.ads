@@ -45,6 +45,70 @@ is
           Post => Object.Current_State = Header_Ready
                   and then Object.Header_Data = Header;
 
+   procedure Fail_Session (Object : in out Decoder)
+     with Post => Object.Current_State = Failed;
+
+   procedure Reset_Session (Object : in out Decoder)
+     with Post => Object.Current_State = Uninitialized
+                  and then Object.Diagnostic.Code = Errors.No_Error;
+
+   procedure Discover_Frame (Object : in out Decoder)
+     with Pre => Object.Current_State = Header_Ready,
+          Post => Object.Current_State = Decoding_Frame;
+
+   procedure Await_Frame_Decision (Object : in out Decoder)
+     with Pre => Object.Current_State = Decoding_Frame,
+          Post => Object.Current_State = Awaiting_Frame_Decision
+                  and then Object.Has_Pending_Frame;
+
+   procedure Begin_Frame (Object : in out Decoder)
+     with Pre => Object.Current_State = Awaiting_Frame_Decision,
+          Post => Object.Current_State = Decoding_Frame;
+
+   procedure Record_Extension (Object : in out Decoder)
+     with Pre => Object.Extensions_Seen < Natural'Last,
+          Post => Object.Extensions_Seen = Object.Extensions_Seen'Old + 1;
+
+   procedure Set_Pending_Control
+     (Object : in out Decoder;
+      Control : Frames.Graphic_Control)
+     with Post => Object.Pending_Control = Control
+                  and then Object.Has_Pending_Control;
+
+   procedure Clear_Pending_Control (Object : in out Decoder)
+     with Post => Object.Pending_Control = Frames.Default_Control
+                  and then not Object.Has_Pending_Control;
+
+   procedure Set_Loop
+     (Object : in out Decoder;
+      Looping : Animations.Loop_Info)
+     with Post => Object.Loop_Data = Looping;
+
+   procedure Record_Compressed_Bytes
+     (Object : in out Decoder;
+      Count : Byte_Count)
+     with Pre => Object.Total_Compressed_Bytes <= Byte_Count'Last - Count,
+          Post => Object.Total_Compressed_Bytes =
+                    Object.Total_Compressed_Bytes'Old + Count;
+
+   procedure Commit_Resource_Usage
+     (Object : in out Decoder;
+      Decoded_Pixels : Pixel_Count;
+      Compressed_Bytes : Byte_Count)
+     with Pre => Decoded_Pixels >= Object.Total_Decoded_Pixels
+                 and then Compressed_Bytes >= Object.Total_Compressed_Bytes,
+          Post => Object.Total_Decoded_Pixels = Decoded_Pixels
+                  and then Object.Total_Compressed_Bytes = Compressed_Bytes;
+
+   procedure Complete_Stream (Object : in out Decoder)
+     with Pre => Object.Current_State = Header_Ready,
+          Post => Object.Current_State = Completed;
+
+   procedure Cancel_Session (Object : in out Decoder)
+     with Pre => State_Arithmetic.Can_Cancel (Object.Current_State),
+          Post => Object.Current_State = Cancelled
+                  and then Object.Diagnostic.Code = Errors.Operation_Cancelled;
+
    procedure Complete_Frame (Object : in out Decoder)
      with Pre => Object.Current_State = Decoding_Frame
                  and then Object.Has_Pending_Frame

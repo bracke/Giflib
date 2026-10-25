@@ -1,5 +1,6 @@
 with Giflib.Animations;
 with Giflib.Encoding.State_Arithmetic;
+with Giflib.Encoding.Session_Transitions;
 with Giflib.Internal.Wire_Format;
 
 package body Giflib.Encoding.Extensions is
@@ -39,8 +40,7 @@ package body Giflib.Encoding.Extensions is
       if not Results.Succeeded (Final_Outcome) then
          return Fail (Object, Final_Outcome.First_Error);
       end if;
-      State_Arithmetic.Record_Extension (Object.Extensions_Written);
-      State_Arithmetic.Accept_Data (Object.Current_State);
+      Session_Transitions.Complete_Extension (Object);
       return Results.Success;
    end Complete_Extension;
 

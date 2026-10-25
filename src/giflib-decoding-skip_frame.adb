@@ -20,7 +20,7 @@ begin
    if not Object.Has_Pending_Frame then
       return Fail (Object, Errors.Make (Errors.Internal_Invariant_Failed));
    end if;
-   State_Arithmetic.Begin_Frame (Object.Current_State);
+   Session_Transitions.Begin_Frame (Object);
    Outcome := Internal.Bytes.Read_Byte
      (Object.Input.all, Minimum_Code_Size, Image_Data_Block);
    if not Results.Succeeded (Outcome) then
@@ -50,8 +50,8 @@ begin
       Compressed_Byte_Limit,
       Image_Data_Block);
    Outcome := Internal.Blocks.Drain (Reader, Object.Input.all);
-   Object.Total_Compressed_Bytes :=
-     Object.Total_Compressed_Bytes + Internal.Blocks.Total_Bytes (Reader);
+   Session_Transitions.Record_Compressed_Bytes
+     (Object, Internal.Blocks.Total_Bytes (Reader));
    if not Results.Succeeded (Outcome) then
       return Fail (Object, Outcome.First_Error);
    end if;

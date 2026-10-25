@@ -44,6 +44,86 @@ package body Giflib.Decoding.Session_Transitions is
       Object.Current_State := Transition.Current_State;
    end Commit_Header;
 
+   procedure Fail_Session (Object : in out Decoder) is
+   begin
+      State_Arithmetic.Fail (Object.Current_State);
+   end Fail_Session;
+
+   procedure Reset_Session (Object : in out Decoder) is
+   begin
+      State_Arithmetic.Reset (Object.Current_State);
+      Object.Diagnostic := Errors.Make (Errors.No_Error);
+   end Reset_Session;
+
+   procedure Discover_Frame (Object : in out Decoder) is
+   begin
+      State_Arithmetic.Frame_Discovered (Object.Current_State);
+   end Discover_Frame;
+
+   procedure Await_Frame_Decision (Object : in out Decoder) is
+   begin
+      State_Arithmetic.Await_Frame_Decision
+        (Object.Current_State, Object.Has_Pending_Frame);
+   end Await_Frame_Decision;
+
+   procedure Begin_Frame (Object : in out Decoder) is
+   begin
+      State_Arithmetic.Begin_Frame (Object.Current_State);
+   end Begin_Frame;
+
+   procedure Record_Extension (Object : in out Decoder) is
+   begin
+      Object.Extensions_Seen := Object.Extensions_Seen + 1;
+   end Record_Extension;
+
+   procedure Set_Pending_Control
+     (Object : in out Decoder;
+      Control : Frames.Graphic_Control) is
+   begin
+      Object.Pending_Control := Control;
+      Object.Has_Pending_Control := True;
+   end Set_Pending_Control;
+
+   procedure Clear_Pending_Control (Object : in out Decoder) is
+   begin
+      Object.Pending_Control := Frames.Default_Control;
+      Object.Has_Pending_Control := False;
+   end Clear_Pending_Control;
+
+   procedure Set_Loop
+     (Object : in out Decoder;
+      Looping : Animations.Loop_Info) is
+   begin
+      Object.Loop_Data := Looping;
+   end Set_Loop;
+
+   procedure Record_Compressed_Bytes
+     (Object : in out Decoder;
+      Count : Byte_Count) is
+   begin
+      Object.Total_Compressed_Bytes := Object.Total_Compressed_Bytes + Count;
+   end Record_Compressed_Bytes;
+
+   procedure Commit_Resource_Usage
+     (Object : in out Decoder;
+      Decoded_Pixels : Pixel_Count;
+      Compressed_Bytes : Byte_Count) is
+   begin
+      Object.Total_Decoded_Pixels := Decoded_Pixels;
+      Object.Total_Compressed_Bytes := Compressed_Bytes;
+   end Commit_Resource_Usage;
+
+   procedure Complete_Stream (Object : in out Decoder) is
+   begin
+      State_Arithmetic.Complete_Stream (Object.Current_State);
+   end Complete_Stream;
+
+   procedure Cancel_Session (Object : in out Decoder) is
+   begin
+      State_Arithmetic.Cancel (Object.Current_State);
+      Object.Diagnostic := Errors.Make (Errors.Operation_Cancelled);
+   end Cancel_Session;
+
    procedure Complete_Frame (Object : in out Decoder) is
       Transition : Session_Arithmetic.Frame_Transition_State :=
         (Current_State => Object.Current_State,

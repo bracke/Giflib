@@ -53,12 +53,12 @@ begin
         (Object,
          Internal.Loop_Extensions.Encode_Netscape
            (Animations.Raw_Count (Object.Loop_Data)));
-      if Results.Succeeded (Outcome) then
-         State_Arithmetic.Record_Extension (Object.Extensions_Written);
-      end if;
    end if;
    if Results.Succeeded (Outcome) then
-      Object.Header_Written := True;
+      Session_Transitions.Commit_Header
+        (Object,
+         Loop_Extension_Written =>
+           Object.Loop_Data.State /= Animations.No_Loop_Extension);
    end if;
    return Outcome;
 end Write_Header;

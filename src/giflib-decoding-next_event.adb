@@ -54,7 +54,7 @@ begin
                (Source_Position => Errors.Source_Position_At (Position.Value),
                 Block => Trailer_Block, Expected => 1, Actual => 0,
                 others => <>));
-            State_Arithmetic.Complete_Stream (Object.Current_State);
+            Session_Transitions.Complete_Stream (Object);
             return Deliver_Event
               (Object, Event, (Kind => End_Event, Offset => Position.Value));
          end if;
@@ -80,15 +80,14 @@ begin
                    Actual => Byte_Count (Object.Frames_Seen) + 1,
                    Limit => Frame_Count_Limit, others => <>)));
          end if;
-         State_Arithmetic.Frame_Discovered (Object.Current_State);
+         Session_Transitions.Discover_Frame (Object);
          Outcome := Prepare_Frame (Object);
          if not Results.Succeeded (Outcome) then
             return Fail (Object, Outcome.First_Error);
          end if;
          Pixels := Internal.Geometry_Arithmetic.Area
            (Object.Pending_Frame.Width, Object.Pending_Frame.Height);
-         State_Arithmetic.Await_Frame_Decision
-           (Object.Current_State, Object.Has_Pending_Frame);
+         Session_Transitions.Await_Frame_Decision (Object);
          return Deliver_Event
            (Object, Event,
             (Kind => Image_Event, Offset => Marker_Offset,
@@ -104,7 +103,7 @@ begin
          if not Results.Succeeded (Outcome) then
             return Fail (Object, Outcome.First_Error);
          end if;
-         State_Arithmetic.Complete_Stream (Object.Current_State);
+         Session_Transitions.Complete_Stream (Object);
          return Deliver_Event
            (Object, Event, (Kind => End_Event, Offset => Marker_Offset));
       when Internal.Wire_Format.Extension_Introducer =>

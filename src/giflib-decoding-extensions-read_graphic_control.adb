@@ -79,8 +79,7 @@ begin
 
    Control := Internal.Extension_Arithmetic.Decode_Graphic_Control
      (Fixed (1), Fixed (2), Fixed (3), Fixed (4));
-   Object.Pending_Control := Control;
-   Object.Has_Pending_Control := True;
+   Session_Transitions.Set_Pending_Control (Object, Control);
    Info.Graphic_Control := Control;
    Info.Payload_Length := 4;
    Info.Sub_Block_Count := 1;

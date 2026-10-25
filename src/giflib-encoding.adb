@@ -41,7 +41,7 @@ package body Giflib.Encoding is
          Object.Diagnostic := Enriched;
       end if;
       Resource_Management.Release (Object);
-      State_Arithmetic.Fail (Object.Current_State);
+      Session_Transitions.Fail_Session (Object);
       return Results.Failure (Object.Diagnostic);
    end Fail;
 
@@ -176,7 +176,7 @@ package body Giflib.Encoding is
                    others => <>))));
       end if;
       Outcome := Streams.Write_All (Object.Output.all, Data, Written);
-      Object.Bytes_Written := Object.Bytes_Written + Written;
+      Session_Transitions.Record_Wire_Bytes (Object, Written);
       return Outcome;
    end Write_Raw;
 
@@ -206,7 +206,7 @@ package body Giflib.Encoding is
       Resource_Management.Release (Object);
       if not Internal.Encoder_Storage.Cleanup_Succeeded (Object.Resources) then
          Object.Diagnostic := Errors.Make (Errors.Internal_Invariant_Failed);
-         State_Arithmetic.Fail (Object.Current_State);
+         Session_Transitions.Fail_Session (Object);
          return Results.Failure (Object.Diagnostic);
       end if;
       Session_Transitions.Begin_Session (Object, Options, Constraints);
@@ -238,8 +238,7 @@ package body Giflib.Encoding is
                                  (Expected => Byte_Count (Object.Constraints.Max_Canvas_Pixels),
                                   Actual => Pixels, Limit => Canvas_Pixel_Limit, others => <>)));
       end if;
-      State_Arithmetic.Define_Screen
-        (Object.Current_State, Object.Screen, Screen);
+      Session_Transitions.Define_Screen (Object, Screen);
       return Results.Success;
    end Define_Screen;
 
@@ -259,8 +258,7 @@ package body Giflib.Encoding is
          return Reject_Request
            (Object, Errors.Make (Errors.Palette_Index_Out_Of_Range));
       end if;
-      Object.Global_Palette := Palette;
-      Object.Has_Global_Palette := True;
+      Session_Transitions.Set_Global_Palette (Object, Palette);
       return Results.Success;
    end Set_Global_Palette;
 
@@ -291,10 +289,11 @@ package body Giflib.Encoding is
                 Limit => Extension_Count_Limit,
                 others => <>)));
       end if;
-      Object.Loop_Data :=
-        (if Count = 0
-         then (State => Animations.Infinite_Looping)
-         else (State => Animations.Finite_Loop_Count, Count => Count));
+      Session_Transitions.Set_Loop
+        (Object,
+         (if Count = 0
+          then (State => Animations.Infinite_Looping)
+          else (State => Animations.Finite_Loop_Count, Count => Count)));
       return Results.Success;
    end Set_Loop_Count;
 
@@ -416,7 +415,7 @@ package body Giflib.Encoding is
       if Errors.Is_Fatal (Flush_Error) then
          return Fail (Object, Flush_Error);
       end if;
-      State_Arithmetic.Complete (Object.Current_State);
+      Session_Transitions.Complete_Session (Object);
       return Results.Success;
    end Finish;
 
@@ -426,12 +425,11 @@ package body Giflib.Encoding is
          if Object.Current_State /= Cancelled then
             Resource_Management.Release (Object);
             if not Internal.Encoder_Storage.Cleanup_Succeeded (Object.Resources) then
-               State_Arithmetic.Fail (Object.Current_State);
+               Session_Transitions.Fail_Session (Object);
                Object.Diagnostic := Errors.Make (Errors.Internal_Invariant_Failed);
                return Results.Failure (Object.Diagnostic);
             end if;
-            State_Arithmetic.Cancel (Object.Current_State);
-            Object.Diagnostic := Errors.Make (Errors.Operation_Cancelled);
+            Session_Transitions.Cancel_Session (Object);
          end if;
          return Results.Success;
       elsif Object.Current_State = Failed then
