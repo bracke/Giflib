@@ -43,11 +43,11 @@ package body Giflib.Quantization is
 
    function Allocated_Bytes (Context : Workspace) return Byte_Count is
    begin
-      return Internal.Ownership.Used (Context.Resources.Allocation_Budget);
+      return Storage.Allocated_Bytes (Context.Resources);
    end Allocated_Bytes;
 
    function Cleanup_Succeeded (Context : Workspace) return Boolean is
-     (not Context.Resources.Cleanup_Failed);
+     (Storage.Cleanup_Succeeded (Context.Resources));
 
    procedure Finalize (Context : in out Workspace) is
    begin
@@ -72,17 +72,17 @@ package body Giflib.Quantization is
    is
       Outcome : Internal.Ownership.Allocation_Outcome;
       Budget : Internal.Ownership.Byte_Budget renames
-        Context.Resources.Allocation_Budget;
+        Storage.Budget (Context.Resources).all;
       Fault : Internal.Ownership.Fault_State renames Context.Allocation_Fault;
 
    begin
       if Nearest_Cache_Ownership.Is_Allocated
-        (Context.Resources.Nearest_Cache)
+        (Storage.Nearest_Cache (Context.Resources).all)
       then
          return Results.Success;
       end if;
       Outcome := Nearest_Cache_Ownership.Ensure
-        (Context.Resources.Nearest_Cache,
+        (Storage.Nearest_Cache (Context.Resources).all,
          Budget,
          Fault,
          Constraints.Max_Allocation_Bytes);
@@ -98,15 +98,17 @@ package body Giflib.Quantization is
    is
       Outcome : Internal.Ownership.Allocation_Outcome;
       Budget : Internal.Ownership.Byte_Budget renames
-        Context.Resources.Allocation_Budget;
+        Storage.Budget (Context.Resources).all;
       Fault : Internal.Ownership.Fault_State renames Context.Allocation_Fault;
 
    begin
-      if Histogram_Ownership.Is_Allocated (Context.Resources.Histogram) then
+      if Histogram_Ownership.Is_Allocated
+        (Storage.Histogram (Context.Resources).all)
+      then
          return Results.Success;
       end if;
       Outcome := Histogram_Ownership.Ensure
-        (Context.Resources.Histogram,
+        (Storage.Histogram (Context.Resources).all,
          Budget,
          Fault,
          Constraints.Max_Allocation_Bytes);
@@ -125,16 +127,17 @@ package body Giflib.Quantization is
         Buffer_Arithmetic.Error_Buffer_Length (Width);
       Outcome : Internal.Ownership.Allocation_Outcome;
       Budget : Internal.Ownership.Byte_Budget renames
-        Context.Resources.Allocation_Budget;
+        Storage.Budget (Context.Resources).all;
       Fault : Internal.Ownership.Fault_State renames Context.Allocation_Fault;
 
    begin
-      if Error_Ownership.Length (Context.Resources.Errors) >= Required_Length
+      if Error_Ownership.Length (Storage.Errors (Context.Resources).all)
+        >= Required_Length
       then
          return Results.Success;
       end if;
       Outcome := Error_Ownership.Ensure
-        (Context.Resources.Errors,
+        (Storage.Errors (Context.Resources).all,
          Budget,
          Fault,
          First => 0,

@@ -44,7 +44,7 @@ package body Giflib.Encoding is
          Object.Diagnostic := Enriched;
       end if;
       Resource_Management.Release (Object);
-      State_Arithmetic.Transition (Object.Current_State, Failed);
+      State_Arithmetic.Fail (Object.Current_State);
       return Results.Failure (Object.Diagnostic);
    end Fail;
 
@@ -268,9 +268,9 @@ package body Giflib.Encoding is
          return Invalid_Transition (Object);
       end if;
       Resource_Management.Release (Object);
-      if Object.Resources.Cleanup_Failed then
+      if not Internal.Encoder_Storage.Cleanup_Succeeded (Object.Resources) then
          Object.Diagnostic := Errors.Make (Errors.Internal_Invariant_Failed);
-         State_Arithmetic.Transition (Object.Current_State, Failed);
+         State_Arithmetic.Fail (Object.Current_State);
          return Results.Failure (Object.Diagnostic);
       end if;
       Object.Options := Options;
@@ -285,7 +285,7 @@ package body Giflib.Encoding is
       Object.Bytes_Written := 0;
       Object.Compressed_Bytes_Written := 0;
       Object.Diagnostic := Errors.Make (Errors.No_Error);
-      State_Arithmetic.Transition (Object.Current_State, Initialized);
+      State_Arithmetic.Initialize (Object.Current_State);
       return Results.Success;
    end Initialize;
 
@@ -315,7 +315,7 @@ package body Giflib.Encoding is
                                   Actual => Pixels, Limit => Canvas_Pixel_Limit, others => <>)));
       end if;
       Object.Screen := Screen;
-      State_Arithmetic.Transition (Object.Current_State, Screen_Defined);
+      State_Arithmetic.Define_Screen (Object.Current_State);
       return Results.Success;
    end Define_Screen;
 
@@ -492,7 +492,7 @@ package body Giflib.Encoding is
       if Errors.Is_Fatal (Flush_Error) then
          return Fail (Object, Flush_Error);
       end if;
-      State_Arithmetic.Transition (Object.Current_State, Completed);
+      State_Arithmetic.Complete (Object.Current_State);
       return Results.Success;
    end Finish;
 
@@ -501,12 +501,12 @@ package body Giflib.Encoding is
       if State_Arithmetic.Can_Cancel (Object.Current_State) then
          if Object.Current_State /= Cancelled then
             Resource_Management.Release (Object);
-            if Object.Resources.Cleanup_Failed then
-               State_Arithmetic.Transition (Object.Current_State, Failed);
+            if not Internal.Encoder_Storage.Cleanup_Succeeded (Object.Resources) then
+               State_Arithmetic.Fail (Object.Current_State);
                Object.Diagnostic := Errors.Make (Errors.Internal_Invariant_Failed);
                return Results.Failure (Object.Diagnostic);
             end if;
-            State_Arithmetic.Transition (Object.Current_State, Cancelled);
+            State_Arithmetic.Cancel (Object.Current_State);
             Object.Diagnostic := Errors.Make (Errors.Operation_Cancelled);
          end if;
          return Results.Success;
@@ -529,11 +529,11 @@ package body Giflib.Encoding is
    procedure Finalize (Object : in out Encoder) is
    begin
       Resource_Management.Release (Object);
-      if Object.Resources.Cleanup_Failed
+      if not Internal.Encoder_Storage.Cleanup_Succeeded (Object.Resources)
         and then Object.Diagnostic.Code = Errors.No_Error
       then
          Object.Diagnostic := Errors.Make (Errors.Internal_Invariant_Failed);
       end if;
-      State_Arithmetic.Transition (Object.Current_State, Finalized);
+      State_Arithmetic.Finalize (Object.Current_State);
    end Finalize;
 end Giflib.Encoding;

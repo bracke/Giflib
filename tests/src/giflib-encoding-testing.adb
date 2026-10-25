@@ -1,15 +1,13 @@
 with Giflib.Internal.Ownership.Testing;
-with Giflib.Internal.LZW_Encoding;
-with Giflib.Internal.Owned_Buffers;
 with Giflib.Internal.Budget_Arithmetic;
 with Giflib.Quantization.Testing;
 
 package body Giflib.Encoding.Testing is
    function Allocated_Bytes (Object : Encoder) return Byte_Count is
      (Internal.Budget_Arithmetic.Charge
-        (Internal.Ownership.Used (Object.Resources.Allocation_Budget),
+        (Internal.Encoder_Storage.Allocated_Bytes (Object.Resources),
          Byte_Count'Last,
-         Quantization.Allocated_Bytes (Object.Resources.Quantizer)).Attempted);
+         Internal.Encoder_Storage.Quantizer_Bytes (Object.Resources)).Attempted);
 
    procedure Set_Bytes_Written
      (Object : in out Encoder;
@@ -48,14 +46,15 @@ package body Giflib.Encoding.Testing is
    is
    begin
       Quantization.Testing.Inject_Storage_Error_After
-        (Object.Resources.Quantizer, Successful_Allocations);
+        (Internal.Encoder_Storage.Quantizer (Object.Resources).all,
+         Successful_Allocations);
    end Inject_Quantizer_Storage_Error_After;
 
    procedure Disable_Failure_Injection (Object : in out Encoder) is
    begin
       Internal.Ownership.Testing.Disable (Object.Allocation_Fault);
       Quantization.Testing.Disable_Failure_Injection
-        (Object.Resources.Quantizer);
+        (Internal.Encoder_Storage.Quantizer (Object.Resources).all);
    end Disable_Failure_Injection;
 
    procedure Corrupt_Quantizer_Allocation_Budget
@@ -63,22 +62,18 @@ package body Giflib.Encoding.Testing is
    is
    begin
       Quantization.Testing.Corrupt_Allocation_Budget
-        (Object.Resources.Quantizer);
+        (Internal.Encoder_Storage.Quantizer (Object.Resources).all);
    end Corrupt_Quantizer_Allocation_Budget;
 
    procedure Corrupt_Allocation_Budget (Object : in out Encoder) is
    begin
       Internal.Ownership.Testing.Set_Used
-        (Object.Resources.Allocation_Budget, 0);
+        (Internal.Encoder_Storage.Budget (Object.Resources).all, 0);
    end Corrupt_Allocation_Budget;
 
    function Resources_Released (Object : Encoder) return Boolean is
-     (not Internal.Owned_Buffers.Is_Allocated
-        (Object.Resources.Truecolor_Pixels)
-      and then not Internal.LZW_Encoding.Is_Allocated
-        (Object.Resources.LZW_Workspace)
-      and then Quantization.Allocated_Bytes (Object.Resources.Quantizer) = 0);
+     (Internal.Encoder_Storage.Is_Released (Object.Resources));
 
    function Quantizer_Cleanup_Succeeded (Object : Encoder) return Boolean is
-     (Quantization.Cleanup_Succeeded (Object.Resources.Quantizer));
+     (Internal.Encoder_Storage.Quantizer_Cleanup_Succeeded (Object.Resources));
 end Giflib.Encoding.Testing;

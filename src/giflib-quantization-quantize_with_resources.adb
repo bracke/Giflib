@@ -86,7 +86,8 @@ begin
       if not Results.Succeeded (Outcome) then
          return Outcome;
       end if;
-      Histogram := Histogram_Ownership.Value (Context.Resources.Histogram);
+      Histogram := Histogram_Ownership.Value
+        (Storage.Histogram (Context.Resources).all);
       if not Charge (Tracker, Byte_Count (Histogram.Counts'Length))
       then
          return Fail

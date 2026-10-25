@@ -1,29 +1,28 @@
 package body Giflib.Decoding.State_Arithmetic
   with SPARK_Mode
 is
-   function Can_Transition
-     (State : Decoder_State;
-      Target : Decoder_State) return Boolean
-   is
-     (Target in Uninitialized | Failed | Finalized
-      or else (Target = Initialized
-               and then State in Uninitialized | Finalized)
-      or else (Target = Header_Ready
-               and then State in Initialized | Decoding_Frame)
-      or else (Target = Decoding_Frame
-               and then State in Header_Ready | Awaiting_Frame_Decision)
-      or else (Target = Awaiting_Frame_Decision
-               and then State = Decoding_Frame)
-      or else (Target = Completed and then State = Header_Ready)
-      or else (Target = Cancelled and then Can_Cancel (State)));
-
-   procedure Transition
-     (State : in out Decoder_State;
-      Target : Decoder_State)
-   is
-   begin
-      State := Target;
-   end Transition;
+   procedure Reset (State : in out Decoder_State) is
+   begin State := Uninitialized; end Reset;
+   procedure Fail (State : in out Decoder_State) is
+   begin State := Failed; end Fail;
+   procedure Initialize (State : in out Decoder_State) is
+   begin State := Initialized; end Initialize;
+   procedure Header_Parsed (State : in out Decoder_State) is
+   begin State := Header_Ready; end Header_Parsed;
+   procedure Frame_Discovered (State : in out Decoder_State) is
+   begin State := Decoding_Frame; end Frame_Discovered;
+   procedure Await_Frame_Decision (State : in out Decoder_State) is
+   begin State := Awaiting_Frame_Decision; end Await_Frame_Decision;
+   procedure Begin_Frame (State : in out Decoder_State) is
+   begin State := Decoding_Frame; end Begin_Frame;
+   procedure Complete_Frame (State : in out Decoder_State) is
+   begin State := Header_Ready; end Complete_Frame;
+   procedure Complete_Stream (State : in out Decoder_State) is
+   begin State := Completed; end Complete_Stream;
+   procedure Cancel (State : in out Decoder_State) is
+   begin State := Cancelled; end Cancel;
+   procedure Finalize (State : in out Decoder_State) is
+   begin State := Finalized; end Finalize;
 
    function Can_Initialize (State : Decoder_State) return Boolean is
      (State in Uninitialized | Finalized);

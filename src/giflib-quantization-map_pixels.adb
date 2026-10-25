@@ -83,7 +83,7 @@ begin
       return Outcome;
    end if;
    Nearest_Cache := Nearest_Cache_Ownership.Value
-     (Context.Resources.Nearest_Cache);
+     (Storage.Nearest_Cache (Context.Resources).all);
    if not Charge (Tracker, Byte_Count (Nearest_Cache'Length))
    then
       return Work_Failure;
@@ -95,7 +95,8 @@ begin
       if not Results.Succeeded (Outcome) then
          return Outcome;
       end if;
-      Errors := Error_Ownership.Value (Context.Resources.Errors);
+      Errors := Error_Ownership.Value
+        (Storage.Errors (Context.Resources).all);
       if not Charge
         (Tracker,
          Byte_Count (Buffer_Arithmetic.Error_Buffer_Length (Source.Width)))

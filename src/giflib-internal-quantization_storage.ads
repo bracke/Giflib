@@ -30,14 +30,32 @@ package Giflib.Internal.Quantization_Storage is
      (Natural, Long_Integer, Error_Array, 0);
    subtype Error_Array_Access is Error_Ownership.Element_Array_Access;
 
-   type Resources is new Ada.Finalization.Limited_Controlled with record
-      Histogram : Histogram_Ownership.Handle;
-      Nearest_Cache : Nearest_Cache_Ownership.Handle;
-      Errors : Error_Ownership.Handle;
-      Allocation_Budget : aliased Ownership.Byte_Budget;
-      Cleanup_Failed : Boolean := False;
-   end record;
+   type Resources is new Ada.Finalization.Limited_Controlled with private;
+
+   function Histogram
+     (Object : aliased in out Resources)
+      return not null access Histogram_Ownership.Handle;
+   function Nearest_Cache
+     (Object : aliased in out Resources)
+      return not null access Nearest_Cache_Ownership.Handle;
+   function Errors
+     (Object : aliased in out Resources)
+      return not null access Error_Ownership.Handle;
+   function Budget
+     (Object : aliased in out Resources)
+      return not null access Ownership.Byte_Budget;
+   function Allocated_Bytes (Object : Resources) return Byte_Count;
+   function Cleanup_Succeeded (Object : Resources) return Boolean;
 
    procedure Release (Object : in out Resources);
    overriding procedure Finalize (Object : in out Resources);
+
+private
+   type Resources is new Ada.Finalization.Limited_Controlled with record
+      Histogram_Data : aliased Histogram_Ownership.Handle;
+      Nearest_Cache_Data : aliased Nearest_Cache_Ownership.Handle;
+      Error_Data : aliased Error_Ownership.Handle;
+      Allocation_Budget : aliased Ownership.Byte_Budget;
+      Cleanup_Failed : Boolean := False;
+   end record;
 end Giflib.Internal.Quantization_Storage;

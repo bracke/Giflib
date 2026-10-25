@@ -18,6 +18,6 @@ package body Giflib.Quantization.Testing is
    procedure Corrupt_Allocation_Budget (Context : in out Workspace) is
    begin
       Internal.Ownership.Testing.Set_Used
-        (Context.Resources.Allocation_Budget, 0);
+        (Internal.Quantization_Storage.Budget (Context.Resources).all, 0);
    end Corrupt_Allocation_Budget;
 end Giflib.Quantization.Testing;

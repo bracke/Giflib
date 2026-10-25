@@ -40,7 +40,7 @@ package body Giflib.Encoding.Extensions is
          return Fail (Object, Final_Outcome.First_Error);
       end if;
       Object.Extensions_Written := Object.Extensions_Written + 1;
-      State_Arithmetic.Transition (Object.Current_State, Accepting_Frames);
+      State_Arithmetic.Accept_Data (Object.Current_State);
       return Results.Success;
    end Complete_Extension;
 

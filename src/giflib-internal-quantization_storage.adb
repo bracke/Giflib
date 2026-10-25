@@ -1,29 +1,41 @@
+with Giflib.Internal.Resource_Cleanup;
+
 package body Giflib.Internal.Quantization_Storage is
+   function Histogram
+     (Object : aliased in out Resources)
+      return not null access Histogram_Ownership.Handle is
+     (Object.Histogram_Data'Access);
+   function Nearest_Cache
+     (Object : aliased in out Resources)
+      return not null access Nearest_Cache_Ownership.Handle
+   is (Object.Nearest_Cache_Data'Access);
+   function Errors
+     (Object : aliased in out Resources)
+      return not null access Error_Ownership.Handle is
+     (Object.Error_Data'Access);
+   function Budget
+     (Object : aliased in out Resources)
+      return not null access Ownership.Byte_Budget is
+     (Object.Allocation_Budget'Access);
+   function Allocated_Bytes (Object : Resources) return Byte_Count is
+     (Ownership.Used (Object.Allocation_Budget));
+   function Cleanup_Succeeded (Object : Resources) return Boolean is
+     (not Object.Cleanup_Failed);
+
    procedure Release (Object : in out Resources) is
-      Failed : Boolean := False;
       function Release_Histogram return Boolean is
         (Histogram_Ownership.Release
-           (Object.Histogram, Object.Allocation_Budget));
+           (Object.Histogram_Data, Object.Allocation_Budget));
       function Release_Nearest_Cache return Boolean is
         (Nearest_Cache_Ownership.Release
-           (Object.Nearest_Cache, Object.Allocation_Budget));
+           (Object.Nearest_Cache_Data, Object.Allocation_Budget));
       function Release_Error_Buffer return Boolean is
         (Error_Ownership.Release
-           (Object.Errors, Object.Allocation_Budget));
-      procedure Try_Histogram is new Ownership.Attempt_Release
-        (Release_Histogram);
-      procedure Try_Nearest_Cache is new Ownership.Attempt_Release
-        (Release_Nearest_Cache);
-      procedure Try_Error_Buffer is new Ownership.Attempt_Release
-        (Release_Error_Buffer);
+           (Object.Error_Data, Object.Allocation_Budget));
+      procedure Release_All is new Resource_Cleanup.Release_Three
+        (Release_Histogram, Release_Nearest_Cache, Release_Error_Buffer);
    begin
-      Try_Histogram (Failed);
-      Try_Nearest_Cache (Failed);
-      Try_Error_Buffer (Failed);
-      Object.Cleanup_Failed :=
-        Object.Cleanup_Failed
-        or else Failed
-        or else not Ownership.Healthy (Object.Allocation_Budget);
+      Release_All (Object.Allocation_Budget, Object.Cleanup_Failed);
    end Release;
 
    overriding procedure Finalize (Object : in out Resources) is

@@ -27,7 +27,7 @@ package body Giflib.Encoding.Resource_Management is
         (Left, Byte_Count'Last, Right).Attempted);
 
    function Quantizer_Bytes (Object : Encoder) return Byte_Count is
-     (Quantization.Allocated_Bytes (Object.Resources.Quantizer));
+     (Internal.Encoder_Storage.Quantizer_Bytes (Object.Resources));
 
    function Outer_Maximum (Object : Encoder) return Byte_Count is
       Reserved : constant Byte_Count := Quantizer_Bytes (Object);
@@ -67,8 +67,8 @@ package body Giflib.Encoding.Resource_Management is
          return Results.Failure (Errors.Make (Errors.Integer_Overflow));
       end if;
       Allocation := Buffers.Ensure
-        (Object.Resources.Truecolor_Pixels,
-         Object.Resources.Allocation_Budget,
+        (Internal.Encoder_Storage.Truecolor_Pixels (Object.Resources).all,
+         Internal.Encoder_Storage.Budget (Object.Resources).all,
          Object.Allocation_Fault,
          Required,
          Outer_Maximum (Object));
@@ -84,13 +84,13 @@ package body Giflib.Encoding.Resource_Management is
       Allocation : Internal.Ownership.Allocation_Outcome;
    begin
       if Internal.LZW_Encoding.Is_Allocated
-        (Object.Resources.LZW_Workspace)
+        (Internal.Encoder_Storage.LZW_Workspace (Object.Resources).all)
       then
          return Results.Success;
       end if;
       Allocation := Internal.LZW_Encoding.Ensure
-        (Object.Resources.LZW_Workspace,
-         Object.Resources.Allocation_Budget,
+        (Internal.Encoder_Storage.LZW_Workspace (Object.Resources).all,
+         Internal.Encoder_Storage.Budget (Object.Resources).all,
          Object.Allocation_Fault,
          Outer_Maximum (Object));
       if Allocation.Status /= Internal.Ownership.Allocation_Ready then
@@ -104,7 +104,7 @@ package body Giflib.Encoding.Resource_Management is
    is
       Result : Limits.Limit_Set := Object.Constraints;
       Reserved : constant Byte_Count :=
-        Internal.Ownership.Used (Object.Resources.Allocation_Budget);
+        Internal.Encoder_Storage.Allocated_Bytes (Object.Resources);
    begin
       Result.Max_Allocation_Bytes :=
         (if Reserved >= Object.Constraints.Max_Allocation_Bytes
@@ -124,7 +124,7 @@ package body Giflib.Encoding.Resource_Management is
       then
          Result.Context.Expected := Object.Constraints.Max_Allocation_Bytes;
          Result.Context.Actual := Combined_Amount
-           (Internal.Ownership.Used (Object.Resources.Allocation_Budget),
+           (Internal.Encoder_Storage.Allocated_Bytes (Object.Resources),
             Result.Context.Actual);
       end if;
       return Result;

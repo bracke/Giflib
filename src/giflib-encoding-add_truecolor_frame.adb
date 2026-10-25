@@ -59,8 +59,10 @@ begin
       return Fail_Frame (Object, Outcome.First_Error);
    end if;
    Outcome := Quantization.Quantize
-     (Object.Resources.Quantizer, Source,
-      Buffers.Value (Object.Resources.Truecolor_Pixels).all (1 .. Natural (Total)),
+     (Internal.Encoder_Storage.Quantizer (Object.Resources).all, Source,
+      Buffers.Value
+        (Internal.Encoder_Storage.Truecolor_Pixels (Object.Resources).all).all
+          (1 .. Natural (Total)),
       Quantized, Quantize_Options,
       Resource_Management.Quantization_Constraints (Object));
    if not Results.Succeeded (Outcome) then
@@ -91,5 +93,7 @@ begin
       (if Selection = Use_Local_Palette
        then (Selection => Use_Local_Palette, Value => Quantized.Palette)
        else Global_Frame_Palette),
-      Buffers.Value (Object.Resources.Truecolor_Pixels).all (1 .. Natural (Total)));
+      Buffers.Value
+        (Internal.Encoder_Storage.Truecolor_Pixels (Object.Resources).all).all
+          (1 .. Natural (Total)));
 end Add_Truecolor_Frame;

@@ -1,15 +1,25 @@
 private package Giflib.Encoding.State_Arithmetic
   with Preelaborate, SPARK_Mode
 is
-   function Can_Transition
-     (State : Encoder_State;
-      Target : Encoder_State) return Boolean;
-
-   procedure Transition
-     (State : in out Encoder_State;
-      Target : Encoder_State)
-     with Pre => Can_Transition (State, Target),
-          Post => State = Target;
+   procedure Fail (State : in out Encoder_State)
+     with Post => State = Failed;
+   procedure Initialize (State : in out Encoder_State)
+     with Pre => State in Uninitialized | Finalized,
+          Post => State = Initialized;
+   procedure Define_Screen (State : in out Encoder_State)
+     with Pre => State = Initialized,
+          Post => State = Screen_Defined;
+   procedure Accept_Data (State : in out Encoder_State)
+     with Pre => State in Screen_Defined | Accepting_Frames,
+          Post => State = Accepting_Frames;
+   procedure Complete (State : in out Encoder_State)
+     with Pre => State in Screen_Defined | Accepting_Frames,
+          Post => State = Completed;
+   procedure Cancel (State : in out Encoder_State)
+     with Pre => State in Initialized | Screen_Defined | Accepting_Frames,
+          Post => State = Cancelled;
+   procedure Finalize (State : in out Encoder_State)
+     with Post => State = Finalized;
 
    function Can_Initialize (State : Encoder_State) return Boolean
      with Post =>

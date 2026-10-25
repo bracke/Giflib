@@ -82,7 +82,7 @@ package Giflib.Quantization is
 
 private
    type Workspace is limited record
-      Resources : Internal.Quantization_Storage.Resources;
+      Resources : aliased Internal.Quantization_Storage.Resources;
       Allocation_Fault : aliased Internal.Ownership.Fault_State;
    end record;
 

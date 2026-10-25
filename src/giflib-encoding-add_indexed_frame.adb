@@ -96,7 +96,8 @@ begin
    end if;
    Remaining_Output := Object.Constraints.Max_Output_Bytes - Object.Bytes_Written;
    Outcome := Internal.LZW_Encoding.Encode
-     (Object.Resources.LZW_Workspace, Object.Output.all, Pixels, Minimum,
+     (Internal.Encoder_Storage.LZW_Workspace (Object.Resources).all,
+      Object.Output.all, Pixels, Minimum,
       Object.Constraints.Max_LZW_Work,
       Object.Constraints.Max_Compressed_Bytes - Object.Compressed_Bytes_Written,
       Remaining_Output, Compressed, Wire_Bytes,
@@ -109,6 +110,6 @@ begin
       return Fail_Frame (Object, Outcome.First_Error);
    end if;
    Object.Frames_Written := Object.Frames_Written + 1;
-   State_Arithmetic.Transition (Object.Current_State, Accepting_Frames);
+   State_Arithmetic.Accept_Data (Object.Current_State);
    return Results.Success;
 end Add_Indexed_Frame;

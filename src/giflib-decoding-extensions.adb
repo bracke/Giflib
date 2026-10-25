@@ -18,10 +18,10 @@ package body Giflib.Decoding.Extensions is
    is
    begin
       return Internal.Metadata_Store.Start
-        (Object.Resources.Metadata_Storage,
+        (Internal.Decoder_Storage.Metadata (Object.Resources).all,
          Object.Options.Retention,
          Object.Constraints.Max_Allocation_Bytes,
-         Object.Resources.Allocation_Budget,
+         Internal.Decoder_Storage.Budget (Object.Resources).all,
          Object.Allocation_Fault,
          Info);
    end Start_Retention;
@@ -32,11 +32,11 @@ package body Giflib.Decoding.Extensions is
    is
    begin
       return Internal.Metadata_Store.Append
-        (Object.Resources.Metadata_Storage,
+        (Internal.Decoder_Storage.Metadata (Object.Resources).all,
          Data,
          Object.Constraints.Max_Retained_Metadata_Bytes,
          Object.Constraints.Max_Allocation_Bytes,
-         Object.Resources.Allocation_Budget,
+         Internal.Decoder_Storage.Budget (Object.Resources).all,
          Object.Allocation_Fault);
    end Retain_Chunk;
 
@@ -283,7 +283,7 @@ package body Giflib.Decoding.Extensions is
 
       if Results.Succeeded (Outcome) then
          Outcome := Internal.Metadata_Store.Finish
-           (Object.Resources.Metadata_Storage, Info);
+           (Internal.Decoder_Storage.Metadata (Object.Resources).all, Info);
       end if;
       return Outcome;
    end Read;
