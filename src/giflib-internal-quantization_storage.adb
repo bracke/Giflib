@@ -31,7 +31,7 @@ package body Giflib.Internal.Quantization_Storage is
    function Allocated_Bytes (Object : Resources) return Byte_Count is
      (Ownership.Used (Object.Allocation_Budget));
    function Cleanup_Succeeded (Object : Resources) return Boolean is
-     (not Object.Cleanup_Failed);
+     (not Object.Cleanup_Failed and then Allocated_Bytes (Object) = 0);
 
    procedure Release (Object : in out Resources) is
       Status : Resource_Cleanup.Guard

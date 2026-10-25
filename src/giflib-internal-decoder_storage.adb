@@ -46,7 +46,9 @@ package body Giflib.Internal.Decoder_Storage is
    function Frame_Scratch_Length (Object : Resources) return Byte_Count is
      (Owned_Buffers.Length (Object.Frame_Scratch_Buffer));
    function Cleanup_Succeeded (Object : Resources) return Boolean is
-     (not Object.Cleanup_Failed);
+     (not Object.Cleanup_Failed
+      and then Is_Released (Object)
+      and then Allocated_Bytes (Object) = 0);
    function Is_Released (Object : Resources) return Boolean is
      (Metadata_Store.Is_Released (Object.Metadata_Storage)
       and then not Owned_Buffers.Is_Allocated (Object.Canvas_Buffer)

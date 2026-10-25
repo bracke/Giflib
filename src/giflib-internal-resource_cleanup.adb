@@ -11,6 +11,7 @@ package body Giflib.Internal.Resource_Cleanup is
       Object.Sticky_Failure.all :=
         Object.Sticky_Failure.all
         or else Object.Failed
-        or else not Ownership.Healthy (Object.Budget.all);
+        or else not Ownership.Healthy (Object.Budget.all)
+        or else Ownership.Used (Object.Budget.all) /= 0;
    end Finalize;
 end Giflib.Internal.Resource_Cleanup;

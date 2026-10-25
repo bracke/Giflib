@@ -22,7 +22,9 @@ package body Giflib.Internal.Encoder_Storage is
    function LZW_Allocated (Object : Resources) return Boolean is
      (LZW_Encoding.Is_Allocated (Object.LZW_Data));
    function Cleanup_Succeeded (Object : Resources) return Boolean is
-     (not Object.Cleanup_Failed);
+     (not Object.Cleanup_Failed
+      and then Is_Released (Object)
+      and then Allocated_Bytes (Object) = 0);
    function Is_Released (Object : Resources) return Boolean is
      (not Owned_Buffers.Is_Allocated (Object.Truecolor_Buffer)
       and then not LZW_Encoding.Is_Allocated (Object.LZW_Data)
