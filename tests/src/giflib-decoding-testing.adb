@@ -1,4 +1,5 @@
 with Giflib.Internal.Ownership.Testing;
+with Giflib.Internal.Decoder_Storage.Testing;
 
 package body Giflib.Decoding.Testing is
    function Allocated_Bytes (Object : Decoder) return Byte_Count is
@@ -20,8 +21,7 @@ package body Giflib.Decoding.Testing is
 
    procedure Corrupt_Allocation_Budget (Object : in out Decoder) is
    begin
-      Internal.Ownership.Testing.Set_Used
-        (Internal.Decoder_Storage.Budget (Object.Resources).all, 0);
+      Internal.Decoder_Storage.Testing.Corrupt_Budget (Object.Resources);
    end Corrupt_Allocation_Budget;
 
    function Resources_Released (Object : Decoder) return Boolean is

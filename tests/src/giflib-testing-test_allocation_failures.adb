@@ -8,6 +8,7 @@ with Giflib.Images;
 with Giflib.Decoding.Testing;
 with Giflib.Encoding.Testing;
 with Giflib.Internal.Ownership;
+with Giflib.Internal.Resource_Cleanup;
 with Giflib.Internal.Resource_Diagnostics;
 with Giflib.Internal.Ownership.Testing;
 with Giflib.Internal.Ownership_Arithmetic;
@@ -111,14 +112,15 @@ package body Giflib.Testing.Test_Allocation_Failures is
       Work : Giflib.Internal.Work_Budgets.Meter (6);
       Accepted : Boolean;
       Work_Context : Giflib.Errors.Diagnostic_Context;
-      Cleanup_Failed : Boolean := False;
+      Cleanup_Budget : aliased Giflib.Internal.Ownership.Byte_Budget;
+      Cleanup_Failed : aliased Boolean := False;
       function Raising_Release return Boolean is
       begin
          raise Program_Error;
          return True;
       end Raising_Release;
       procedure Attempt_Raising_Release is new
-        Giflib.Internal.Ownership.Attempt_Release (Raising_Release);
+        Giflib.Internal.Resource_Cleanup.Attempt (Raising_Release);
    begin
       Result := Arithmetic.Check (State);
       Assert
@@ -201,10 +203,18 @@ package body Giflib.Testing.Test_Allocation_Failures is
          and then Work_Context.Actual = 7
          and then Work_Context.Limit = Giflib.Optimization_Work_Limit,
          "shared work-meter diagnostic context is wrong");
-      Attempt_Raising_Release (Cleanup_Failed);
+      declare
+         Guard : Giflib.Internal.Resource_Cleanup.Guard
+           (Cleanup_Budget'Access, Cleanup_Failed'Access);
+      begin
+         Attempt_Raising_Release (Guard);
+         Assert
+           (not Cleanup_Failed,
+            "cleanup guard reconciled before leaving its scope");
+      end;
       Assert
         (Cleanup_Failed,
-         "shared cleanup policy allowed an exception to escape");
+         "scope-bound cleanup did not retain a release exception");
    end Ownership_Transitions_Are_Exact;
 
    procedure Owned_Array_Ranges_Are_Structured
@@ -218,6 +228,7 @@ package body Giflib.Testing.Test_Allocation_Failures is
       Item : Giflib.Errors.Error;
       Before : Giflib.Byte_Count;
       Vector : Test_Vector.Handle;
+      Foreign_Budget : aliased Giflib.Internal.Ownership.Byte_Budget;
    begin
       Outcome := Test_Array_Ownership.Ensure
         (Object,
@@ -291,6 +302,18 @@ package body Giflib.Testing.Test_Allocation_Failures is
         (Test_Vector.Length (Vector) = 3
          and then Test_Vector.Element (Vector, 3) = 13,
          "owned vector append did not advance logical length");
+      Outcome := Test_Vector.Ensure_Append
+        (Vector, Foreign_Budget, Fault, Maximum => 64);
+      Assert
+        (Outcome.Status = Giflib.Internal.Ownership.Allocation_Owner_Error
+         and then Test_Vector.Length (Vector) = 3
+         and then Giflib.Internal.Ownership.Used (Foreign_Budget) = 0,
+         "owned vector accepted a foreign ledger through spare capacity");
+      Assert
+        (not Test_Vector.Release (Vector, Foreign_Budget)
+         and then Test_Vector.Length (Vector) = 3
+         and then Test_Vector.Element (Vector, 3) = 13,
+         "foreign-ledger vector release changed logical contents");
       Assert
         (Test_Vector.Release (Vector, Budget)
          and then Test_Vector.Length (Vector) = 0,

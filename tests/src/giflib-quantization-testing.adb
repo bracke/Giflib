@@ -1,4 +1,5 @@
 with Giflib.Internal.Ownership.Testing;
+with Giflib.Internal.Quantization_Storage.Testing;
 
 package body Giflib.Quantization.Testing is
    procedure Inject_Storage_Error_After
@@ -17,7 +18,7 @@ package body Giflib.Quantization.Testing is
 
    procedure Corrupt_Allocation_Budget (Context : in out Workspace) is
    begin
-      Internal.Ownership.Testing.Set_Used
-        (Internal.Quantization_Storage.Budget (Context.Resources).all, 0);
+      Internal.Quantization_Storage.Testing.Corrupt_Budget
+        (Context.Resources);
    end Corrupt_Allocation_Budget;
 end Giflib.Quantization.Testing;

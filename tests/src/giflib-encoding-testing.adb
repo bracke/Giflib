@@ -1,6 +1,6 @@
 with Giflib.Internal.Ownership.Testing;
+with Giflib.Internal.Encoder_Storage.Testing;
 with Giflib.Internal.Budget_Arithmetic;
-with Giflib.Quantization.Testing;
 
 package body Giflib.Encoding.Testing is
    function Allocated_Bytes (Object : Encoder) return Byte_Count is
@@ -45,35 +45,34 @@ package body Giflib.Encoding.Testing is
       Successful_Allocations : Natural := 0)
    is
    begin
-      Quantization.Testing.Inject_Storage_Error_After
-        (Internal.Encoder_Storage.Quantizer (Object.Resources).all,
-         Successful_Allocations);
+      Internal.Encoder_Storage.Testing.Inject_Quantizer_Error_After
+        (Object.Resources, Successful_Allocations);
    end Inject_Quantizer_Storage_Error_After;
 
    procedure Disable_Failure_Injection (Object : in out Encoder) is
    begin
       Internal.Ownership.Testing.Disable (Object.Allocation_Fault);
-      Quantization.Testing.Disable_Failure_Injection
-        (Internal.Encoder_Storage.Quantizer (Object.Resources).all);
+      Internal.Encoder_Storage.Testing.Disable_Quantizer_Error
+        (Object.Resources);
    end Disable_Failure_Injection;
 
    procedure Corrupt_Quantizer_Allocation_Budget
      (Object : in out Encoder)
    is
    begin
-      Quantization.Testing.Corrupt_Allocation_Budget
-        (Internal.Encoder_Storage.Quantizer (Object.Resources).all);
+      Internal.Encoder_Storage.Testing.Corrupt_Quantizer_Budget
+        (Object.Resources);
    end Corrupt_Quantizer_Allocation_Budget;
 
    procedure Corrupt_Allocation_Budget (Object : in out Encoder) is
    begin
-      Internal.Ownership.Testing.Set_Used
-        (Internal.Encoder_Storage.Budget (Object.Resources).all, 0);
+      Internal.Encoder_Storage.Testing.Corrupt_Budget (Object.Resources);
    end Corrupt_Allocation_Budget;
 
    function Resources_Released (Object : Encoder) return Boolean is
      (Internal.Encoder_Storage.Is_Released (Object.Resources));
 
    function Quantizer_Cleanup_Succeeded (Object : Encoder) return Boolean is
-     (Internal.Encoder_Storage.Quantizer_Cleanup_Succeeded (Object.Resources));
+     (Internal.Encoder_Storage.Testing.Quantizer_Cleanup_Succeeded
+        (Object.Resources));
 end Giflib.Encoding.Testing;
