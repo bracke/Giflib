@@ -1,4 +1,4 @@
-separate (Giflib.Testing.Test_Allocation_Failures)
+separate (Giflib.Testing.Test_Encoder_Allocation)
 procedure Encoder_Allocation_Failures
   (T : in out AUnit.Test_Cases.Test_Case'Class)
 is

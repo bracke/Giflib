@@ -1,4 +1,4 @@
-separate (Giflib.Testing.Test_Allocation_Failures)
+separate (Giflib.Testing.Test_Ownership_Failures)
 procedure Owned_Array_Ranges_Are_Structured
   (T : in out AUnit.Test_Cases.Test_Case'Class)
 is

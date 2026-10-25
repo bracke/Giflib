@@ -1,4 +1,4 @@
-separate (Giflib.Testing.Test_Allocation_Failures)
+separate (Giflib.Testing.Test_Decoder_Allocation)
 procedure Decoder_Allocation_Failures
   (T : in out AUnit.Test_Cases.Test_Case'Class)
 is

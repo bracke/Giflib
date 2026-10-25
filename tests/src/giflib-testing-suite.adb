@@ -1,5 +1,10 @@
 with AUnit.Test_Cases;
-with Giflib.Testing.Test_Allocation_Failures;
+with Giflib.Testing.Test_Decoder_Allocation;
+with Giflib.Testing.Test_Encoder_Allocation;
+with Giflib.Testing.Test_Metadata_Ownership;
+with Giflib.Testing.Test_Ownership_Failures;
+with Giflib.Testing.Test_Quantizer_Allocation;
+with Giflib.Testing.Test_Workspace_Failures;
 with Giflib.Testing.Test_Blocks;
 with Giflib.Testing.Test_Container;
 with Giflib.Testing.Test_Compositing;
@@ -20,8 +25,18 @@ with Giflib.Testing.Test_Streams;
 package body Giflib.Testing.Suite is
    function All_Tests return AUnit.Test_Suites.Access_Test_Suite is
       Suite : constant AUnit.Test_Suites.Access_Test_Suite := AUnit.Test_Suites.New_Suite;
-      Allocation_Failures : constant AUnit.Test_Cases.Test_Case_Access :=
-        new Giflib.Testing.Test_Allocation_Failures.Test;
+      Decoder_Allocation : constant AUnit.Test_Cases.Test_Case_Access :=
+        new Giflib.Testing.Test_Decoder_Allocation.Test;
+      Encoder_Allocation : constant AUnit.Test_Cases.Test_Case_Access :=
+        new Giflib.Testing.Test_Encoder_Allocation.Test;
+      Metadata_Ownership : constant AUnit.Test_Cases.Test_Case_Access :=
+        new Giflib.Testing.Test_Metadata_Ownership.Test;
+      Ownership_Failures : constant AUnit.Test_Cases.Test_Case_Access :=
+        new Giflib.Testing.Test_Ownership_Failures.Test;
+      Quantizer_Allocation : constant AUnit.Test_Cases.Test_Case_Access :=
+        new Giflib.Testing.Test_Quantizer_Allocation.Test;
+      Workspace_Failures : constant AUnit.Test_Cases.Test_Case_Access :=
+        new Giflib.Testing.Test_Workspace_Failures.Test;
       Blocks : constant AUnit.Test_Cases.Test_Case_Access :=
         new Giflib.Testing.Test_Blocks.Test;
       Container : constant AUnit.Test_Cases.Test_Case_Access :=
@@ -55,7 +70,12 @@ package body Giflib.Testing.Suite is
       Streams : constant AUnit.Test_Cases.Test_Case_Access :=
         new Giflib.Testing.Test_Streams.Test;
    begin
-      Suite.Add_Test (Allocation_Failures);
+      Suite.Add_Test (Decoder_Allocation);
+      Suite.Add_Test (Encoder_Allocation);
+      Suite.Add_Test (Metadata_Ownership);
+      Suite.Add_Test (Ownership_Failures);
+      Suite.Add_Test (Quantizer_Allocation);
+      Suite.Add_Test (Workspace_Failures);
       Suite.Add_Test (Blocks);
       Suite.Add_Test (Container);
       Suite.Add_Test (Compositing);
