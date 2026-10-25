@@ -10,7 +10,6 @@ package Giflib.Internal.Quantization_Storage.Cache_Operations is
       Found : Boolean := False;
       Value : Palette_Index := 0;
       Store_Slot : Natural := 0;
-      Probe_Count : Natural := 0;
    end record;
 
    function Reset
@@ -20,7 +19,7 @@ package Giflib.Internal.Quantization_Storage.Cache_Operations is
        (if Reset'Result = Outcomes.Budgeted_Work_Limit
         then Work_Budgets.Failed (Work));
    function Probe
-     (Object : Resources;
+     (Object : in out Resources;
       Key : Natural;
       Work : in out Work_Budgets.Meter) return Probe_Result
      with Post =>

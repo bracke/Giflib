@@ -38,7 +38,7 @@ package body Giflib.Internal.Quantization_Storage.Cache_Operations is
    end Reset;
 
    function Probe
-     (Object : Resources;
+     (Object : in out Resources;
       Key : Natural;
       Work : in out Work_Budgets.Meter) return Probe_Result
    is
@@ -48,26 +48,22 @@ package body Giflib.Internal.Quantization_Storage.Cache_Operations is
 
       procedure Search (Cache : Cache_Array) is
          Slot : Natural;
-         Probe_Count : Natural := 0;
       begin
          for Offset in 0 .. Cache_Probe_Limit - 1 loop
-            Probe_Count := Probe_Count + 1;
             Slot := (Start + Offset) mod Cache_Capacity;
             if not Cache (Slot).Used then
                Result :=
                  (Status => Outcomes.Budgeted_Ready,
                   Found => False,
                   Value => 0,
-                  Store_Slot => Slot,
-                  Probe_Count => Probe_Count);
+                  Store_Slot => Slot);
                return;
             elsif Cache (Slot).Key = Key then
                Result :=
                  (Status => Outcomes.Budgeted_Ready,
                   Found => True,
                   Value => Cache (Slot).Value,
-                  Store_Slot => Slot,
-                  Probe_Count => Probe_Count);
+                  Store_Slot => Slot);
                return;
             end if;
          end loop;
@@ -75,8 +71,7 @@ package body Giflib.Internal.Quantization_Storage.Cache_Operations is
            (Status => Outcomes.Budgeted_Ready,
             Found => False,
             Value => 0,
-            Store_Slot => Start,
-            Probe_Count => Probe_Count);
+            Store_Slot => Start);
       end Search;
    begin
       if not Nearest_Cache_Allocated (Object) or else Key > Cache_Key_Last then
