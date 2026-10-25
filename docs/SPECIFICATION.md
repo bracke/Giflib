@@ -171,11 +171,11 @@ A palette is a bounded count and array of at most 256 RGB entries; tables writte
   than a transferable handle, and the store binds to the allocation ledger
   that owns its first retained allocation through a stable ledger identity,
   not a reusable storage address. Non-release operations through a
-  different ledger fail without mutation or accounting changes. Release must
-  never debit a foreign ledger, but it still destroys and
-  clears the owned storage and reports an ownership failure so terminal cleanup
-  remains leak-free. The original ledger can remain stale after this invariant
-  failure and must not be treated as usable accounting state. Public indexed
+  different ledger fail without mutation or accounting changes. Release through
+  a different ledger likewise fails without changing either the storage or its
+  ownership binding, so cleanup remains retryable through the owning ledger.
+  A same-ledger bookkeeping failure still destroys the owned storage, records a
+  sticky ledger fault, and reports failure. Public indexed
   extension and chunk access must not repeatedly scan from the head; the store
   maintains bounded, allocation-accounted indexes with amortized constant-time
   lookup. The shared owned-array layer provides preserve-on-growth storage for

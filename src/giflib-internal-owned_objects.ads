@@ -20,8 +20,9 @@ package Giflib.Internal.Owned_Objects is
    function Release
      (Object : in out Handle;
       Budget : aliased in out Ownership.Byte_Budget) return Boolean;
-   --  Always frees and clears Object.  False reports a ledger mismatch; a
-   --  foreign Budget is never debited.
+   --  A foreign Budget returns False without changing Object, so cleanup can
+   --  be retried with the owning ledger. A same-ledger bookkeeping failure
+   --  still frees and clears Object and is recorded by the ledger.
 
    function Is_Allocated (Object : Handle) return Boolean;
    function Allocation_Bytes return Byte_Count;

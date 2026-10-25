@@ -24,8 +24,8 @@ package Giflib.Internal.Owned_Buffers is
    function Release
      (Buffer : in out Handle;
       Budget : aliased in out Ownership.Byte_Budget) return Boolean;
-   --  Always frees and clears Buffer.  False reports a ledger mismatch; a
-   --  foreign Budget is never debited.
+   --  A foreign Budget returns False without changing Buffer. Cleanup can be
+   --  retried with the owning ledger.
 
    function Is_Allocated (Buffer : Handle) return Boolean;
    function Length (Buffer : Handle) return Byte_Count;

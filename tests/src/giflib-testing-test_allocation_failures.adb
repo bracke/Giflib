@@ -353,11 +353,15 @@ package body Giflib.Testing.Test_Allocation_Failures is
          "owned buffer accepted a foreign ledger");
       Assert
         (not Buffers.Release (Buffer, Second_Budget)
-         and then not Buffers.Is_Allocated (Buffer)
+         and then Buffers.Is_Allocated (Buffer)
          and then Giflib.Internal.Ownership.Used (First_Budget) = 8
          and then Giflib.Internal.Ownership.Used (Second_Budget) = 0,
-         "foreign-ledger cleanup leaked storage or changed a ledger");
-      Giflib.Internal.Ownership.Testing.Set_Used (First_Budget, 0);
+         "foreign-ledger cleanup changed storage or a ledger");
+      Assert
+        (Buffers.Release (Buffer, First_Budget)
+         and then not Buffers.Is_Allocated (Buffer)
+         and then Giflib.Internal.Ownership.Used (First_Budget) = 0,
+         "owned buffer cleanup was not retryable with its owner");
 
       Outcome := Buffers.Ensure
         (Buffer, First_Budget, Fault, Required => 8, Maximum => 8);
@@ -390,12 +394,16 @@ package body Giflib.Testing.Test_Allocation_Failures is
          "owned object accepted a foreign ledger");
       Assert
         (not Objects.Release (Object, Second_Budget)
-         and then not Objects.Is_Allocated (Object)
+         and then Objects.Is_Allocated (Object)
          and then Giflib.Internal.Ownership.Used (First_Budget)
            = Objects.Allocation_Bytes
          and then Giflib.Internal.Ownership.Used (Second_Budget) = 0,
-         "foreign-ledger object cleanup leaked storage or changed a ledger");
-      Giflib.Internal.Ownership.Testing.Set_Used (First_Budget, 0);
+         "foreign-ledger object cleanup changed storage or a ledger");
+      Assert
+        (Objects.Release (Object, First_Budget)
+         and then not Objects.Is_Allocated (Object)
+         and then Giflib.Internal.Ownership.Used (First_Budget) = 0,
+         "owned object cleanup was not retryable with its owner");
    end Owned_Resources_Reject_Foreign_Ledgers;
 
    procedure Metadata_Store_Rejects_Foreign_Ledgers
@@ -460,11 +468,15 @@ package body Giflib.Testing.Test_Allocation_Failures is
          "metadata store accepted a foreign ledger");
       Assert
         (not Store.Release (Object, Second_Budget)
-         and then Store.Is_Released (Object)
+         and then not Store.Is_Released (Object)
          and then Giflib.Internal.Ownership.Used (First_Budget) > 0
          and then Giflib.Internal.Ownership.Used (Second_Budget) = 0,
-         "foreign-ledger metadata cleanup leaked storage or changed a ledger");
-      Giflib.Internal.Ownership.Testing.Set_Used (First_Budget, 0);
+         "foreign-ledger metadata cleanup changed storage or a ledger");
+      Assert
+        (Store.Release (Object, First_Budget)
+         and then Store.Is_Released (Object)
+         and then Giflib.Internal.Ownership.Used (First_Budget) = 0,
+         "metadata cleanup was not retryable with its owner");
 
       Outcome := Store.Start
         (Object,

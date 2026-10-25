@@ -214,12 +214,16 @@ package body Giflib.Internal.Ownership is
       Budget : aliased in out Byte_Budget;
       Amount : Byte_Count) return Boolean
    is
-      Same_Owner : constant Boolean := Matches (Owner, Budget);
-      Released : constant Boolean :=
-        (if Same_Owner then Release (Budget, Amount) else False);
    begin
-      Owner.Identity := 0;
-      return Released;
+      if not Matches (Owner, Budget) then
+         return False;
+      end if;
+      declare
+         Released : constant Boolean := Release (Budget, Amount);
+      begin
+         Owner.Identity := 0;
+         return Released;
+      end;
    end Release_Owned;
 
    procedure Attempt_Release (Failed : in out Boolean) is

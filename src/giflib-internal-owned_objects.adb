@@ -49,6 +49,9 @@ package body Giflib.Internal.Owned_Objects is
    is
       Released : Boolean;
    begin
+      if not Ownership.Matches (Object.Owner, Budget) then
+         return False;
+      end if;
       if Object.Pointer /= null then
          Released := Ownership.Release_Owned
            (Object.Owner, Budget, Allocation_Bytes);

@@ -46,19 +46,17 @@ package body Giflib.Internal.Metadata_Store is
       Node : Extension_Node_Access;
       Chunk : Payload_Chunk_Access;
       Ledger_Released : Boolean;
-      Same_Owner : constant Boolean := Ownership.Matches (Object.Owner, Budget);
-      Released : Boolean := Same_Owner;
+      Released : Boolean := True;
 
       procedure Release_Charge (Amount : Byte_Count) is
       begin
-         if Same_Owner then
-            Ledger_Released := Ownership.Release (Budget, Amount);
-            Released := Ledger_Released and Released;
-         else
-            Released := False;
-         end if;
+         Ledger_Released := Ownership.Release (Budget, Amount);
+         Released := Ledger_Released and Released;
       end Release_Charge;
    begin
+      if not Ownership.Matches (Object.Owner, Budget) then
+         return False;
+      end if;
       for Index in 1 .. Extension_Indexes.Length (Object.Entries) loop
          Node := Extension_Indexes.Element (Object.Entries, Index);
          for Chunk_Index in 1 .. Chunk_Indexes.Length (Node.Chunks) loop

@@ -7,6 +7,10 @@ generic
    Default_Element : Element_Type;
 package Giflib.Internal.Owned_Arrays is
    pragma Preelaborate;
+   pragma Compile_Time_Error
+     (Index_Type'Pos (Index_Type'First) < Integer'Pos (Integer'First)
+      or else Index_Type'Pos (Index_Type'Last) > Integer'Pos (Integer'Last),
+      "Owned_Arrays index type must fit in Integer");
 
    type Element_Array_Access is access all Element_Array;
    type Handle is limited private;
@@ -39,8 +43,9 @@ package Giflib.Internal.Owned_Arrays is
    function Release
      (Object : in out Handle;
       Budget : aliased in out Ownership.Byte_Budget) return Boolean;
-   --  Always frees and clears Object.  False reports a ledger mismatch; a
-   --  foreign Budget is never debited.
+   --  A foreign Budget returns False without changing Object, so cleanup can
+   --  be retried with the owning ledger. A same-ledger bookkeeping failure
+   --  still frees and clears Object and is recorded by the ledger.
 
    function Is_Allocated (Object : Handle) return Boolean;
    function Contains
