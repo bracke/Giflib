@@ -38,4 +38,8 @@ command = ["alr", "--chdir", "tests", "exec", "--", "./check_private_api.sh"]
 
 [[actions]]
 type = "test"
+command = ["alr", "--chdir", "tests", "exec", "--", "sh", "./check_library_interface.sh", ".."]
+
+[[actions]]
+type = "test"
 command = ["alr", "--chdir", "tests", "exec", "--", "./bin/giflib_tests"]

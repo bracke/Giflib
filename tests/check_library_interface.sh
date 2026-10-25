@@ -1,0 +1,95 @@
+#!/bin/sh
+set -eu
+
+root=${1:-..}
+actual_interface=$(mktemp)
+expected_interface=$(mktemp)
+actual_dependencies=$(mktemp)
+expected_dependencies=$(mktemp)
+trap 'rm -f "$actual_interface" "$expected_interface" "$actual_dependencies" "$expected_dependencies"' EXIT HUP INT TERM
+
+awk '
+  /for[[:space:]]+Library_Interface[[:space:]]+use/ { inside = 1 }
+  inside {
+    sub(/--.*/, "")
+    rest = $0
+    while (match(rest, /"[^"]+"/)) {
+      print substr(rest, RSTART + 1, RLENGTH - 2)
+      rest = substr(rest, RSTART + RLENGTH)
+    }
+  }
+  inside && /\);/ { exit }
+' "$root/giflib.gpr" >"$actual_interface"
+
+sed -n '/^Giflib$/,/^Giflib.Internal.Work_Budgets$/p' <<'EOF' >"$expected_interface"
+Giflib
+Giflib.Animations
+Giflib.Capabilities
+Giflib.Decoding
+Giflib.Encoding
+Giflib.Errors
+Giflib.Frames
+Giflib.Images
+Giflib.Limits
+Giflib.Metadata
+Giflib.Optimization
+Giflib.Palettes
+Giflib.Quantization
+Giflib.Results
+Giflib.Streams
+Giflib.Version
+Giflib.Internal
+Giflib.Internal.Blocks
+Giflib.Internal.Budget_Arithmetic
+Giflib.Internal.Decoder_Storage
+Giflib.Internal.Encoder_Storage
+Giflib.Internal.LZW
+Giflib.Internal.LZW_Arithmetic
+Giflib.Internal.LZW_Encoding
+Giflib.Internal.Metadata_Store
+Giflib.Internal.Owned_Arrays
+Giflib.Internal.Owned_Buffers
+Giflib.Internal.Owned_Objects
+Giflib.Internal.Owned_Vectors
+Giflib.Internal.Ownership
+Giflib.Internal.Ownership_Arithmetic
+Giflib.Internal.Quantization_Buffer_Arithmetic
+Giflib.Internal.Quantization_Dithering
+Giflib.Internal.Quantization_Palette
+Giflib.Internal.Quantization_Storage
+Giflib.Internal.Work_Budgets
+EOF
+
+if ! cmp -s "$expected_interface" "$actual_interface"; then
+    echo "library interface does not match the reviewed semantic-closure manifest" >&2
+    diff -u "$expected_interface" "$actual_interface" >&2 || true
+    exit 1
+fi
+
+for spec in giflib-decoding.ads giflib-encoding.ads giflib-quantization.ads; do
+    awk -v file="$spec" '
+      {
+        sub(/--.*/, "")
+        if ($0 ~ /^[[:space:]]*private[[:space:]]+with[[:space:]]+Giflib\.Internal\.[A-Za-z0-9_]+[[:space:]]*;/) {
+          line = $0
+          sub(/^[[:space:]]*/, "", line)
+          print file ":" line
+        }
+      }
+    ' "$root/src/$spec"
+done >"$actual_dependencies"
+
+sed -n '/^giflib-decoding.ads:/,/^giflib-quantization.ads:private with Giflib.Internal.Quantization_Storage;$/p' <<'EOF' >"$expected_dependencies"
+giflib-decoding.ads:private with Giflib.Internal.Decoder_Storage;
+giflib-decoding.ads:private with Giflib.Internal.Ownership;
+giflib-encoding.ads:private with Giflib.Internal.Encoder_Storage;
+giflib-encoding.ads:private with Giflib.Internal.Ownership;
+giflib-quantization.ads:private with Giflib.Internal.Ownership;
+giflib-quantization.ads:private with Giflib.Internal.Quantization_Storage;
+EOF
+
+if ! cmp -s "$expected_dependencies" "$actual_dependencies"; then
+    echo "public specifications have unreviewed internal dependencies" >&2
+    diff -u "$expected_dependencies" "$actual_dependencies" >&2 || true
+    exit 1
+fi

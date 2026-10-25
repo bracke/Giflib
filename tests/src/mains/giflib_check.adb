@@ -21,6 +21,7 @@ procedure Giflib_Check is
       else Ada.Command_Line.Argument (1));
    Alr : constant String := Processes.Locate_Command ("alr");
    Gprbuild : constant String := Processes.Locate_Command ("gprbuild");
+   Sh : constant String := Processes.Locate_Command ("sh");
    Checks : constant Project_Tools.Release_Checks.Checker :=
      Project_Tools.Release_Checks.Create (Root);
 
@@ -32,25 +33,14 @@ procedure Giflib_Check is
         (Checks, "tests/alire.toml", "gnat_native = ""^15""", Quiet => False);
       Project_Tools.Release_Checks.Require_Text
         (Checks, "giflib.gpr", "with ""giflib_build.gpr"";", Quiet => False);
-      Project_Tools.Release_Checks.Require_Text
-        (Checks, "giflib.gpr", "Giflib.Internal.Decoder_Storage", Quiet => False);
-      Project_Tools.Release_Checks.Require_Text
-        (Checks, "giflib.gpr", "Giflib.Internal.Encoder_Storage", Quiet => False);
-      Project_Tools.Release_Checks.Require_Text
-        (Checks, "giflib.gpr", "Giflib.Internal.Quantization_Storage", Quiet => False);
-      if Files.File_Contains
-        (Files.Join (Root, "src/giflib-decoding.ads"),
-         "private with Giflib.Internal.Owned")
-        or else Files.File_Contains
-          (Files.Join (Root, "src/giflib-encoding.ads"),
-           "private with Giflib.Internal.Owned")
-        or else Files.File_Contains
-          (Files.Join (Root, "src/giflib-quantization.ads"),
-           "private with Giflib.Internal.Owned")
-      then
-         Project_Tools.Release_Checks.Fail
-           ("giflib_check: public specs bypass subsystem storage packages");
-      end if;
+      Processes.Run
+        ("library interface structure",
+         Root,
+         Sh,
+         Processes.Arguments
+           ([Processes.Argument (Files.Join (Root, "tests/check_library_interface.sh")),
+             Processes.Argument (Root)]),
+         Quiet => True);
       Project_Tools.Release_Checks.Require_Text
         (Checks,
          "tests/giflib_whitebox.gpr",
