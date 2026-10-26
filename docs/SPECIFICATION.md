@@ -263,15 +263,17 @@ A palette is a bounded count and array of at most 256 RGB entries; tables writte
   Successful ensure operations establish both allocation and required capacity
   as part of their contract. Production ownership-container instances are
   restricted to scalar/access elements or element types declared with the
-  compiler-enforced `No_Controlled_Parts` aspect; a repository structure gate
-  rejects unreviewed instances.
+  compiler-enforced `No_Controlled_Parts` aspect; the ownership generics enforce
+  that restriction on every instantiation. Allocation failure is distinct from
+  an exception raised by element initialization or preservation; both remain
+  non-raising and roll back their complete budget reservation.
 - Initialization/reset/finalization must be idempotent where explicitly specified and must clean up all owned allocations on failures and cancellation. No dangling pointers or leakage on decoder/encoder reuse.
 - Cleanup bookkeeping is production state, not a test callback embedded in a
   resource record. Controlled finalizers must not propagate cleanup failures;
   cleanup aggregation is scope-bound so ledger reconciliation cannot be omitted;
   cleanup succeeds only when every owned handle is released and the owning
   allocation ledger has a zero balance, even when the ledger remains healthy;
-  decoder and encoder resource release returns the exact aggregate outcome and
+  decoder and encoder resource release returns the shared exact aggregate outcome and
   preserves its first failure rather than reducing it to a Boolean observer;
   an explicit decoder or encoder lifecycle operation records
   `Internal_Invariant_Failed` when a release invariant fails and preserves any
