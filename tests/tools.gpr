@@ -7,7 +7,7 @@ project Tools extends "tests_common.gpr" is
    for Main use
      ("giflib_generate_samples.adb", "giflib_generate_fixtures.adb",
       "giflib_external_checks.adb", "giflib_benchmark.adb",
-      "giflib_fuzz.adb", "giflib_check.adb");
+      "giflib_fuzz.adb", "giflib_check.adb", "giflib_tooling_tests.adb");
    case Tests_Common.Selected_Build_Profile is
       when "release" =>
          for Object_Dir use "obj/tools-release";

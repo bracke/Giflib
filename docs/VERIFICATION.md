@@ -81,9 +81,11 @@ and orchestration are also runtime-checked Ada. Their work meters and bounded
 arithmetic are proved, while generation/occupancy state, the dictionary probe
 loop, transport callbacks, and writer lifecycle are enforced by contracts and
 adversarial tests rather than by SPARK proof.
-The Ada `Giflib_Tooling` validator also enforces the architectural write boundary around
-decoder and encoder session-transition fields; this is a structural source
-check, not a SPARK proof. The same gate rejects upward dependencies from
+The Ada `Giflib_Tooling` validator also enforces the architectural write
+boundary around decoder and encoder session-transition fields; this is a
+token-based structural source check, not a SPARK proof. It derives every field
+from the actual session records, classifies non-transition resource fields, and
+uses exact callee identities for reviewed calls. The same gate rejects upward dependencies from
 `Giflib.Internal` into public codec facades, unreviewed ownership-container
 instances, misplaced test subunits, and oversized test-case parent bodies.
 Decoder, encoder, and quantizer resource representations are consolidated in
@@ -94,8 +96,9 @@ container dependencies from the three public subsystem specifications.
 The test crate declares only `unit_tests.gpr` and `giflib_tests` as its default
 Alire project and executable inventory. The root test action regenerates its
 development configuration, builds the AUnit runner and repository tools, runs
-`giflib_check tooling`, and then executes `tests/bin/giflib_tests` by its exact
-path. Root and test manifests carry inert
+the independent `giflib_tooling_tests` mutation suite, runs the tooling check,
+and then executes `tests/bin/giflib_tests` by its exact path. Root and test
+manifests carry inert
 configuration-epoch scenarios so a layout change invalidates legacy ignored
 setup hashes before a generated `config/` tree is required.
 Generated Alire settings, configuration sources, and test logs are ignored and

@@ -6,6 +6,7 @@ with Project_Tools.Files;
 with Project_Tools.Processes;
 with Project_Tools.Release_Checks;
 with Giflib_Tooling;
+with Giflib_Tooling.Self_Tests;
 
 procedure Giflib_Check is
    package Files renames Project_Tools.Files;
@@ -23,6 +24,7 @@ procedure Giflib_Check is
 
    procedure Validate_Tooling is
    begin
+      Giflib_Tooling.Self_Tests.Run;
       Giflib_Tooling.Validate (Root);
    end Validate_Tooling;
 
