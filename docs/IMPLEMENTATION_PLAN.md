@@ -148,9 +148,10 @@ tagging remains a post-verification release action.
 The AUnit entry point is `giflib_tests`; the other repository-owned workflow
 programs are `giflib_check`, `giflib_generate_samples`,
 `giflib_generate_fixtures`, `giflib_external_checks`, `giflib_benchmark`, and
-`giflib_fuzz`. `unit_tests.gpr` builds only the AUnit runner for the normal test
-action; `tools.gpr` builds the remaining workflow programs for release and
-tooling gates. Every entry point uses `project_tools`; the release gate validates
+`giflib_fuzz`. `unit_tests.gpr` builds the AUnit runner, while the normal test
+action also builds `tools.gpr` and runs `giflib_check tooling`; the release gate
+invokes the same Ada validation package directly. Every entry point uses
+`project_tools`; the tooling validator checks
 both the workspace pin and both GPR/source inventories.
 Internal tests alone import the dedicated `giflib_whitebox.gpr`; workflow tools
 import the production `giflib.gpr`, use separate artifacts, and remain limited

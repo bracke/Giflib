@@ -81,7 +81,7 @@ and orchestration are also runtime-checked Ada. Their work meters and bounded
 arithmetic are proved, while generation/occupancy state, the dictionary probe
 loop, transport callbacks, and writer lifecycle are enforced by contracts and
 adversarial tests rather than by SPARK proof.
-Repository tooling also enforces the architectural write boundary around
+The Ada `Giflib_Tooling` validator also enforces the architectural write boundary around
 decoder and encoder session-transition fields; this is a structural source
 check, not a SPARK proof. The same gate rejects upward dependencies from
 `Giflib.Internal` into public codec facades, unreviewed ownership-container
@@ -92,9 +92,10 @@ those semantic-closure units in `Library_Interface` and rejects direct owned-
 container dependencies from the three public subsystem specifications.
 
 The test crate declares only `unit_tests.gpr` and `giflib_tests` as its default
-Alire project and executable inventory, so the root test action regenerates its
-development configuration and builds only the AUnit runner before executing
-`tests/bin/giflib_tests` by its exact path. Root and test manifests carry inert
+Alire project and executable inventory. The root test action regenerates its
+development configuration, builds the AUnit runner and repository tools, runs
+`giflib_check tooling`, and then executes `tests/bin/giflib_tests` by its exact
+path. Root and test manifests carry inert
 configuration-epoch scenarios so a layout change invalidates legacy ignored
 setup hashes before a generated `config/` tree is required.
 Generated Alire settings, configuration sources, and test logs are ignored and
@@ -109,14 +110,15 @@ and the tools continuously exercise the supported interface.
 The white-box suite is a `Giflib.Testing` descendant hierarchy, which is allowed
 to test the private `Giflib.Internal` child without making it public. A separate
 consumer built through `public_api.gpr` compiles against the production project,
-and `check_private_api.sh` requires a direct client import of `Giflib.Internal`
-to fail. Both Alire crates pin GNAT 15, and all project variants import compiler
-switches from `giflib_build.gpr`.
+and the Ada tooling validator requires a direct client import of
+`Giflib.Internal` to fail. It also compiles a controlled-element ownership
+probe that must be rejected. Both Alire crates pin GNAT 15, and all project
+variants import compiler switches from `giflib_build.gpr`.
 Separate actions ensure that a compilation or test failure makes `alr test`
 fail, and selecting an exact executable prevents stale binaries for other
 profiles from making execution ambiguous. Repository workflow tools are
-isolated in `tools.gpr` and are built explicitly by the release gate rather than
-every unit-test invocation.
+isolated in `tools.gpr`; both the normal test action and release gate build the
+same tooling validator and execute the same structural checks.
 The stream tests inject exceptions from every callback family (`Read`, `Skip`,
 `Write`, `Offset`, and `Flush`) and require structured, non-raising outcomes.
 Extension behavior is exercised through the per-kind decoder handlers and both

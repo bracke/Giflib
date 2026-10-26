@@ -8,7 +8,7 @@ Baseline verified on 2026-10-24 with Alire-selected GNAT 15.2.1:
   pin).
 - `alr --chdir tests exec -- gprbuild -P tools.gpr -p -j0`: repository tooling
   project succeeds independently.
-- development- and release-profile AUnit: 107/107 tests, zero failures or
+- development- and release-profile AUnit: 137/137 tests, zero failures or
   unexpected errors in each profile.
 - development- and release-profile `giflib_fuzz 10000 3235823838`: success,
   final state `2752455965` in each profile.

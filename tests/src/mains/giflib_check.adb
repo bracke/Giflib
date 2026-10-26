@@ -2,11 +2,10 @@ with Ada.Command_Line;
 with Ada.Directories;
 with Ada.Text_IO;
 
-with Project_Tools.Alire_Manifests;
-with Project_Tools.AUnit_Checks;
 with Project_Tools.Files;
 with Project_Tools.Processes;
 with Project_Tools.Release_Checks;
+with Giflib_Tooling;
 
 procedure Giflib_Check is
    package Files renames Project_Tools.Files;
@@ -21,113 +20,10 @@ procedure Giflib_Check is
       else Ada.Command_Line.Argument (1));
    Alr : constant String := Processes.Locate_Command ("alr");
    Gprbuild : constant String := Processes.Locate_Command ("gprbuild");
-   Sh : constant String := Processes.Locate_Command ("sh");
-   Checks : constant Project_Tools.Release_Checks.Checker :=
-     Project_Tools.Release_Checks.Create (Root);
 
    procedure Validate_Tooling is
    begin
-      Project_Tools.Release_Checks.Require_Text
-        (Checks, "alire.toml", "gnat_native = ""^15""", Quiet => False);
-      Project_Tools.Release_Checks.Require_Text
-        (Checks, "tests/alire.toml", "gnat_native = ""^15""", Quiet => False);
-      Project_Tools.Release_Checks.Require_Text
-        (Checks, "giflib.gpr", "with ""giflib_build.gpr"";", Quiet => False);
-      Processes.Run
-        ("library interface structure",
-         Root,
-         Sh,
-         Processes.Arguments
-           ([Processes.Argument (Files.Join (Root, "tests/check_library_interface.sh")),
-             Processes.Argument (Root)]),
-         Quiet => True);
-      Processes.Run
-        ("session transition ownership",
-         Root,
-         Sh,
-         Processes.Arguments
-           ([Processes.Argument (Files.Join (Root, "tests/check_session_transitions.sh")),
-             Processes.Argument (Root)]),
-         Quiet => True);
-      Project_Tools.Release_Checks.Require_Text
-        (Checks,
-         "tests/giflib_whitebox.gpr",
-         "with ""../giflib_build.gpr"";",
-         Quiet => False);
-      Project_Tools.Release_Checks.Require_Text
-        (Checks,
-         "tests/public_api.gpr",
-         "with ""../giflib.gpr"";",
-         Quiet => False);
-      Project_Tools.Release_Checks.Require_Text
-        (Checks,
-         "tests/unit_tests.gpr",
-         "with ""giflib_whitebox.gpr"";",
-         Quiet => False);
-      Project_Tools.Release_Checks.Require_Text
-        (Checks,
-         "tests/tools.gpr",
-         "with ""../giflib.gpr"";",
-         Quiet => False);
-      Project_Tools.Release_Checks.Require_Text
-        (Checks,
-         "tests/check_private_api.sh",
-         "private child unit",
-         Quiet => False);
-      Project_Tools.Release_Checks.Require_Text
-        (Checks,
-         "tests/alire.toml",
-         "executables = [""giflib_tests""]",
-         Quiet => False);
-      Project_Tools.Release_Checks.Require_Text
-        (Checks,
-         "tests/alire.toml",
-         "project-files = [""unit_tests.gpr""]",
-         Quiet => False);
-      Project_Tools.Alire_Manifests.Require_Workspace_Pin
-        (Files.Join (Root, "tests/alire.toml"),
-         "project_tools",
-         "../../project_tools",
-         Quiet => False);
-      Project_Tools.Release_Checks.Require_GPR_Main_Inventory
-        (Project_File       => Files.Join (Root, "tests/unit_tests.gpr"),
-         Documentation_File => Files.Join (Root, "docs/IMPLEMENTATION_PLAN.md"),
-         Source_Directory   => Files.Join (Root, "tests/src/test_mains"),
-         Quiet              => False);
-      Project_Tools.Release_Checks.Require_GPR_Main_Inventory
-        (Project_File       => Files.Join (Root, "tests/tools.gpr"),
-         Documentation_File => Files.Join (Root, "docs/IMPLEMENTATION_PLAN.md"),
-         Source_Directory   => Files.Join (Root, "tests/src/mains"),
-         Quiet              => False);
-      Project_Tools.AUnit_Checks.Require_Registered_Test_Packages
-        (Test_Dir             => Files.Join (Root, "tests/src"),
-         Spec_Pattern         => "giflib-testing-test_*.ads",
-         Suite_Path           => Files.Join (Root, "tests/src/giflib-testing-suite.adb"),
-         Suite_Add_Prefix     => "new ",
-         Suite_Add_Suffix     => ".Test",
-         Required_Stem_Suffix => "",
-         Quiet                => False);
-      Project_Tools.Release_Checks.Require_Text
-        (Checks, "tests/src/test_mains/giflib_tests.adb", "with Project_Tools.", Quiet => False);
-      Project_Tools.Release_Checks.Require_Text
-        (Checks, "tests/src/mains/giflib_check.adb", "with Project_Tools.", Quiet => False);
-      Project_Tools.Release_Checks.Require_Text
-        (Checks, "tests/src/mains/giflib_generate_samples.adb", "with Project_Tools.",
-         Quiet => False);
-      Project_Tools.Release_Checks.Require_Text
-        (Checks, "tests/src/mains/giflib_generate_fixtures.adb", "with Project_Tools.",
-         Quiet => False);
-      Project_Tools.Release_Checks.Require_Text
-        (Checks, "tests/src/mains/giflib_external_checks.adb", "with Project_Tools.",
-         Quiet => False);
-      Project_Tools.Release_Checks.Require_Text
-        (Checks, "tests/src/mains/giflib_benchmark.adb", "with Project_Tools.", Quiet => False);
-      Project_Tools.Release_Checks.Require_Text
-        (Checks, "tests/src/mains/giflib_fuzz.adb", "with Project_Tools.", Quiet => False);
-   exception
-      when Program_Error =>
-         Project_Tools.Release_Checks.Fail
-           ("giflib_check: project_tools integration validation failed");
+      Giflib_Tooling.Validate (Root);
    end Validate_Tooling;
 
    procedure Run_Tool

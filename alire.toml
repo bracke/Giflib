@@ -30,23 +30,11 @@ command = ["alr", "--chdir", "tests", "build", "--development"]
 
 [[actions]]
 type = "test"
-command = ["alr", "--chdir", "tests", "exec", "--", "gprbuild", "-q", "-p", "-P", "public_api.gpr"]
+command = ["alr", "--chdir", "tests", "exec", "--", "gprbuild", "-q", "-p", "-P", "tools.gpr"]
 
 [[actions]]
 type = "test"
-command = ["alr", "--chdir", "tests", "exec", "--", "./check_private_api.sh"]
-
-[[actions]]
-type = "test"
-command = ["alr", "--chdir", "tests", "exec", "--", "sh", "./check_library_interface.sh", ".."]
-
-[[actions]]
-type = "test"
-command = ["alr", "--chdir", "tests", "exec", "--", "sh", "./check_session_transitions.sh", ".."]
-
-[[actions]]
-type = "test"
-command = ["alr", "--chdir", "tests", "exec", "--", "sh", "./check_structure.sh", ".."]
+command = ["alr", "--chdir", "tests", "exec", "--", "./bin/giflib_check", "tooling"]
 
 [[actions]]
 type = "test"
