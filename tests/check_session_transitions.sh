@@ -21,16 +21,24 @@ session_fields() {
         next
       }
       inside && /^[[:space:]]*end[[:space:]]+record[[:space:]]*;/ { exit }
-      inside && /^[[:space:]]*[[:alpha:]][[:alnum:]_]*([[:space:]]*,[[:space:]]*[[:alpha:]][[:alnum:]_]*)*[[:space:]]*:/ {
-        declaration = $0
-        sub(/:.*/, "", declaration)
-        count = split(declaration, declared, ",")
-        for (item = 1; item <= count; item++) {
-          field = declared[item]
-          gsub(/[[:space:]]/, "", field)
-          if (!(field in omit)) {
-            fields = fields (fields == "" ? "" : "|") field
+      inside {
+        line = $0
+        sub(/--.*/, "", line)
+        declaration = declaration " " line
+        if (index(declaration, ";") != 0) {
+          declaration_names = declaration
+          sub(/:.*/, "", declaration_names)
+          if (declaration_names ~ /^[[:space:]]*[[:alpha:]][[:alnum:]_]*([[:space:]]*,[[:space:]]*[[:alpha:]][[:alnum:]_]*)*[[:space:]]*$/) {
+            count = split(declaration_names, declared, ",")
+            for (item = 1; item <= count; item++) {
+              field = declared[item]
+              gsub(/[[:space:]]/, "", field)
+              if (!(field in omit)) {
+                fields = fields (fields == "" ? "" : "|") field
+              }
+            }
           }
+          declaration = ""
         }
       }
       END { print fields }
@@ -84,19 +92,25 @@ scan_transition_file() {
           arithmetic_rename = "renames[[:space:]]+" \
                               "([[:alnum:]_]+[.])*State_Arithmetic" \
                               "([^[:alnum:]_]|$)"
-          field_call = "^[[:space:]]*[[:alnum:]_.]+[[:space:]]*[(]" \
-                       "[[:space:]]*[[:alnum:]_]+[.](" fields ")" \
-                       "([.][[:alnum:]_]+|" \
-                       "[[:space:]]*[(][^)]*[)])*" \
-                       "[[:space:]]*([,)]|$)"
+          field_argument = "(^|[(,])[[:space:]]*[[:alnum:]_]+[.](" \
+                           fields ")([.][[:alnum:]_]+|" \
+                           "[[:space:]]*[(][^)]*[)])*" \
+                           "[[:space:]]*([,)]|$)"
+          mutating_name = "(^|[.[:space:]])(Mutate|Update|Set|Reset|Clear|" \
+                          "Assign|Replace|Change)" \
+                          "[[:alnum:]_]*[[:space:]]*[(]"
+          whole_object = "[(,][[:space:]]*(Object|Encoder|Decoder)" \
+                         "[[:space:]]*([,)]|$)"
           call_clause = clause
           sub(/^.* (begin|then|else|loop) /, "", call_clause)
-          helper_mutation = call_clause ~ field_call && call_clause !~ /:=/ &&
-                            call_clause !~ \
-                              /^[[:space:]]*Session_Transitions[.]/
+          named_mutation = call_clause ~ mutating_name &&
+                           (call_clause ~ field_argument ||
+                            call_clause ~ whole_object) &&
+                           call_clause !~ /Session_Transitions[.]/ &&
+                           call_clause !~ /Resource_Management[.]/
           if (clause ~ write_pattern || clause ~ rename_pattern ||
               clause ~ call_pattern || clause ~ arithmetic_rename ||
-              helper_mutation) print file ":" clause ";"
+              named_mutation) print file ":" clause ";"
         }
       }
     ' "$source_file"
@@ -107,7 +121,7 @@ check_session() {
     record_type=$2
     owner=$3
     fields=$(session_fields "$root/src/giflib-$prefix.ads" "$record_type" \
-      'Resources|Quantizer_Data|Allocation_Fault')
+      'Resources|Quantizer_Data|Cleanup_State|Allocation_Fault')
     operations=$(state_mutators "$root/src/giflib-$prefix-state_arithmetic.ads")
     if [ -z "$fields" ] || [ -z "$operations" ]; then
         echo "$prefix transition manifest is empty" >&2
@@ -126,7 +140,8 @@ check_session() {
 
 cat >"$probe_dir/probe.ads" <<'EOF'
 type Probe is limited record
-   Current_State, Other_State : Integer;
+   Current_State,
+   Other_State : Integer;
    Resources : Integer;
    Quantizer_Data : Integer;
    New_Field : Integer;
@@ -144,14 +159,17 @@ Object.Other_State.Component := 1;
 State_Arithmetic.Newly_Added (Object.Current_State);
 package SA renames State_Arithmetic;
 Mutate (Object.Current_State);
+Mutate (0, Object.Current_State);
+Value := Mutate (Object.Current_State);
+Mutate (Object);
 EOF
 probe_fields=$(session_fields "$probe_dir/probe.ads" Probe \
-  'Resources|Quantizer_Data|Allocation_Fault')
+  'Resources|Quantizer_Data|Cleanup_State|Allocation_Fault')
 probe_operations=$(state_mutators "$probe_dir/state.ads")
 if [ "$probe_fields" != 'Current_State|Other_State|New_Field' ] ||
    [ "$probe_operations" != 'Existing|Newly_Added' ] ||
    [ "$(scan_transition_file "$probe_dir/probe.adb" "$probe_fields" \
-        "$probe_operations" | wc -l)" -ne 5 ]; then
+        "$probe_operations" | wc -l)" -ne 8 ]; then
     echo "session transition checker self-test failed" >&2
     exit 1
 fi
