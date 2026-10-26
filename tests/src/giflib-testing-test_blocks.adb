@@ -6,7 +6,7 @@ with Giflib.Internal.Block_Arithmetic;
 with Giflib.Internal.Blocks;
 with Giflib.Internal.Budget_Arithmetic;
 with Giflib.Internal.Bytes;
-with Giflib.Internal.Checked_Arithmetic;
+with Giflib.Testing.Checked_Arithmetic;
 with Giflib.Results;
 with Giflib.Streams;
 
@@ -111,7 +111,7 @@ package body Giflib.Testing.Test_Blocks is
 
    procedure Arithmetic_Is_Checked (T : in out AUnit.Test_Cases.Test_Case'Class) is
       pragma Unreferenced (T);
-      use Giflib.Internal.Checked_Arithmetic;
+      use Giflib.Testing.Checked_Arithmetic;
       Item : Count_Result;
       Budget : Giflib.Internal.Budget_Arithmetic.Charge_Result;
    begin

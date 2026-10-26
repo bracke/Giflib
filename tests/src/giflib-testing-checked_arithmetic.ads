@@ -1,7 +1,7 @@
 with Giflib.Errors;
 with Giflib.Results;
 
-package Giflib.Internal.Checked_Arithmetic with SPARK_Mode is
+package Giflib.Testing.Checked_Arithmetic with SPARK_Mode is
    pragma Preelaborate;
    use type Errors.Error_Code;
 
@@ -29,4 +29,4 @@ package Giflib.Internal.Checked_Arithmetic with SPARK_Mode is
            not Results.Succeeded (Multiply'Result.Outcome)
            and then Multiply'Result.Outcome.First_Error.Code = Errors.Integer_Overflow
            and then Multiply'Result.Value = 0);
-end Giflib.Internal.Checked_Arithmetic;
+end Giflib.Testing.Checked_Arithmetic;

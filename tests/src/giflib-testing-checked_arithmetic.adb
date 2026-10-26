@@ -1,4 +1,4 @@
-package body Giflib.Internal.Checked_Arithmetic with SPARK_Mode is
+package body Giflib.Testing.Checked_Arithmetic with SPARK_Mode is
    function Add (Left, Right : Byte_Count) return Count_Result is
    begin
       if Right > Byte_Count'Last - Left then
@@ -14,4 +14,4 @@ package body Giflib.Internal.Checked_Arithmetic with SPARK_Mode is
       end if;
       return (Outcome => Results.Success, Value => Left * Right);
    end Multiply;
-end Giflib.Internal.Checked_Arithmetic;
+end Giflib.Testing.Checked_Arithmetic;
