@@ -76,6 +76,6 @@ package body Giflib.Encoding.Testing is
      (Quantization.Cleanup_Succeeded (Object.Quantizer_Data));
 
    function Last_Cleanup
-     (Object : Encoder) return Quantization.Cleanup_Status
+     (Object : Encoder) return Cleanup.Cleanup_Status
    is (Object.Cleanup_State);
 end Giflib.Encoding.Testing;

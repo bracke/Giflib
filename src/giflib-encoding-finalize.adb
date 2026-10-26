@@ -1,9 +1,9 @@
 separate (Giflib.Encoding)
 procedure Finalize (Object : in out Encoder) is
-   Cleanup_Status : constant Quantization.Cleanup_Status :=
+   Cleanup_Outcome : constant Internal.Cleanup.Cleanup_Outcome :=
      Resource_Management.Release (Object);
 begin
-   if Cleanup_Status /= Quantization.Cleanup_Complete
+   if not Internal.Cleanup.Succeeded (Cleanup_Outcome)
      and then Object.Diagnostic.Code = Errors.No_Error
    then
       Session_Transitions.Record_Diagnostic

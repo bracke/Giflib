@@ -3,6 +3,7 @@ with Giflib.Encoding.Frame_Pipeline;
 with Giflib.Encoding.Resource_Management;
 with Giflib.Encoding.Session_Transitions;
 with Giflib.Internal.Diagnostics;
+with Giflib.Internal.Cleanup;
 with Giflib.Internal.Budget_Arithmetic;
 with Giflib.Internal.Container_Writer;
 with Giflib.Encoding.State_Arithmetic;
@@ -17,7 +18,6 @@ package body Giflib.Encoding is
    use type Errors.Position_State;
    use type Frames.Graphic_Control;
    use type Metadata.Extension_Kind;
-   use type Quantization.Cleanup_Status;
    package Geometry_Arithmetic renames Internal.Geometry_Arithmetic;
    package Session_Arithmetic renames Internal.Session_Arithmetic;
 
@@ -31,8 +31,8 @@ package body Giflib.Encoding is
 
    function Fail (Object : in out Encoder; Item : Errors.Error) return Results.Result is
       Enriched : Errors.Error := Item;
-      Cleanup_Status : Quantization.Cleanup_Status;
-      pragma Unreferenced (Cleanup_Status);
+      Cleanup_Outcome : Internal.Cleanup.Cleanup_Outcome;
+      pragma Unreferenced (Cleanup_Outcome);
    begin
       if Enriched.Context.Destination_Position.State =
         Errors.Position_Not_Checked
@@ -40,7 +40,7 @@ package body Giflib.Encoding is
          Enriched.Context := Internal.Diagnostics.At_Destination
            (Object.Output.all, Enriched.Context);
       end if;
-      Cleanup_Status := Resource_Management.Release (Object);
+      Cleanup_Outcome := Resource_Management.Release (Object);
       Session_Transitions.Fail_Session (Object, Enriched);
       return Results.Failure (Object.Diagnostic);
    end Fail;

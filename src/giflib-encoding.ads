@@ -8,6 +8,7 @@ with Giflib.Palettes;
 with Giflib.Results;
 with Giflib.Streams;
 with Giflib.Quantization;
+private with Giflib.Cleanup;
 private with Giflib.Internal.Encoder_Storage;
 private with Giflib.Internal.Ownership;
 
@@ -178,8 +179,7 @@ private
       Bytes_Written : Byte_Count := 0;
       Compressed_Bytes_Written : Byte_Count := 0;
       Diagnostic : Errors.Error := Errors.Make (Errors.No_Error);
-      Cleanup_State : Quantization.Cleanup_Status :=
-        Quantization.Cleanup_Complete;
+      Cleanup_State : Cleanup.Cleanup_Status := Cleanup.Cleanup_Complete;
       Resources : Encoder_Resources;
       Quantizer_Data : Quantization.Workspace;
       Allocation_Fault : aliased Internal.Ownership.Fault_State;

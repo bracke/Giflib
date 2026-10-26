@@ -5,7 +5,7 @@ with Giflib.Internal.Resource_Diagnostics;
 package body Giflib.Encoding.Resource_Management is
    use type Internal.Ownership.Allocation_Status;
    use type Errors.Error_Code;
-   use type Quantization.Cleanup_Status;
+   use type Internal.Cleanup.Cleanup_Status;
 
    function Release
      (Resources : in out Encoder_Resources)
@@ -13,21 +13,21 @@ package body Giflib.Encoding.Resource_Management is
    is (Internal.Encoder_Storage.Release (Resources));
 
    function Release
-     (Object : in out Encoder) return Quantization.Cleanup_Status
+     (Object : in out Encoder) return Internal.Cleanup.Cleanup_Outcome
    is
       Quantizer_Status : constant Quantization.Cleanup_Status :=
         Quantization.Release (Object.Quantizer_Data);
       Resource_Status : constant Internal.Cleanup.Cleanup_Outcome :=
         Release (Object.Resources);
    begin
-      if Object.Cleanup_State = Quantization.Cleanup_Complete then
-         if Quantizer_Status /= Quantization.Cleanup_Complete then
+      if Object.Cleanup_State = Internal.Cleanup.Cleanup_Complete then
+         if Quantizer_Status /= Internal.Cleanup.Cleanup_Complete then
             Object.Cleanup_State := Quantizer_Status;
          elsif Resource_Status.Status /= Internal.Cleanup.Cleanup_Complete then
             Object.Cleanup_State := Resource_Status.Status;
          end if;
       end if;
-      return Object.Cleanup_State;
+      return (Status => Object.Cleanup_State);
    end Release;
 
    function Combined_Amount
