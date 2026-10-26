@@ -103,6 +103,10 @@ package Giflib.Internal.Owned_Arrays is
      with Pre => Contains (Object, Index) and then not Is_Borrowed (Object);
 
 private
+   type Element_Safety_Check is limited record
+      Value : Element_Type;
+   end record
+     with No_Controlled_Parts => True;
    type Element_Array_Access is access all Element_Array;
    type Handle is limited record
       Pointer : Element_Array_Access := null;

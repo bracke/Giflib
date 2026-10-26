@@ -64,6 +64,10 @@ package Giflib.Internal.Owned_Objects is
    end Result_Operations;
 
 private
+   type Element_Safety_Check is limited record
+      Value : Element_Type;
+   end record
+     with No_Controlled_Parts => True;
    type Element_Access is access all Element_Type;
    type Handle is limited record
       Pointer : Element_Access := null;

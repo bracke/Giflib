@@ -290,10 +290,11 @@ package body Giflib.Testing.Test_Ownership_Failures is
       Outcome := Raising_Objects.Ensure
         (Object, Budget, Fault, Raising_Objects.Allocation_Bytes);
       Assert
-        (Outcome.Status = Giflib.Internal.Ownership.Allocation_Storage_Error
+        (Outcome.Status =
+           Giflib.Internal.Ownership.Allocation_Initialization_Error
          and then not Raising_Objects.Is_Allocated (Object)
          and then Giflib.Internal.Ownership.Used (Budget) = 0,
-         "raising default initialization escaped or retained its reservation");
+         "raising default initialization was misclassified or retained its reservation");
    end Raising_Initialization_Is_Structured;
 
    procedure Owned_Resources_Reject_Foreign_Ledgers

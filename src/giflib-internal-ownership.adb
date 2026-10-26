@@ -97,15 +97,18 @@ package body Giflib.Internal.Ownership is
             Allocate;
             Commit (Ticket);
          exception
+            when Storage_Error =>
+               Cancel (Ticket, Outcome, Allocation_Storage_Error);
             when others =>
-               Cancel (Ticket, Outcome);
+               Cancel (Ticket, Outcome, Allocation_Initialization_Error);
          end;
       end if;
    end Reserve_And_Allocate;
 
    procedure Cancel
      (Ticket : in out Reservation;
-      Outcome : in out Allocation_Outcome)
+      Outcome : in out Allocation_Outcome;
+      Failure : Allocation_Status)
    is
    begin
       if Ticket.Active then
@@ -116,7 +119,7 @@ package body Giflib.Internal.Ownership is
          end if;
          Ticket.Active := False;
       end if;
-      Outcome.Status := Allocation_Storage_Error;
+      Outcome.Status := Failure;
    end Cancel;
 
    overriding procedure Finalize (Ticket : in out Reservation) is

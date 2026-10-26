@@ -112,7 +112,8 @@ package body Giflib.Internal.Owned_Arrays is
                when others =>
                   Ownership.Rollback (Budget, New_Charge);
                   Free (New_Pointer);
-                  Outcome.Status := Ownership.Allocation_Storage_Error;
+                  Outcome.Status :=
+                    Ownership.Allocation_Initialization_Error;
                   return Outcome;
             end;
          end if;

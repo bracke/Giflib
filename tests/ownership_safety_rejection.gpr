@@ -1,0 +1,7 @@
+with "giflib_whitebox.gpr";
+
+project Ownership_Safety_Rejection extends "tests_common.gpr" is
+   for Source_Dirs use ("ownership_safety");
+   for Object_Dir use "obj/ownership-safety-rejection";
+   for Main use ("giflib-ownership_safety_must_fail.adb");
+end Ownership_Safety_Rejection;

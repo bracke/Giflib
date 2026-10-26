@@ -1,0 +1,1 @@
+private procedure Giflib.Ownership_Safety_Must_Fail;

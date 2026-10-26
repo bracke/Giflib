@@ -14,6 +14,7 @@ package Giflib.Internal.Ownership is
      (Allocation_Ready,
       Allocation_Limit,
       Allocation_Storage_Error,
+      Allocation_Initialization_Error,
       Allocation_Size_Error,
       Allocation_Borrow_Error,
       Allocation_Owner_Error);
@@ -49,10 +50,15 @@ package Giflib.Internal.Ownership is
 
    procedure Cancel
      (Ticket : in out Reservation;
-      Outcome : in out Allocation_Outcome)
+      Outcome : in out Allocation_Outcome;
+      Failure : Allocation_Status)
      with Pre =>
-       Outcome.Status = Allocation_Ready,
-       Post => Outcome.Status in Allocation_Storage_Error | Allocation_Owner_Error;
+       Outcome.Status = Allocation_Ready
+       and then Failure in
+         Allocation_Storage_Error | Allocation_Initialization_Error,
+       Post => Outcome.Status in
+         Allocation_Storage_Error | Allocation_Initialization_Error |
+         Allocation_Owner_Error;
 
    function Storage_Bytes (Size_In_Bits : Natural) return Byte_Count;
    function Used (Budget : Byte_Budget) return Byte_Count;
