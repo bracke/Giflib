@@ -382,10 +382,13 @@ completion, failure, reset, and cancellation). Orchestrators may ask
 the proved state-arithmetic packages whether an operation is legal, but must not
 invoke their mutating operations directly or duplicate a multi-field commit.
 The repository structure check derives the transition-owned field manifest from
-the decoder and encoder records, rejects assignments and renames of those fields
-outside the transition units, and rejects direct use of mutating
-state-arithmetic operations there. This includes indexed warning storage and
-prevents a newly added transition-owned field from silently escaping the check.
+the decoder and encoder records and derives session-object names from their Ada
+declarations.  It rejects assignments and renames of those fields outside the
+transition units, including through grouped expressions, and rejects direct use
+of mutating state-arithmetic operations there.  Reviewed helper-call identities
+may not be shadowed by nested subprograms or packages.  This includes indexed
+warning storage and prevents a newly added transition-owned field or differently
+named session formal from silently escaping the check.
 Public lifecycle operations state
 success-conditioned postconditions without turning invalid calls into raising
 preconditions.

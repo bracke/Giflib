@@ -318,6 +318,111 @@ package body Giflib_Tooling.Source_Model is
       return Result;
    end Record_Fields;
 
+   function Session_Identifiers
+     (Text : String; Type_Name : String) return Name_Vectors.Vector
+   is
+      Tokens : constant Token_Vectors.Vector := Lex (Text);
+      Result : Name_Vectors.Vector;
+      Target : constant String := Lower (Type_Name);
+   begin
+      if Tokens.Length < 3 then
+         return Result;
+      end if;
+      for Colon in Tokens.First_Index + 1 .. Tokens.Last_Index - 1 loop
+         if Image (Tokens (Colon)) = ":"
+           and then Tokens (Colon - 1).Kind = Identifier
+         then
+            for Cursor in Colon + 1 .. Tokens.Last_Index loop
+               exit when Image (Tokens (Cursor)) in ";" | ")" | ":=";
+               if Tokens (Cursor).Kind = Identifier
+                 and then Image (Tokens (Cursor)) = Target
+               then
+                  declare
+                     Candidate : Positive := Colon - 1;
+                  begin
+                     loop
+                        if not Contains
+                          (Result, Image (Tokens (Candidate)))
+                        then
+                           Result.Append (Tokens (Candidate).Text);
+                        end if;
+                        exit when Candidate < Tokens.First_Index + 2
+                          or else Image (Tokens (Candidate - 1)) /= ",";
+                        Candidate := Candidate - 2;
+                        exit when Tokens (Candidate).Kind /= Identifier;
+                     end loop;
+                  end;
+                  exit;
+               end if;
+            end loop;
+         end if;
+      end loop;
+      return Result;
+   end Session_Identifiers;
+
+   function Nested_Program_Units (Text : String) return Name_Vectors.Vector is
+      Tokens : constant Token_Vectors.Vector := Lex (Text);
+      Active_Subprograms : Name_Vectors.Vector;
+      Result : Name_Vectors.Vector;
+
+      procedure Include (Name : Unbounded_String) is
+      begin
+         Result.Append (Name);
+      end Include;
+   begin
+      if Tokens.Length < 3 then
+         return Result;
+      end if;
+      for Index in Tokens.First_Index .. Tokens.Last_Index - 2 loop
+         if Image (Tokens (Index)) in "procedure" | "function"
+           and then Tokens (Index + 1).Kind = Identifier
+         then
+            declare
+               Parentheses : Natural := 0;
+               Is_Body : Boolean := False;
+            begin
+               for Cursor in Index + 2 .. Tokens.Last_Index loop
+                  if Image (Tokens (Cursor)) = "(" then
+                     Parentheses := Parentheses + 1;
+                  elsif Image (Tokens (Cursor)) = ")" and then Parentheses > 0 then
+                     Parentheses := Parentheses - 1;
+                  elsif Parentheses = 0 and then Image (Tokens (Cursor)) = ";" then
+                     exit;
+                  elsif Parentheses = 0 and then Image (Tokens (Cursor)) = "is" then
+                     Is_Body :=
+                       Cursor = Tokens.Last_Index
+                       or else Image (Tokens (Cursor + 1)) not in
+                         "separate" | "new" | "abstract" | "(";
+                     exit;
+                  end if;
+               end loop;
+               if not Active_Subprograms.Is_Empty then
+                  Include (Tokens (Index + 1).Text);
+               end if;
+               if Is_Body then
+                  Active_Subprograms.Append (Tokens (Index + 1).Text);
+               end if;
+            end;
+         elsif not Active_Subprograms.Is_Empty
+           and then Image (Tokens (Index)) = "package"
+           and then Tokens (Index + 1).Kind = Identifier
+         then
+            Include (Tokens (Index + 1).Text);
+         elsif not Active_Subprograms.Is_Empty
+           and then Image (Tokens (Index)) = "end"
+           and then Image (Tokens (Index + 1)) =
+             To_String (Active_Subprograms.Last_Element)
+           and then Image (Tokens (Index + 2)) = ";"
+         then
+            Active_Subprograms.Delete_Last;
+         end if;
+      end loop;
+      return Result;
+   end Nested_Program_Units;
+
+   function Has_Nested_Program_Unit (Text : String) return Boolean is
+     (not Nested_Program_Units (Text).Is_Empty);
+
    procedure Scan_Statements
      (Text : String;
       Process : not null access procedure (Statement : Token_Vectors.Vector))
@@ -399,9 +504,17 @@ package body Giflib_Tooling.Source_Model is
             Depth := Depth + 1;
          elsif Image (Statement (Index)) = "(" then
             if Depth = 0 then
-               return Join_Callee (Statement, Index);
+               declare
+                  Callee : constant String := Join_Callee (Statement, Index);
+               begin
+                  if Callee /= "" then
+                     return Callee;
+                  end if;
+               end;
             end if;
-            Depth := Depth - 1;
+            if Depth > 0 then
+               Depth := Depth - 1;
+            end if;
          end if;
       end loop;
       return "";

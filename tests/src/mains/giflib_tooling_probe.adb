@@ -10,5 +10,5 @@ begin
       Project_Tools.Release_Checks.Fail
         ("usage: giflib_tooling_probe ROOT");
    end if;
-   Giflib_Tooling.Validate_Structure (Ada.Command_Line.Argument (1));
+   Giflib_Tooling.Validate (Ada.Command_Line.Argument (1));
 end Giflib_Tooling_Probe;

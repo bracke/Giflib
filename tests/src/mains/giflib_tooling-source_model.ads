@@ -27,6 +27,10 @@ package Giflib_Tooling.Source_Model is
      (Text : String; Key : String; Value : String) return Boolean;
    function Record_Fields
      (Text : String; Type_Name : String) return Name_Vectors.Vector;
+   function Session_Identifiers
+     (Text : String; Type_Name : String) return Name_Vectors.Vector;
+   function Nested_Program_Units (Text : String) return Name_Vectors.Vector;
+   function Has_Nested_Program_Unit (Text : String) return Boolean;
 
    procedure Scan_Statements
      (Text : String;

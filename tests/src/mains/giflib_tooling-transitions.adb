@@ -8,7 +8,20 @@ package body Giflib_Tooling.Transitions is
    use Ada.Strings.Unbounded;
    package Files renames Project_Tools.Files;
    package Source renames Giflib_Tooling.Source_Model;
+   use type Source.Token_Kind;
    Session_Prefix : constant String := "session_transitions.";
+
+   Reviewed_Aliases : constant array (Positive range <>) of Unbounded_String :=
+     [To_Unbounded_String
+        ("giflib-encoding.adb:geometry_arithmetic:internal.geometry_arithmetic"),
+      To_Unbounded_String
+        ("giflib-encoding.adb:session_arithmetic:internal.session_arithmetic"),
+      To_Unbounded_String
+        ("giflib-encoding-frame_pipeline.adb:geometry_arithmetic:" &
+         "internal.geometry_arithmetic"),
+      To_Unbounded_String
+        ("giflib-decoding-extensions.adb:arithmetic:" &
+         "internal.metadata_arithmetic")];
 
    Allowed_Calls : constant array (Positive range <>) of Unbounded_String :=
      [To_Unbounded_String ("resource_management.release"),
@@ -44,6 +57,9 @@ package body Giflib_Tooling.Transitions is
       To_Unbounded_String ("geometry_arithmetic.analyze_rectangle"),
       To_Unbounded_String ("internal.budget_arithmetic.charge"),
       To_Unbounded_String ("errors.frame_at"),
+      To_Unbounded_String ("errors.make"),
+      To_Unbounded_String ("internal.diagnostics.at_destination"),
+      To_Unbounded_String ("internal.diagnostics.at_source"),
       To_Unbounded_String ("internal.geometry_arithmetic.area"),
       To_Unbounded_String
         ("internal.decoder_storage.image_operations.overlay_frame_scratch"),
@@ -217,6 +233,34 @@ package body Giflib_Tooling.Transitions is
       Permit ("giflib-encoding-write_header.adb", "write_palette"),
       Permit ("giflib-encoding-write_header.adb", "write_raw")];
 
+   function Is_Trusted_Qualifier (Name : String) return Boolean is
+      Prefix : constant String := Name & ".";
+   begin
+      if Name = "session_transitions" then
+         return True;
+      end if;
+      for Item of Allowed_Calls loop
+         if Project_Tools.Text.Starts_With (To_String (Item), Prefix) then
+            return True;
+         end if;
+      end loop;
+      return False;
+   end Is_Trusted_Qualifier;
+
+   function Is_Trusted_Local_Name
+     (Name : String; Unit_Name : String) return Boolean
+   is
+   begin
+      for Item of Local_Allowed_Calls loop
+         if Unit_Name = To_String (Item.Unit_Name)
+           and then Name = To_String (Item.Callee)
+         then
+            return True;
+         end if;
+      end loop;
+      return False;
+   end Is_Trusted_Local_Name;
+
    function Allowed (Callee : String; Unit_Name : String) return Boolean is
    begin
       if Callee'Length > Session_Prefix'Length
@@ -244,6 +288,7 @@ package body Giflib_Tooling.Transitions is
    function Violation
      (Statement : Source.Token_Vectors.Vector;
       Protected_Fields : Source.Name_Vectors.Vector;
+      Session_Names : Source.Name_Vectors.Vector;
       Unit_Name : String := "") return Boolean
    is
       Assignment : Natural := 0;
@@ -267,7 +312,9 @@ package body Giflib_Tooling.Transitions is
          end loop;
       end if;
       for Index in Statement.First_Index .. Statement.Last_Index loop
-         if Source.Image (Statement (Index)) = "object" then
+         if Source.Contains
+           (Session_Names, Source.Image (Statement (Index)))
+         then
             if Index > Statement.First_Index
               and then Source.Image (Statement (Index - 1)) = "renames"
             then
@@ -276,6 +323,13 @@ package body Giflib_Tooling.Transitions is
               and then Source.Image (Statement (Index + 1)) = ":"
             then
                null;
+            elsif Assignment > 0
+              and then Index >= Left_Start
+              and then Index < Assignment
+              and then Index < Statement.Last_Index
+              and then Source.Image (Statement (Index + 1)) = ":="
+            then
+               return True;
             elsif Index + 2 <= Statement.Last_Index
               and then Source.Image (Statement (Index + 1)) = "."
               and then Source.Contains
@@ -313,6 +367,84 @@ package body Giflib_Tooling.Transitions is
       end loop;
       return False;
    end Violation;
+
+   procedure Check_Declaration_Safety (Text : String; Unit_Name : String) is
+      Nested_Units : constant Source.Name_Vectors.Vector :=
+        Source.Nested_Program_Units (Text);
+      procedure Inspect (Statement : Source.Token_Vectors.Vector) is
+      begin
+         if Natural (Statement.Length) < 4 then
+            return;
+         end if;
+         for Index in Statement.First_Index .. Statement.Last_Index - 2 loop
+            if Source.Image (Statement (Index)) = "package"
+              and then Source.Image (Statement (Index + 1)) /= "body"
+              and then Statement (Index + 1).Kind = Source.Identifier
+              and then Is_Trusted_Qualifier
+                (Source.Image (Statement (Index + 1)))
+            then
+               for Marker in Index + 2 .. Statement.Last_Index loop
+                  if Source.Image (Statement (Marker)) = "renames"
+                    and then Marker < Statement.Last_Index
+                  then
+                     declare
+                        Target : Unbounded_String;
+                     begin
+                        for Cursor in Marker + 1 .. Statement.Last_Index loop
+                           if Statement (Cursor).Kind = Source.Identifier
+                             or else Source.Image (Statement (Cursor)) = "."
+                           then
+                              Append (Target, Source.Image (Statement (Cursor)));
+                           else
+                              exit;
+                           end if;
+                        end loop;
+                        declare
+                           Identity : constant String :=
+                             Unit_Name & ":" &
+                             Source.Image (Statement (Index + 1)) & ":" &
+                             To_String (Target);
+                           Reviewed : Boolean := False;
+                        begin
+                           for Item of Reviewed_Aliases loop
+                              if Identity = To_String (Item) then
+                                 Reviewed := True;
+                                 exit;
+                              end if;
+                           end loop;
+                           if not Reviewed then
+                              Fail
+                                ("package declaration can shadow a reviewed " &
+                                 "transition helper: " & Unit_Name);
+                           end if;
+                        end;
+                     end;
+                     return;
+                  elsif Source.Image (Statement (Marker)) = "is" then
+                     Fail
+                       ("package declaration can shadow a reviewed transition " &
+                        "helper: " & Unit_Name);
+                  end if;
+               end loop;
+            end if;
+         end loop;
+      end Inspect;
+   begin
+      for Nested of Nested_Units loop
+         declare
+            Name : constant String := To_String (Nested);
+         begin
+            if Is_Trusted_Qualifier (Name)
+              or else Is_Trusted_Local_Name (Name, Unit_Name)
+            then
+               Fail
+                 ("nested declaration can shadow a reviewed transition " &
+                  "helper: " & Unit_Name);
+            end if;
+         end;
+      end loop;
+      Source.Scan_Statements (Text, Inspect'Access);
+   end Check_Declaration_Safety;
 
    function Classified_Fields
      (Root : String;
@@ -352,6 +484,7 @@ package body Giflib_Tooling.Transitions is
      (Root : String;
       Prefix : String;
       Owner : String;
+      Type_Name : String;
       Fields : Source.Name_Vectors.Vector)
    is
    begin
@@ -359,9 +492,12 @@ package body Giflib_Tooling.Transitions is
          declare
             Name : constant String :=
               Source.Lower (Ada.Directories.Simple_Name (To_String (Path)));
+            Text : constant String := Files.Read_Raw_File (To_String (Path));
+            Session_Names : constant Source.Name_Vectors.Vector :=
+              Source.Session_Identifiers (Text, Type_Name);
             procedure Inspect (Statement : Source.Token_Vectors.Vector) is
             begin
-               if Violation (Statement, Fields, Name) then
+               if Violation (Statement, Fields, Session_Names, Name) then
                   Fail
                     ("session state mutation escaped transition owner: " & Name &
                      ": " & Source.Image (Statement));
@@ -372,8 +508,8 @@ package body Giflib_Tooling.Transitions is
               and then Project_Tools.Text.Ends_With (Name, ".adb")
               and then Name /= Owner
             then
-               Source.Scan_Statements
-                 (Files.Read_Raw_File (To_String (Path)), Inspect'Access);
+               Check_Declaration_Safety (Text, Name);
+               Source.Scan_Statements (Text, Inspect'Access);
             end if;
          end;
       end loop;
@@ -391,10 +527,12 @@ package body Giflib_Tooling.Transitions is
       Encoder_Exempt.Append (To_Unbounded_String ("allocation_fault"));
       Scan_Family
         (Root, "giflib-decoding", "giflib-decoding-session_transitions.adb",
+         "decoder",
          Classified_Fields
            (Root, "src/giflib-decoding.ads", "decoder", Decoder_Exempt));
       Scan_Family
         (Root, "giflib-encoding", "giflib-encoding-session_transitions.adb",
+         "encoder",
          Classified_Fields
            (Root, "src/giflib-encoding.ads", "encoder", Encoder_Exempt));
    end Validate;
