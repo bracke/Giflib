@@ -1,0 +1,8 @@
+with Giflib_Tooling.Source_Model;
+
+package Giflib_Tooling.Transitions is
+   function Violation
+     (Statement : Source_Model.Token_Vectors.Vector;
+      Protected_Fields : Source_Model.Name_Vectors.Vector) return Boolean;
+   procedure Validate (Root : String);
+end Giflib_Tooling.Transitions;
