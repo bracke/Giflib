@@ -85,7 +85,8 @@ The Ada `Giflib_Tooling` validator also enforces the architectural write
 boundary around decoder and encoder session-transition fields; this is a
 token-based structural source check, not a SPARK proof. It derives every field
 from the actual session records, classifies non-transition resource fields, and
-uses exact callee identities for reviewed calls. The same gate rejects upward dependencies from
+uses file-scoped callee identities for reviewed calls. The same gate rejects
+upward dependencies from
 `Giflib.Internal` into public codec facades, unreviewed ownership-container
 instances, misplaced test subunits, and oversized test-case parent bodies.
 Decoder, encoder, and quantizer resource representations are consolidated in
@@ -96,8 +97,9 @@ container dependencies from the three public subsystem specifications.
 The test crate declares only `unit_tests.gpr` and `giflib_tests` as its default
 Alire project and executable inventory. The root test action regenerates its
 development configuration, builds the AUnit runner and repository tools, runs
-the independent `giflib_tooling_tests` mutation suite, runs the tooling check,
-and then executes `tests/bin/giflib_tests` by its exact path. Root and test
+the tooling check, which first launches the independent `giflib_tooling_tests`
+suite against mutated repository copies through the structural probe, and then
+executes `tests/bin/giflib_tests` by its exact path. Root and test
 manifests carry inert
 configuration-epoch scenarios so a layout change invalidates legacy ignored
 setup hashes before a generated `config/` tree is required.

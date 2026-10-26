@@ -6,7 +6,6 @@ with Project_Tools.Files;
 with Project_Tools.Processes;
 with Project_Tools.Release_Checks;
 with Giflib_Tooling;
-with Giflib_Tooling.Self_Tests;
 
 procedure Giflib_Check is
    package Files renames Project_Tools.Files;
@@ -22,9 +21,17 @@ procedure Giflib_Check is
    Alr : constant String := Processes.Locate_Command ("alr");
    Gprbuild : constant String := Processes.Locate_Command ("gprbuild");
 
+   procedure Run_Tool
+     (Name  : String;
+      Args  : Processes.Argument_Vectors.Vector;
+      Label : String;
+      Bin_Directory : String := Tests_Bin);
+
    procedure Validate_Tooling is
    begin
-      Giflib_Tooling.Self_Tests.Run;
+      Run_Tool
+        ("giflib_tooling_tests", Processes.No_Arguments,
+         "tooling mutation tests");
       Giflib_Tooling.Validate (Root);
    end Validate_Tooling;
 
