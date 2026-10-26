@@ -67,10 +67,11 @@ alr exec -- gnatprove -P giflib.gpr \
 ```
 
 `Giflib.Internal.Ownership`, `Owned_Arrays`, `Owned_Buffers`, `Owned_Vectors`,
-and `Owned_Objects` are runtime-checked Ada. `Checked_Arithmetic` and the
-callback-driven `Owned_Element_Vectors` helper are test support compiled only
-into the white-box test library; the former remains in SPARK mode but is not
-part of the production release proof command above. The ownership packages
+and `Owned_Objects` are runtime-checked Ada. `Giflib.Testing.Checked_Arithmetic`
+and the callback-driven `Giflib.Internal.Testing.Owned_Element_Vectors` helper are test
+support compiled by the unit-test project against the white-box library; the
+former remains in SPARK mode but is not part of the production release proof
+command above. The ownership packages
 provide scoped reservation
 rollback, ledger-identity-checked ownership, and callback-scoped storage
 access, but are outside the SPARK
@@ -82,7 +83,9 @@ loop, transport callbacks, and writer lifecycle are enforced by contracts and
 adversarial tests rather than by SPARK proof.
 Repository tooling also enforces the architectural write boundary around
 decoder and encoder session-transition fields; this is a structural source
-check, not a SPARK proof.
+check, not a SPARK proof. The same gate rejects upward dependencies from
+`Giflib.Internal` into public codec facades, unreviewed ownership-container
+instances, misplaced test subunits, and oversized test-case parent bodies.
 Decoder, encoder, and quantizer resource representations are consolidated in
 their respective `Internal.*_Storage` packages. The tooling check requires
 those semantic-closure units in `Library_Interface` and rejects direct owned-

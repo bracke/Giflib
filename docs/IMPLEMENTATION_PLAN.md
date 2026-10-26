@@ -160,7 +160,8 @@ private-child rules remain intact. A production-project consumer compile and an
 expected-failure private-child import guard that boundary. The root and tests
 crates both pin GNAT 15, and all GPR variants share compiler-switch policy from
 `giflib_build.gpr`. Allocation and ownership tests are separate domain-specific
-AUnit cases. Large individual procedures live under `tests/src/subunits`,
+AUnit cases. Large individual procedures live under `tests/src/subunits`;
+test-case parent bodies remain below the enforced 500-line structural cap,
 keeping package inventory checks focused without sharing unrelated fixtures or
 dependencies.
 

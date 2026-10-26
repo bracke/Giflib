@@ -102,7 +102,7 @@ Giflib.Internal.Block_Arithmetic -- proved sub-block transfer state
 Giflib.Internal.Budget_Arithmetic -- proved bounded resource charging
 Giflib.Internal.Work_Budgets     -- proved stateful work meters
 Giflib.Internal.Resource_Diagnostics -- allocation/work failure presentation
-Giflib.Internal.Checked_Arithmetic -- test-only proved count arithmetic
+Giflib.Testing.Checked_Arithmetic -- test-only proved count arithmetic
 Giflib.Internal.Descriptor_Arithmetic -- proved screen/image packed fields
 Giflib.Internal.Encoding_Arithmetic -- proved palette table/code sizing
 Giflib.Internal.Extension_Arithmetic -- proved GIF89a control/U16 fields
@@ -140,6 +140,7 @@ Giflib.Decoding.Frame_Pipeline -- private shared decode/skip validation and fram
 Giflib.Encoding.State_Arithmetic -- private proved encoder lifecycle guards
 Giflib.Encoding.Session_Transitions -- private complete encoder state commits
 Giflib.Encoding.Frame_Pipeline -- private shared indexed-frame orchestration
+Giflib.Encoding/Decoding lifecycle operations -- separate facade subunits
 Giflib.Internal.Session_Arithmetic -- proved shared count/warning capacity
 Giflib.Internal.Metadata_Arithmetic -- proved retention/count accounting
 Giflib.Internal.Metadata_Store -- opaque retained-extension ownership and indexed access
@@ -153,11 +154,12 @@ Giflib.Internal.Ownership     -- shared allocation, owner and cleanup policy
 Giflib.Internal.Resource_Cleanup -- non-raising aggregate cleanup guard
 Giflib.Internal.Decoder_Storage -- decoder workspace ownership
 Giflib.Internal.Encoder_Storage -- encoder workspace ownership
+Giflib.Internal.Encoder_Storage.Buffer_Operations -- scoped scratch updates
 Giflib.Internal.Quantization_Storage -- quantizer workspace ownership
 Giflib.Internal.Ownership_Arithmetic -- proved injection state transitions
 Giflib.Internal.Owned_Arrays  -- budget-bound reusable array ownership
 Giflib.Internal.Owned_Vectors -- budget-bound logical-length collections
-Giflib.Internal.Owned_Element_Vectors -- test-only element-object ownership
+Giflib.Internal.Testing.Owned_Element_Vectors -- test-only element ownership
 Giflib.Internal.Owned_Buffers -- budget-bound reusable byte-buffer ownership
 Giflib.Internal.Owned_Buffers.Result_Operations -- result-preserving scoped buffer access
 Giflib.Internal.Owned_Objects -- budget-bound fixed-object ownership
@@ -259,13 +261,18 @@ A palette is a bounded count and array of at most 256 RGB entries; tables writte
   through mutable outer state. Operations
   involving two buffers acquire both borrows before exposing either payload.
   Successful ensure operations establish both allocation and required capacity
-  as part of their contract.
+  as part of their contract. Production ownership-container instances are
+  restricted to scalar/access elements or element types declared with the
+  compiler-enforced `No_Controlled_Parts` aspect; a repository structure gate
+  rejects unreviewed instances.
 - Initialization/reset/finalization must be idempotent where explicitly specified and must clean up all owned allocations on failures and cancellation. No dangling pointers or leakage on decoder/encoder reuse.
 - Cleanup bookkeeping is production state, not a test callback embedded in a
   resource record. Controlled finalizers must not propagate cleanup failures;
   cleanup aggregation is scope-bound so ledger reconciliation cannot be omitted;
   cleanup succeeds only when every owned handle is released and the owning
   allocation ledger has a zero balance, even when the ledger remains healthy;
+  decoder and encoder resource release returns the exact aggregate outcome and
+  preserves its first failure rather than reducing it to a Boolean observer;
   an explicit decoder or encoder lifecycle operation records
   `Internal_Invariant_Failed` when a release invariant fails and preserves any
   earlier fatal diagnostic.
