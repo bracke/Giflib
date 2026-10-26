@@ -46,4 +46,8 @@ command = ["alr", "--chdir", "tests", "exec", "--", "sh", "./check_session_trans
 
 [[actions]]
 type = "test"
+command = ["alr", "--chdir", "tests", "exec", "--", "sh", "./check_structure.sh", ".."]
+
+[[actions]]
+type = "test"
 command = ["alr", "--chdir", "tests", "exec", "--", "./bin/giflib_tests"]
