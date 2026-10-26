@@ -29,50 +29,6 @@ package body Giflib_Tooling.Transitions is
       To_Unbounded_String ("extensions.read"),
       To_Unbounded_String ("extensions.add"),
       To_Unbounded_String ("extensions.add_exact"),
-      To_Unbounded_String ("add_warning"),
-      To_Unbounded_String ("fail"),
-      To_Unbounded_String ("deliver_event"),
-      To_Unbounded_String ("prepare_frame"),
-      To_Unbounded_String ("validate_frame_request"),
-      To_Unbounded_String ("validate_frame_output"),
-      To_Unbounded_String ("reject_request"),
-      To_Unbounded_String ("reject_frame_request"),
-      To_Unbounded_String ("fail_frame"),
-      To_Unbounded_String ("write_header"),
-      To_Unbounded_String ("write_raw"),
-      To_Unbounded_String ("write_palette"),
-      To_Unbounded_String ("write_chunk"),
-      To_Unbounded_String ("write_prefix"),
-      To_Unbounded_String ("invalid_transition"),
-      To_Unbounded_String ("output_variant_error"),
-      To_Unbounded_String ("input_position"),
-      To_Unbounded_String ("complete_frame"),
-      To_Unbounded_String ("check_trailing_data"),
-      To_Unbounded_String ("has_extension_capacity"),
-      To_Unbounded_String ("start_retention"),
-      To_Unbounded_String ("retain_chunk"),
-      To_Unbounded_String ("read_fixed_block"),
-      To_Unbounded_String ("read_sub_blocks"),
-      To_Unbounded_String ("truncated"),
-      To_Unbounded_String ("check_fixed_payload"),
-      To_Unbounded_String ("read_graphic_control"),
-      To_Unbounded_String ("read_application"),
-      To_Unbounded_String ("read_plain_text"),
-      To_Unbounded_String ("read_variable_extension"),
-      To_Unbounded_String ("read_extension"),
-      To_Unbounded_String ("fill_background"),
-      To_Unbounded_String ("allocation_result"),
-      To_Unbounded_String ("quantizer_bytes"),
-      To_Unbounded_String ("outer_maximum"),
-      To_Unbounded_String ("prepare"),
-      To_Unbounded_String ("complete"),
-      To_Unbounded_String ("validate"),
-      To_Unbounded_String ("complete_extension"),
-      To_Unbounded_String ("initialize"),
-      To_Unbounded_String ("add_extension"),
-      To_Unbounded_String ("add_extension_exact"),
-      To_Unbounded_String ("add_decoded_extension"),
-      To_Unbounded_String ("add_decoded_extension_exact"),
       To_Unbounded_String ("state_arithmetic.can_initialize"),
       To_Unbounded_String ("state_arithmetic.can_cancel"),
       To_Unbounded_String ("state_arithmetic.can_configure"),
@@ -88,7 +44,6 @@ package body Giflib_Tooling.Transitions is
       To_Unbounded_String ("geometry_arithmetic.analyze_rectangle"),
       To_Unbounded_String ("internal.budget_arithmetic.charge"),
       To_Unbounded_String ("errors.frame_at"),
-      To_Unbounded_String ("byte_count"),
       To_Unbounded_String ("internal.geometry_arithmetic.area"),
       To_Unbounded_String
         ("internal.decoder_storage.image_operations.overlay_frame_scratch"),
@@ -125,13 +80,144 @@ package body Giflib_Tooling.Transitions is
       To_Unbounded_String ("internal.decoder_storage.ensure_snapshot"),
       To_Unbounded_String ("palettes.contains"),
       To_Unbounded_String ("palettes.same_entries"),
-      To_Unbounded_String ("colors"),
       To_Unbounded_String ("object.header_data.global_palette.colors"),
       To_Unbounded_String ("animations.raw_count"),
-      To_Unbounded_String ("results.failure"),
-      To_Unbounded_String ("pos")];
+      To_Unbounded_String ("results.failure")];
 
-   function Allowed (Callee : String) return Boolean is
+   type Local_Allowance is record
+      Unit_Name : Unbounded_String;
+      Callee : Unbounded_String;
+   end record;
+
+   function Permit (Unit_Name : String; Callee : String) return Local_Allowance is
+     ((To_Unbounded_String (Unit_Name), To_Unbounded_String (Callee)));
+
+   Local_Allowed_Calls : constant array (Positive range <>) of Local_Allowance :=
+     [Permit ("giflib-decoding.adb", "add_warning"),
+      Permit ("giflib-decoding.adb", "fail"),
+      Permit ("giflib-decoding.adb", "input_position"),
+      Permit ("giflib-decoding.adb", "invalid_transition"),
+      Permit ("giflib-decoding.adb", "check_trailing_data"),
+      Permit ("giflib-decoding.adb", "output_variant_error"),
+      Permit ("giflib-decoding.adb", "pos"),
+      Permit ("giflib-decoding-cancel.adb", "invalid_transition"),
+      Permit ("giflib-decoding-decode_composited_frame.adb", "complete_frame"),
+      Permit ("giflib-decoding-decode_composited_frame.adb", "add_warning"),
+      Permit ("giflib-decoding-decode_composited_frame.adb", "byte_count"),
+      Permit ("giflib-decoding-decode_composited_frame.adb", "fail"),
+      Permit ("giflib-decoding-decode_expanded_frame.adb", "complete_frame"),
+      Permit ("giflib-decoding-decode_indexed_frame.adb", "complete_frame"),
+      Permit ("giflib-decoding-extensions.adb", "check_fixed_payload"),
+      Permit ("giflib-decoding-extensions.adb", "byte_count"),
+      Permit ("giflib-decoding-extensions.adb", "read_application"),
+      Permit ("giflib-decoding-extensions.adb", "read_graphic_control"),
+      Permit ("giflib-decoding-extensions.adb", "read_plain_text"),
+      Permit ("giflib-decoding-extensions.adb", "read_variable_extension"),
+      Permit ("giflib-decoding-extensions.adb", "retain_chunk"),
+      Permit ("giflib-decoding-extensions.adb", "truncated"),
+      Permit
+        ("giflib-decoding-extensions-read_application.adb", "read_fixed_block"),
+      Permit
+        ("giflib-decoding-extensions-read_application.adb", "read_sub_blocks"),
+      Permit
+        ("giflib-decoding-extensions-read_application.adb", "retain_chunk"),
+      Permit
+        ("giflib-decoding-extensions-read_application.adb", "start_retention"),
+      Permit
+        ("giflib-decoding-extensions-read_graphic_control.adb",
+         "read_fixed_block"),
+      Permit
+        ("giflib-decoding-extensions-read_graphic_control.adb", "add_warning"),
+      Permit
+        ("giflib-decoding-extensions-read_graphic_control.adb", "retain_chunk"),
+      Permit
+        ("giflib-decoding-extensions-read_graphic_control.adb",
+         "start_retention"),
+      Permit
+        ("giflib-decoding-extensions-read_graphic_control.adb", "truncated"),
+      Permit
+        ("giflib-decoding-extensions-read_plain_text.adb", "read_fixed_block"),
+      Permit
+        ("giflib-decoding-extensions-read_plain_text.adb", "read_sub_blocks"),
+      Permit
+        ("giflib-decoding-extensions-read_plain_text.adb", "retain_chunk"),
+      Permit
+        ("giflib-decoding-extensions-read_plain_text.adb", "start_retention"),
+      Permit
+        ("giflib-decoding-extensions-read_variable_extension.adb",
+         "start_retention"),
+      Permit
+        ("giflib-decoding-extensions-read_variable_extension.adb",
+         "read_sub_blocks"),
+      Permit ("giflib-decoding-frame_pipeline.adb", "fail"),
+      Permit ("giflib-decoding-frame_pipeline.adb", "invalid_transition"),
+      Permit ("giflib-decoding-frame_pipeline.adb", "validate_frame_output"),
+      Permit ("giflib-decoding-initialize.adb", "input_position"),
+      Permit ("giflib-decoding-initialize.adb", "invalid_transition"),
+      Permit ("giflib-decoding-next_event.adb", "check_trailing_data"),
+      Permit ("giflib-decoding-next_event.adb", "add_warning"),
+      Permit ("giflib-decoding-next_event.adb", "byte_count"),
+      Permit ("giflib-decoding-next_event.adb", "deliver_event"),
+      Permit ("giflib-decoding-next_event.adb", "fail"),
+      Permit ("giflib-decoding-next_event.adb", "input_position"),
+      Permit ("giflib-decoding-next_event.adb", "invalid_transition"),
+      Permit ("giflib-decoding-next_event.adb", "prepare_frame"),
+      Permit ("giflib-decoding-next_event.adb", "read_extension"),
+      Permit ("giflib-decoding-reset.adb", "initialize"),
+      Permit ("giflib-decoding-resource_management.adb", "allocation_result"),
+      Permit ("giflib-decoding-resource_management.adb", "byte_count"),
+      Permit ("giflib-decoding-resource_management.adb", "colors"),
+      Permit ("giflib-decoding-resource_management.adb", "fill_background"),
+      Permit ("giflib-decoding-skip_frame.adb", "complete_frame"),
+      Permit ("giflib-decoding-skip_frame.adb", "fail"),
+      Permit ("giflib-encoding.adb", "add_extension"),
+      Permit ("giflib-encoding.adb", "add_extension_exact"),
+      Permit ("giflib-encoding.adb", "byte_count"),
+      Permit ("giflib-encoding.adb", "fail"),
+      Permit ("giflib-encoding.adb", "has_extension_capacity"),
+      Permit ("giflib-encoding.adb", "invalid_transition"),
+      Permit ("giflib-encoding.adb", "reject_request"),
+      Permit ("giflib-encoding.adb", "write_raw"),
+      Permit ("giflib-encoding-add_truecolor_frame.adb", "fail_frame"),
+      Permit ("giflib-encoding-add_truecolor_frame.adb", "invalid_transition"),
+      Permit ("giflib-encoding-add_truecolor_frame.adb", "reject_frame_request"),
+      Permit ("giflib-encoding-add_truecolor_frame.adb", "validate_frame_request"),
+      Permit ("giflib-encoding-cancel.adb", "invalid_transition"),
+      Permit ("giflib-encoding-extensions.adb", "complete_extension"),
+      Permit ("giflib-encoding-extensions.adb", "byte_count"),
+      Permit ("giflib-encoding-extensions.adb", "fail"),
+      Permit ("giflib-encoding-extensions.adb", "has_extension_capacity"),
+      Permit ("giflib-encoding-extensions.adb", "invalid_transition"),
+      Permit ("giflib-encoding-extensions.adb", "reject_request"),
+      Permit ("giflib-encoding-extensions.adb", "validate"),
+      Permit ("giflib-encoding-extensions.adb", "write_chunk"),
+      Permit ("giflib-encoding-extensions.adb", "write_header"),
+      Permit ("giflib-encoding-extensions.adb", "write_raw"),
+      Permit ("giflib-encoding-extensions.adb", "write_prefix"),
+      Permit ("giflib-encoding-finish.adb", "fail"),
+      Permit ("giflib-encoding-finish.adb", "invalid_transition"),
+      Permit ("giflib-encoding-finish.adb", "write_header"),
+      Permit ("giflib-encoding-finish.adb", "write_raw"),
+      Permit ("giflib-encoding-frame_pipeline.adb", "complete"),
+      Permit ("giflib-encoding-frame_pipeline.adb", "fail_frame"),
+      Permit ("giflib-encoding-frame_pipeline.adb", "invalid_transition"),
+      Permit ("giflib-encoding-frame_pipeline.adb", "prepare"),
+      Permit ("giflib-encoding-frame_pipeline.adb", "reject_frame_request"),
+      Permit ("giflib-encoding-frame_pipeline.adb", "validate_frame_request"),
+      Permit ("giflib-encoding-frame_pipeline.adb", "write_header"),
+      Permit ("giflib-encoding-frame_pipeline.adb", "write_palette"),
+      Permit ("giflib-encoding-frame_pipeline.adb", "write_raw"),
+      Permit ("giflib-encoding-initialize.adb", "invalid_transition"),
+      Permit ("giflib-encoding-resource_management.adb", "allocation_result"),
+      Permit ("giflib-encoding-resource_management.adb", "outer_maximum"),
+      Permit ("giflib-encoding-resource_management.adb", "quantizer_bytes"),
+      Permit ("giflib-encoding-write_header.adb", "has_extension_capacity"),
+      Permit ("giflib-encoding-write_header.adb", "byte_count"),
+      Permit ("giflib-encoding-write_header.adb", "write_header"),
+      Permit ("giflib-encoding-write_header.adb", "write_palette"),
+      Permit ("giflib-encoding-write_header.adb", "write_raw")];
+
+   function Allowed (Callee : String; Unit_Name : String) return Boolean is
    begin
       if Callee'Length > Session_Prefix'Length
         and then Callee
@@ -145,29 +231,26 @@ package body Giflib_Tooling.Transitions is
             return True;
          end if;
       end loop;
+      for Item of Local_Allowed_Calls loop
+         if Unit_Name = To_String (Item.Unit_Name)
+           and then Callee = To_String (Item.Callee)
+         then
+            return True;
+         end if;
+      end loop;
       return False;
    end Allowed;
 
-   function Is_Declaration
-     (Statement : Source.Token_Vectors.Vector) return Boolean
-   is
-   begin
-      if Statement.Is_Empty then
-         return False;
-      end if;
-      return Source.Image (Statement (Statement.First_Index)) in
-        "procedure" | "function";
-   end Is_Declaration;
-
    function Violation
      (Statement : Source.Token_Vectors.Vector;
-      Protected_Fields : Source.Name_Vectors.Vector) return Boolean
+      Protected_Fields : Source.Name_Vectors.Vector;
+      Unit_Name : String := "") return Boolean
    is
       Assignment : Natural := 0;
       Left_Start : Positive :=
         (if Statement.Is_Empty then 1 else Statement.First_Index);
    begin
-      if Statement.Is_Empty or else Is_Declaration (Statement) then
+      if Statement.Is_Empty then
          return False;
       end if;
       for Index in Statement.First_Index .. Statement.Last_Index loop
@@ -185,7 +268,11 @@ package body Giflib_Tooling.Transitions is
       end if;
       for Index in Statement.First_Index .. Statement.Last_Index loop
          if Source.Image (Statement (Index)) = "object" then
-            if Index < Statement.Last_Index
+            if Index > Statement.First_Index
+              and then Source.Image (Statement (Index - 1)) = "renames"
+            then
+               return True;
+            elsif Index < Statement.Last_Index
               and then Source.Image (Statement (Index + 1)) = ":"
             then
                null;
@@ -206,7 +293,7 @@ package body Giflib_Tooling.Transitions is
                   Callee : constant String :=
                     Source.Enclosing_Callee (Statement, Index);
                begin
-                  if Callee /= "" and then not Allowed (Callee) then
+                  if Callee /= "" and then not Allowed (Callee, Unit_Name) then
                      return True;
                   end if;
                end;
@@ -217,7 +304,7 @@ package body Giflib_Tooling.Transitions is
                   Callee : constant String :=
                     Source.Enclosing_Callee (Statement, Index);
                begin
-                  if Callee /= "" and then not Allowed (Callee) then
+                  if Callee /= "" and then not Allowed (Callee, Unit_Name) then
                      return True;
                   end if;
                end;
@@ -274,7 +361,7 @@ package body Giflib_Tooling.Transitions is
               Source.Lower (Ada.Directories.Simple_Name (To_String (Path)));
             procedure Inspect (Statement : Source.Token_Vectors.Vector) is
             begin
-               if Violation (Statement, Fields) then
+               if Violation (Statement, Fields, Name) then
                   Fail
                     ("session state mutation escaped transition owner: " & Name &
                      ": " & Source.Image (Statement));
