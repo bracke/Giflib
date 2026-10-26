@@ -1,6 +1,7 @@
 with Ada.Text_IO;
 with Ada.Command_Line;
 with Ada.Directories;
+with Ada.Exceptions;
 
 with Project_Tools.Files;
 with Project_Tools.Release_Checks;
@@ -22,7 +23,8 @@ begin
 exception
    when Program_Error =>
       raise;
-   when others =>
+   when E : others =>
       Project_Tools.Release_Checks.Fail
-        ("giflib tooling tests raised an unexpected exception");
+        ("giflib tooling tests raised an unexpected exception: " &
+         Ada.Exceptions.Exception_Information (E));
 end Giflib_Tooling_Tests;

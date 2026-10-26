@@ -1,3 +1,5 @@
+with Ada.Exceptions;
+
 with Project_Tools.AUnit_Checks;
 with Project_Tools.Files;
 with Project_Tools.Release_Checks;
@@ -44,7 +46,9 @@ package body Giflib_Tooling is
    exception
       when Program_Error =>
          raise;
-      when others =>
-         Fail ("validation raised an unexpected exception");
+      when E : others =>
+         Fail
+           ("validation raised an unexpected exception: " &
+            Ada.Exceptions.Exception_Information (E));
    end Validate;
 end Giflib_Tooling;
