@@ -98,8 +98,10 @@ The test crate declares only `unit_tests.gpr` and `giflib_tests` as its default
 Alire project and executable inventory. The root test action regenerates its
 development configuration, builds the AUnit runner and repository tools, runs
 the tooling check, which first launches the independent `giflib_tooling_tests`
-suite against mutated repository copies through the structural probe, and then
-executes `tests/bin/giflib_tests` by its exact path. Root and test
+suite against mutated repository copies through the full validation probe;
+source-level transition and ownership mutations are compiled before rejection,
+and API-boundary mutations exercise the compiler-backed negative probes.  The
+test action then executes `tests/bin/giflib_tests` by its exact path. Root and test
 manifests carry inert
 configuration-epoch scenarios so a layout change invalidates legacy ignored
 setup hashes before a generated `config/` tree is required.
@@ -122,8 +124,8 @@ variants import compiler switches from `giflib_build.gpr`.
 Separate actions ensure that a compilation or test failure makes `alr test`
 fail, and selecting an exact executable prevents stale binaries for other
 profiles from making execution ambiguous. Repository workflow tools are
-isolated in `tools.gpr`; both the normal test action and release gate build the
-same tooling validator and execute the same structural checks.
+isolated in `tools.gpr`; both the normal test action and release gate build and
+execute their profile-local tooling validator and the same structural checks.
 The stream tests inject exceptions from every callback family (`Read`, `Skip`,
 `Write`, `Offset`, and `Flush`) and require structured, non-raising outcomes.
 Extension behavior is exercised through the per-kind decoder handlers and both

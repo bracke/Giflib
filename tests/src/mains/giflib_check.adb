@@ -13,8 +13,12 @@ procedure Giflib_Check is
 
    Root : constant String :=
      Files.Find_Root_Upward (Ada.Directories.Current_Directory, "giflib.gpr");
-   Tests_Bin : constant String := Files.Join (Root, "tests/bin");
-   Release_Tests_Bin : constant String := Files.Join (Tests_Bin, "release");
+   Development_Tests_Bin : constant String := Files.Join (Root, "tests/bin");
+   Active_Tests_Bin : constant String :=
+     Ada.Directories.Containing_Directory
+       (Ada.Directories.Full_Name (Ada.Command_Line.Command_Name));
+   Release_Tests_Bin : constant String :=
+     Files.Join (Development_Tests_Bin, "release");
    Command : constant String :=
      (if Ada.Command_Line.Argument_Count = 0 then "all"
       else Ada.Command_Line.Argument (1));
@@ -25,13 +29,14 @@ procedure Giflib_Check is
      (Name  : String;
       Args  : Processes.Argument_Vectors.Vector;
       Label : String;
-      Bin_Directory : String := Tests_Bin);
+      Bin_Directory : String := Active_Tests_Bin);
 
-   procedure Validate_Tooling is
+   procedure Validate_Tooling
+     (Bin_Directory : String := Active_Tests_Bin) is
    begin
       Run_Tool
         ("giflib_tooling_tests", Processes.No_Arguments,
-         "tooling mutation tests");
+         "tooling mutation tests", Bin_Directory);
       Giflib_Tooling.Validate (Root);
    end Validate_Tooling;
 
@@ -39,7 +44,7 @@ procedure Giflib_Check is
      (Name  : String;
       Args  : Processes.Argument_Vectors.Vector;
       Label : String;
-      Bin_Directory : String := Tests_Bin)
+      Bin_Directory : String := Active_Tests_Bin)
    is
    begin
       Processes.Run
@@ -59,7 +64,7 @@ procedure Giflib_Check is
 
    procedure Run_Benchmarks
      (Enforce : Boolean := False;
-      Bin_Directory : String := Tests_Bin)
+      Bin_Directory : String := Active_Tests_Bin)
    is
       procedure Run_Case (Relative_Path : String; Label : String) is
       begin
@@ -112,7 +117,7 @@ procedure Giflib_Check is
 
    procedure External
      (Include_Benchmarks : Boolean := True;
-      Bin_Directory      : String := Tests_Bin;
+      Bin_Directory      : String := Active_Tests_Bin;
       Label_Prefix       : String := "")
    is
    begin
@@ -140,7 +145,7 @@ procedure Giflib_Check is
    end External;
 
    procedure Run_Correctness_Checks
-     (Bin_Directory : String := Tests_Bin;
+     (Bin_Directory : String := Active_Tests_Bin;
       Label_Prefix  : String := "")
    is
    begin
@@ -222,6 +227,7 @@ begin
              Processes.Argument ("-p"), Processes.Argument ("-j0"),
              Processes.Argument
                ("-XGIFLIB_BUILD_PROFILE_OVERRIDE=release")]));
+      Validate_Tooling (Release_Tests_Bin);
       Run_Correctness_Checks
         (Bin_Directory => Release_Tests_Bin,
          Label_Prefix  => "release-profile ");
