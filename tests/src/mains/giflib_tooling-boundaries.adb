@@ -86,16 +86,23 @@ package body Giflib_Tooling.Boundaries is
          "ownership safety probe");
    end Check_API_Boundaries;
 
-   procedure Validate (Root : String) is
-      Tool_Mains : constant array (Positive range <>) of Unbounded_String :=
-        [To_Unbounded_String ("tests/src/test_mains/giflib_tests.adb"),
-         To_Unbounded_String ("tests/src/mains/giflib_check.adb"),
-         To_Unbounded_String ("tests/src/mains/giflib_generate_samples.adb"),
-         To_Unbounded_String ("tests/src/mains/giflib_generate_fixtures.adb"),
-         To_Unbounded_String ("tests/src/mains/giflib_external_checks.adb"),
-         To_Unbounded_String ("tests/src/mains/giflib_benchmark.adb"),
-         To_Unbounded_String ("tests/src/mains/giflib_fuzz.adb"),
-         To_Unbounded_String ("tests/src/mains/giflib_tooling_tests.adb")];
+   procedure Require_Project_Tools_Mains
+     (Root : String; Project_Path : String; Source_Dir : String)
+   is
+      Mains : constant Source.Name_Vectors.Vector :=
+        Source.GPR_Attribute_Strings
+          (Files.Read_Raw_File (Files.Join (Root, Project_Path)), "Main");
+   begin
+      if Mains.Is_Empty then
+         Fail (Project_Path & " has no exact Main attribute");
+      end if;
+      for Name of Mains loop
+         Require_Project_Tools_With
+           (Root, Files.Join (Source_Dir, To_String (Name)));
+      end loop;
+   end Require_Project_Tools_Mains;
+
+   procedure Validate_Static (Root : String) is
    begin
       Require_Config (Root, "alire.toml", "gnat_native", """^15""");
       Require_Config (Root, "tests/alire.toml", "gnat_native", """^15""");
@@ -113,9 +120,15 @@ package body Giflib_Tooling.Boundaries is
       Project_Tools.Alire_Manifests.Require_Workspace_Pin
         (Files.Join (Root, "tests/alire.toml"), "project_tools",
          "../../project_tools", Quiet => True);
-      for Path of Tool_Mains loop
-         Require_Project_Tools_With (Root, To_String (Path));
-      end loop;
+      Require_Project_Tools_Mains
+        (Root, "tests/unit_tests.gpr", "tests/src/test_mains");
+      Require_Project_Tools_Mains
+        (Root, "tests/tools.gpr", "tests/src/mains");
+   end Validate_Static;
+
+   procedure Validate_API (Root : String) is
+   begin
       Check_API_Boundaries (Root);
-   end Validate;
+   end Validate_API;
+
 end Giflib_Tooling.Boundaries;

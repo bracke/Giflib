@@ -14,9 +14,9 @@ package body Giflib_Tooling is
       Project_Tools.Release_Checks.Fail ("giflib tooling: " & Message);
    end Fail;
 
-   procedure Validate (Root : String) is
+   procedure Validate_Structure (Root : String) is
    begin
-      Boundaries.Validate (Root);
+      Boundaries.Validate_Static (Root);
       Architecture.Validate (Root);
       Transitions.Validate (Root);
       Project_Tools.Release_Checks.Require_GPR_Main_Inventory
@@ -35,6 +35,12 @@ package body Giflib_Tooling is
          Suite_Path => Files.Join (Root, "tests/src/giflib-testing-suite.adb"),
          Suite_Add_Prefix => "new ", Suite_Add_Suffix => ".Test",
          Required_Stem_Suffix => "", Quiet => True);
+   end Validate_Structure;
+
+   procedure Validate (Root : String) is
+   begin
+      Validate_Structure (Root);
+      Boundaries.Validate_API (Root);
    exception
       when Program_Error =>
          raise;

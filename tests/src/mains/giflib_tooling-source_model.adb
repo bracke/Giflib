@@ -155,6 +155,52 @@ package body Giflib_Tooling.Source_Model is
       return False;
    end Has_GPR_With;
 
+   function GPR_Attribute_Strings
+     (Text : String; Attribute_Name : String) return Name_Vectors.Vector
+   is
+      Tokens : constant Token_Vectors.Vector := Lex (Text);
+      Result : Name_Vectors.Vector;
+      Target : constant String := Lower (Attribute_Name);
+   begin
+      if Tokens.Length < 5 then
+         return Result;
+      end if;
+      for Index in Tokens.First_Index .. Tokens.Last_Index - 4 loop
+         if Image (Tokens (Index)) = "for"
+           and then Tokens (Index + 1).Kind = Identifier
+           and then Image (Tokens (Index + 1)) = Target
+           and then Image (Tokens (Index + 2)) = "use"
+           and then Image (Tokens (Index + 3)) = "("
+         then
+            declare
+               Depth : Natural := 1;
+               Cursor : Positive := Index + 4;
+            begin
+               while Cursor <= Tokens.Last_Index and then Depth > 0 loop
+                  if Image (Tokens (Cursor)) = "(" then
+                     Depth := Depth + 1;
+                  elsif Image (Tokens (Cursor)) = ")" then
+                     Depth := Depth - 1;
+                  elsif Depth = 1
+                    and then Tokens (Cursor).Kind = String_Literal
+                  then
+                     Result.Append (Tokens (Cursor).Text);
+                  end if;
+                  Cursor := Cursor + 1;
+               end loop;
+               if Depth = 0
+                 and then Cursor <= Tokens.Last_Index
+                 and then Image (Tokens (Cursor)) = ";"
+               then
+                  return Result;
+               end if;
+               Result.Clear;
+            end;
+         end if;
+      end loop;
+      return Result;
+   end GPR_Attribute_Strings;
+
    function Has_Config_Assignment
      (Text : String; Key : String; Value : String) return Boolean
    is

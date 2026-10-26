@@ -21,6 +21,8 @@ package Giflib_Tooling.Source_Model is
    function Lower (Value : String) return String;
    function Contains_Code (Text : String; Pattern : String) return Boolean;
    function Has_GPR_With (Text : String; Project_Path : String) return Boolean;
+   function GPR_Attribute_Strings
+     (Text : String; Attribute_Name : String) return Name_Vectors.Vector;
    function Has_Config_Assignment
      (Text : String; Key : String; Value : String) return Boolean;
    function Record_Fields

@@ -23,9 +23,10 @@ package body Giflib_Tooling.Architecture is
      (Files.List_Tree (Files.Join (Root, "src")));
 
    procedure Check_Library_Interface (Root : String) is
-      Tokens : constant Source.Token_Vectors.Vector :=
-        Source.Lex (Files.Read_Raw_File (Files.Join (Root, "giflib.gpr")));
-      Actual : Source.Name_Vectors.Vector;
+      Actual : constant Source.Name_Vectors.Vector :=
+        Source.GPR_Attribute_Strings
+          (Files.Read_Raw_File (Files.Join (Root, "giflib.gpr")),
+           "Library_Interface");
       Expected : constant array (Positive range <>) of Unbounded_String :=
         [To_Unbounded_String ("Giflib"),
          To_Unbounded_String ("Giflib.Animations"),
@@ -95,22 +96,8 @@ package body Giflib_Tooling.Architecture is
          To_Unbounded_String ("giflib-results.ads"),
          To_Unbounded_String ("giflib-streams.ads"),
          To_Unbounded_String ("giflib-version.ads")];
-      Found : Boolean := False;
    begin
-      if not Tokens.Is_Empty then
-         for Index in Tokens.First_Index .. Tokens.Last_Index loop
-            if not Found
-              and then Source.Image (Tokens (Index)) = "library_interface"
-            then
-               Found := True;
-            elsif Found and then Tokens (Index).Kind = Source.String_Literal then
-               Actual.Append (Tokens (Index).Text);
-            elsif Found and then Source.Image (Tokens (Index)) = ";" then
-               exit;
-            end if;
-         end loop;
-      end if;
-      if not Found or else Natural (Actual.Length) /= Expected'Length then
+      if Natural (Actual.Length) /= Expected'Length then
          Fail ("library interface unit inventory changed without review");
       end if;
       for Index in Expected'Range loop
@@ -188,15 +175,18 @@ package body Giflib_Tooling.Architecture is
             Package_At : Natural := 0;
          begin
             if Statement.Length >= 4 then
-               if Source.Image (Statement (Statement.First_Index)) = "package" then
-                  Package_At := Statement.First_Index;
-               elsif Statement.Length >= 5
-                 and then Source.Image (Statement (Statement.First_Index)) = "private"
-                 and then Source.Image (Statement (Statement.First_Index + 1)) =
-                   "package"
-               then
-                  Package_At := Statement.First_Index + 1;
-               end if;
+               for Cursor in Statement.First_Index .. Statement.Last_Index - 2 loop
+                  if Source.Image (Statement (Cursor)) = "package"
+                    and then Statement (Cursor + 1).Kind = Source.Identifier
+                    and then Source.Image (Statement (Cursor + 1)) /= "body"
+                    and then
+                      (Cursor = Statement.First_Index
+                       or else Source.Image (Statement (Cursor - 1)) /= "with")
+                  then
+                     Package_At := Cursor;
+                     exit;
+                  end if;
+               end loop;
             end if;
             if Package_At > 0
               and then Statement (Package_At + 1).Kind = Source.Identifier
@@ -282,6 +272,7 @@ package body Giflib_Tooling.Architecture is
 
    procedure Check_Test_Layout (Root : String) is
       Test_Root : constant String := Files.Join (Root, "tests/src");
+      Subunit_Root : constant String := Files.Join (Test_Root, "subunits");
    begin
       for Path of Files.List_Tree (Test_Root, "*.adb") loop
          declare
@@ -290,7 +281,7 @@ package body Giflib_Tooling.Architecture is
               Ada.Directories.Containing_Directory (To_String (Path));
             Text : constant String := Files.Read_Raw_File (To_String (Path));
          begin
-            if Parent = Test_Root
+            if Parent /= Subunit_Root
               and then Source.Contains_Code (Text, "separate (")
             then
                Fail ("test subunit is outside tests/src/subunits: " & Name);
