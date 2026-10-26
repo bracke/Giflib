@@ -7,6 +7,7 @@ is
    use type Animations.Loop_Info;
    use type Errors.Error_Code;
    use type Palettes.Palette;
+   use type Quantization.Cleanup_Status;
 
    function Session_Data_Is_Initialized (Object : Encoder) return Boolean is
      (Object.Screen = Screen_Info'(others => <>)
@@ -18,6 +19,7 @@ is
       and then Object.Extensions_Written = 0
       and then Object.Bytes_Written = 0
       and then Object.Compressed_Bytes_Written = 0
+      and then Object.Cleanup_State = Quantization.Cleanup_Complete
       and then Object.Diagnostic.Code = Errors.No_Error);
 
    procedure Begin_Session

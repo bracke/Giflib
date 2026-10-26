@@ -1,3 +1,5 @@
+with Giflib.Cleanup;
+
 package Giflib.Decoding.Testing is
    function Allocated_Bytes (Object : Decoder) return Byte_Count;
 
@@ -9,4 +11,5 @@ package Giflib.Decoding.Testing is
 
    procedure Corrupt_Allocation_Budget (Object : in out Decoder);
    function Resources_Released (Object : Decoder) return Boolean;
+   function Last_Cleanup (Object : Decoder) return Cleanup.Cleanup_Status;
 end Giflib.Decoding.Testing;

@@ -7,16 +7,27 @@ with Giflib.Decoding.Session_Transitions;
 
 package body Giflib.Decoding.Resource_Management is
    use type Internal.Ownership.Allocation_Status;
+   use type Internal.Cleanup.Cleanup_Status;
 
-   procedure Release (Resources : in out Decoder_Resources) is
-   begin
-      Internal.Decoder_Storage.Release (Resources);
-   end Release;
+   function Release
+     (Resources : in out Decoder_Resources)
+      return Internal.Cleanup.Cleanup_Outcome
+   is (Internal.Decoder_Storage.Release (Resources));
 
-   procedure Release (Object : in out Decoder) is
+   function Release
+     (Object : in out Decoder) return Internal.Cleanup.Cleanup_Outcome
+   is
+      Current : constant Internal.Cleanup.Cleanup_Outcome :=
+        Release (Object.Resources);
    begin
-      Release (Object.Resources);
       Session_Transitions.Clear_Resource_State (Object);
+      return
+        (if Internal.Decoder_Storage.First_Cleanup_Status (Object.Resources) /=
+              Internal.Cleanup.Cleanup_Complete
+         then
+           (Status =>
+              Internal.Decoder_Storage.First_Cleanup_Status (Object.Resources))
+         else Current);
    end Release;
 
    function Allocation_Result

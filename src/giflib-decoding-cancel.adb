@@ -1,9 +1,10 @@
 separate (Giflib.Decoding)
 function Cancel (Object : in out Decoder) return Results.Result is
+   Cleanup_Outcome : Internal.Cleanup.Cleanup_Outcome;
 begin
    if State_Arithmetic.Can_Cancel (Object.Current_State) then
-      Resource_Management.Release (Object);
-      if not Internal.Decoder_Storage.Cleanup_Succeeded (Object.Resources) then
+      Cleanup_Outcome := Resource_Management.Release (Object);
+      if not Internal.Cleanup.Succeeded (Cleanup_Outcome) then
          Session_Transitions.Fail_Session
            (Object, Errors.Make (Errors.Internal_Invariant_Failed));
          return Results.Failure (Object.Diagnostic);

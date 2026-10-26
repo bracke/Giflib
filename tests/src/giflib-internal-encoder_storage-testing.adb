@@ -5,7 +5,4 @@ package body Giflib.Internal.Encoder_Storage.Testing is
    begin
       Ownership.Testing.Set_Used (Object.Allocation_Budget, 0);
    end Corrupt_Budget;
-
-   function Last_Cleanup (Object : Resources) return Cleanup.Cleanup_Status is
-     (Object.Cleanup_State);
 end Giflib.Internal.Encoder_Storage.Testing;

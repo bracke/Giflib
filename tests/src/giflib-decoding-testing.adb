@@ -26,4 +26,7 @@ package body Giflib.Decoding.Testing is
 
    function Resources_Released (Object : Decoder) return Boolean is
      (Internal.Decoder_Storage.Is_Released (Object.Resources));
+
+   function Last_Cleanup (Object : Decoder) return Cleanup.Cleanup_Status is
+     (Internal.Decoder_Storage.First_Cleanup_Status (Object.Resources));
 end Giflib.Decoding.Testing;

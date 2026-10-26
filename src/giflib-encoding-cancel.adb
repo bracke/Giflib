@@ -1,10 +1,11 @@
 separate (Giflib.Encoding)
 function Cancel (Object : in out Encoder) return Results.Result is
+   Cleanup_Status : Quantization.Cleanup_Status;
 begin
    if State_Arithmetic.Can_Cancel (Object.Current_State) then
       if Object.Current_State /= Cancelled then
-         Resource_Management.Release (Object);
-         if not Resource_Management.Cleanup_Succeeded (Object) then
+         Cleanup_Status := Resource_Management.Release (Object);
+         if Cleanup_Status /= Quantization.Cleanup_Complete then
             Session_Transitions.Fail_Session
               (Object, Errors.Make (Errors.Internal_Invariant_Failed));
             return Results.Failure (Object.Diagnostic);

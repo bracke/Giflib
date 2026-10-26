@@ -1,7 +1,6 @@
 with Giflib.Internal.Resource_Cleanup;
 
 package body Giflib.Internal.Encoder_Storage is
-   use type Cleanup.Cleanup_Status;
    function Ensure_Truecolor_Pixels
      (Object : in out Resources;
       Fault : in out Ownership.Fault_State;
@@ -22,18 +21,15 @@ package body Giflib.Internal.Encoder_Storage is
      (Owned_Buffers.Length (Object.Truecolor_Buffer));
    function LZW_Allocated (Object : Resources) return Boolean is
      (LZW_Encoding.Is_Allocated (Object.LZW_Data));
-   function Cleanup_Succeeded (Object : Resources) return Boolean is
-     (Object.Cleanup_State = Cleanup.Cleanup_Complete
-      and then Is_Released (Object)
-      and then Allocated_Bytes (Object) = 0);
    function Is_Released (Object : Resources) return Boolean is
      (not Owned_Buffers.Is_Allocated (Object.Truecolor_Buffer)
       and then not LZW_Encoding.Is_Allocated (Object.LZW_Data));
    function Allocated_Bytes (Object : Resources) return Byte_Count is
      (Ownership.Used (Object.Allocation_Budget));
-   procedure Release (Object : in out Resources) is
-      Status : Resource_Cleanup.Guard
-        (Object.Allocation_Budget'Access, Object.Cleanup_State'Access);
+   function Release
+     (Object : in out Resources) return Cleanup.Cleanup_Outcome
+   is
+      Outcome : Cleanup.Cleanup_Outcome;
       function Release_Buffer return Cleanup.Cleanup_Outcome is
       begin
          return Owned_Buffers.Release
@@ -47,12 +43,21 @@ package body Giflib.Internal.Encoder_Storage is
       procedure Try_Buffer is new Resource_Cleanup.Attempt (Release_Buffer);
       procedure Try_LZW is new Resource_Cleanup.Attempt (Release_LZW);
    begin
-      Try_Buffer (Status);
-      Try_LZW (Status);
+      declare
+         Status : Resource_Cleanup.Guard
+           (Object.Allocation_Budget'Access, Object.Cleanup_State'Access);
+      begin
+         Try_Buffer (Status);
+         Try_LZW (Status);
+         Outcome := Resource_Cleanup.Current_Outcome (Status);
+      end;
+      return Outcome;
    end Release;
 
    overriding procedure Finalize (Object : in out Resources) is
+      Outcome : constant Cleanup.Cleanup_Outcome := Release (Object);
+      pragma Unreferenced (Outcome);
    begin
-      Release (Object);
+      null;
    end Finalize;
 end Giflib.Internal.Encoder_Storage;

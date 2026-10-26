@@ -107,8 +107,10 @@ begin
    Assert
      (Outcome.First_Error.Code = Giflib.Errors.Internal_Invariant_Failed
       and then Giflib.Encoding.Testing.Resources_Released
-        (Outer_Cleanup_Encoder),
-      "outer encoder cleanup failure retained owned storage");
+        (Outer_Cleanup_Encoder)
+      and then Giflib.Encoding.Testing.Last_Cleanup (Outer_Cleanup_Encoder) =
+        Giflib.Quantization.Cleanup_Accounting_Failed,
+      "outer encoder cleanup failure lost its status or retained owned storage");
    Giflib.Encoding.Finalize (Outer_Cleanup_Encoder);
 
    Start;

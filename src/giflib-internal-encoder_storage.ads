@@ -30,11 +30,11 @@ package Giflib.Internal.Encoder_Storage is
      with Post =>
        (if Ensure_LZW'Result.Status = Ownership.Allocation_Ready
         then LZW_Allocated (Object));
-   function Cleanup_Succeeded (Object : Resources) return Boolean;
    function Is_Released (Object : Resources) return Boolean;
    function Allocated_Bytes (Object : Resources) return Byte_Count;
 
-   procedure Release (Object : in out Resources);
+   function Release
+     (Object : in out Resources) return Cleanup.Cleanup_Outcome;
    overriding procedure Finalize (Object : in out Resources);
 
 private

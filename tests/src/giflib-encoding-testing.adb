@@ -4,8 +4,6 @@ with Giflib.Internal.Budget_Arithmetic;
 with Giflib.Quantization.Testing;
 
 package body Giflib.Encoding.Testing is
-   use type Quantization.Cleanup_Status;
-
    function Allocated_Bytes (Object : Encoder) return Byte_Count is
      (Internal.Budget_Arithmetic.Charge
         (Internal.Encoder_Storage.Allocated_Bytes (Object.Resources),
@@ -79,9 +77,5 @@ package body Giflib.Encoding.Testing is
 
    function Last_Cleanup
      (Object : Encoder) return Quantization.Cleanup_Status
-   is
-     (if Quantization.First_Cleanup_Status (Object.Quantizer_Data) /=
-          Quantization.Cleanup_Complete
-      then Quantization.First_Cleanup_Status (Object.Quantizer_Data)
-      else Internal.Encoder_Storage.Testing.Last_Cleanup (Object.Resources));
+   is (Object.Cleanup_State);
 end Giflib.Encoding.Testing;

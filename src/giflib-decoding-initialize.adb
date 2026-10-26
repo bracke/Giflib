@@ -5,12 +5,13 @@ function Initialize
    Constraints : Limits.Limit_Set := Limits.Default_Limits)
    return Results.Result
 is
+   Cleanup_Outcome : Internal.Cleanup.Cleanup_Outcome;
 begin
    if not State_Arithmetic.Can_Initialize (Object.Current_State) then
       return Invalid_Transition (Object);
    end if;
-   Resource_Management.Release (Object);
-   if not Internal.Decoder_Storage.Cleanup_Succeeded (Object.Resources) then
+   Cleanup_Outcome := Resource_Management.Release (Object);
+   if not Internal.Cleanup.Succeeded (Cleanup_Outcome) then
       Session_Transitions.Fail_Session
         (Object, Errors.Make (Errors.Internal_Invariant_Failed));
       return Results.Failure (Object.Diagnostic);

@@ -5,23 +5,30 @@ with Giflib.Internal.Resource_Diagnostics;
 package body Giflib.Encoding.Resource_Management is
    use type Internal.Ownership.Allocation_Status;
    use type Errors.Error_Code;
+   use type Quantization.Cleanup_Status;
 
-   procedure Release (Resources : in out Encoder_Resources) is
-   begin
-      Internal.Encoder_Storage.Release (Resources);
-   end Release;
+   function Release
+     (Resources : in out Encoder_Resources)
+      return Internal.Cleanup.Cleanup_Outcome
+   is (Internal.Encoder_Storage.Release (Resources));
 
-   procedure Release (Object : in out Encoder) is
-      Status : constant Quantization.Cleanup_Status :=
+   function Release
+     (Object : in out Encoder) return Quantization.Cleanup_Status
+   is
+      Quantizer_Status : constant Quantization.Cleanup_Status :=
         Quantization.Release (Object.Quantizer_Data);
-      pragma Unreferenced (Status);
+      Resource_Status : constant Internal.Cleanup.Cleanup_Outcome :=
+        Release (Object.Resources);
    begin
-      Release (Object.Resources);
+      if Object.Cleanup_State = Quantization.Cleanup_Complete then
+         if Quantizer_Status /= Quantization.Cleanup_Complete then
+            Object.Cleanup_State := Quantizer_Status;
+         elsif Resource_Status.Status /= Internal.Cleanup.Cleanup_Complete then
+            Object.Cleanup_State := Resource_Status.Status;
+         end if;
+      end if;
+      return Object.Cleanup_State;
    end Release;
-
-   function Cleanup_Succeeded (Object : Encoder) return Boolean is
-     (Internal.Encoder_Storage.Cleanup_Succeeded (Object.Resources)
-      and then Quantization.Cleanup_Succeeded (Object.Quantizer_Data));
 
    function Combined_Amount
      (Left : Byte_Count;

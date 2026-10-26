@@ -7,6 +7,7 @@ with Giflib.Internal.Decoder_Storage.Metadata_Operations;
 with Giflib.Internal.Bytes;
 with Giflib.Internal.Diagnostics;
 with Giflib.Internal.Container;
+with Giflib.Internal.Cleanup;
 with Giflib.Internal.Geometry_Arithmetic;
 with Giflib.Internal.Image_Data;
 with Giflib.Internal.Pixel_Arithmetic;
@@ -34,6 +35,8 @@ package body Giflib.Decoding is
 
    function Fail (Object : in out Decoder; Item : Errors.Error) return Results.Result is
       Enriched : Errors.Error := Item;
+      Cleanup_Outcome : Internal.Cleanup.Cleanup_Outcome;
+      pragma Unreferenced (Cleanup_Outcome);
    begin
       if Enriched.Context.Source_Position.State = Errors.Position_Not_Checked then
          Enriched.Context := Internal.Diagnostics.At_Source
@@ -44,7 +47,7 @@ package body Giflib.Decoding is
       then
          Enriched.Context.Frame := Errors.Frame_At (Object.Frames_Seen);
       end if;
-      Resource_Management.Release (Object);
+      Cleanup_Outcome := Resource_Management.Release (Object);
       Session_Transitions.Fail_Session (Object, Enriched);
       return Results.Failure (Object.Diagnostic);
    end Fail;

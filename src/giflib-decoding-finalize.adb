@@ -1,8 +1,9 @@
 separate (Giflib.Decoding)
 procedure Finalize (Object : in out Decoder) is
+   Cleanup_Outcome : constant Internal.Cleanup.Cleanup_Outcome :=
+     Resource_Management.Release (Object);
 begin
-   Resource_Management.Release (Object);
-   if not Internal.Decoder_Storage.Cleanup_Succeeded (Object.Resources)
+   if not Internal.Cleanup.Succeeded (Cleanup_Outcome)
      and then Object.Diagnostic.Code = Errors.No_Error
    then
       Session_Transitions.Record_Diagnostic

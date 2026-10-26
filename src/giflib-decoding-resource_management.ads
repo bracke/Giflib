@@ -1,8 +1,13 @@
+with Giflib.Internal.Cleanup;
+
 private package Giflib.Decoding.Resource_Management is
    pragma Preelaborate;
 
-   procedure Release (Resources : in out Decoder_Resources);
-   procedure Release (Object : in out Decoder);
+   function Release
+     (Resources : in out Decoder_Resources)
+      return Internal.Cleanup.Cleanup_Outcome;
+   function Release
+     (Object : in out Decoder) return Internal.Cleanup.Cleanup_Outcome;
 
    function Ensure_Frame_Scratch
      (Object : in out Decoder;

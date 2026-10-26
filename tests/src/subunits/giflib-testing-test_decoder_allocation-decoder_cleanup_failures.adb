@@ -25,8 +25,10 @@ begin
    Outcome := Giflib.Decoding.Cancel (Decoder);
    Assert
      (Outcome.First_Error.Code = Giflib.Errors.Internal_Invariant_Failed
-      and then Giflib.Decoding.Testing.Resources_Released (Decoder),
-      "decoder cleanup failure retained owned storage");
+      and then Giflib.Decoding.Testing.Resources_Released (Decoder)
+      and then Giflib.Decoding.Testing.Last_Cleanup (Decoder) =
+        Giflib.Cleanup.Cleanup_Accounting_Failed,
+      "decoder cleanup failure lost its status or retained owned storage");
    Finish_Scenario (Decoder);
 exception
    when others =>

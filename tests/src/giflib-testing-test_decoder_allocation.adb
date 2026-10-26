@@ -1,4 +1,5 @@
 with AUnit.Assertions;
+with Giflib.Cleanup;
 with Giflib.Decoding;
 with Giflib.Decoding.Testing;
 with Giflib.Errors;
@@ -8,6 +9,7 @@ with Giflib.Streams;
 
 package body Giflib.Testing.Test_Decoder_Allocation is
    use AUnit.Assertions;
+   use type Giflib.Cleanup.Cleanup_Status;
    use type Giflib.Decoding.Decoder_State;
    use type Giflib.Decoding.Event_Kind;
    use type Giflib.Errors.Error_Code;

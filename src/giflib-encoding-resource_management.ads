@@ -1,9 +1,12 @@
+with Giflib.Internal.Cleanup;
+
 private package Giflib.Encoding.Resource_Management is
    pragma Preelaborate;
 
-   procedure Release (Resources : in out Encoder_Resources);
-   procedure Release (Object : in out Encoder);
-   function Cleanup_Succeeded (Object : Encoder) return Boolean;
+   function Release
+     (Resources : in out Encoder_Resources)
+      return Internal.Cleanup.Cleanup_Outcome;
+   function Release (Object : in out Encoder) return Quantization.Cleanup_Status;
 
    function Ensure_Truecolor_Pixels
      (Object : in out Encoder;

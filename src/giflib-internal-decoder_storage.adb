@@ -1,7 +1,6 @@
 with Giflib.Internal.Resource_Cleanup;
 
 package body Giflib.Internal.Decoder_Storage is
-   use type Cleanup.Cleanup_Status;
    function Ensure_Frame_Scratch
      (Object : in out Resources;
       Fault : in out Ownership.Fault_State;
@@ -46,10 +45,9 @@ package body Giflib.Internal.Decoder_Storage is
      (Owned_Buffers.Length (Object.Snapshot_Buffer));
    function Frame_Scratch_Length (Object : Resources) return Byte_Count is
      (Owned_Buffers.Length (Object.Frame_Scratch_Buffer));
-   function Cleanup_Succeeded (Object : Resources) return Boolean is
-     (Object.Cleanup_State = Cleanup.Cleanup_Complete
-      and then Is_Released (Object)
-      and then Allocated_Bytes (Object) = 0);
+   function First_Cleanup_Status
+     (Object : Resources) return Cleanup.Cleanup_Status
+   is (Object.Cleanup_State);
    function Is_Released (Object : Resources) return Boolean is
      (Metadata_Store.Is_Released (Object.Metadata_Storage)
       and then not Owned_Buffers.Is_Allocated (Object.Canvas_Buffer)
@@ -59,9 +57,10 @@ package body Giflib.Internal.Decoder_Storage is
    function Allocated_Bytes (Object : Resources) return Byte_Count is
      (Ownership.Used (Object.Allocation_Budget));
 
-   procedure Release (Object : in out Resources) is
-      Status : Resource_Cleanup.Guard
-        (Object.Allocation_Budget'Access, Object.Cleanup_State'Access);
+   function Release
+     (Object : in out Resources) return Cleanup.Cleanup_Outcome
+   is
+      Outcome : Cleanup.Cleanup_Outcome;
       function Release_Metadata return Cleanup.Cleanup_Outcome is
         (Metadata_Store.Release
            (Object.Metadata_Storage, Object.Allocation_Budget));
@@ -91,15 +90,24 @@ package body Giflib.Internal.Decoder_Storage is
         (Release_Frame_Scratch);
       procedure Try_LZW is new Resource_Cleanup.Attempt (Release_LZW);
    begin
-      Try_Metadata (Status);
-      Try_Canvas (Status);
-      Try_Snapshot (Status);
-      Try_Frame_Scratch (Status);
-      Try_LZW (Status);
+      declare
+         Status : Resource_Cleanup.Guard
+           (Object.Allocation_Budget'Access, Object.Cleanup_State'Access);
+      begin
+         Try_Metadata (Status);
+         Try_Canvas (Status);
+         Try_Snapshot (Status);
+         Try_Frame_Scratch (Status);
+         Try_LZW (Status);
+         Outcome := Resource_Cleanup.Current_Outcome (Status);
+      end;
+      return Outcome;
    end Release;
 
    overriding procedure Finalize (Object : in out Resources) is
+      Outcome : constant Cleanup.Cleanup_Outcome := Release (Object);
+      pragma Unreferenced (Outcome);
    begin
-      Release (Object);
+      null;
    end Finalize;
 end Giflib.Internal.Decoder_Storage;
