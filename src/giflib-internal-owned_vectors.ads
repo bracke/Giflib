@@ -8,8 +8,7 @@ generic
      (Index_Type => Positive,
       Element_Type => Element_Type,
       Element_Array => <>,
-      Default_Element => <>,
-      Element_Operations_Are_No_Throw => <>);
+      Default_Element => <>);
    Initial_Capacity : Positive := 16;
 package Giflib.Internal.Owned_Vectors is
    pragma Preelaborate;

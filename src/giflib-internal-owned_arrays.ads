@@ -7,16 +7,10 @@ generic
    type Element_Type is private;
    type Element_Array is array (Index_Type range <>) of Element_Type;
    Default_Element : Element_Type;
-   --  Required because assignment during growth and finalization during
-   --  deallocation cannot be translated safely after partial execution.
-   Element_Operations_Are_No_Throw : Boolean;
 package Giflib.Internal.Owned_Arrays is
    pragma Preelaborate;
    pragma Unevaluated_Use_Of_Old (Allow);
    use type Cleanup.Cleanup_Status;
-   pragma Compile_Time_Error
-     (not Element_Operations_Are_No_Throw,
-      "Owned_Arrays requires non-raising assignment and finalization");
    pragma Compile_Time_Error
      (Index_Type'Pos (Index_Type'First) < Integer'Pos (Integer'First)
       or else Index_Type'Pos (Index_Type'Last) > Integer'Pos (Integer'Last),

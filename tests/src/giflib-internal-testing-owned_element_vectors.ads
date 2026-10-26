@@ -6,8 +6,6 @@ with Giflib.Internal.Ownership;
 
 generic
    type Element_Type is limited private;
-   --  Test-support instances must use elements whose finalization cannot raise.
-   Element_Operations_Are_No_Throw : Boolean;
    --  The preflight must not mutate Element.  Once it returns True,
    --  Release_Contents consumes all nested resources; its outcome reports
    --  cleanup/accounting status rather than whether the resources remain.
@@ -15,17 +13,17 @@ generic
    --  must tolerate retry of that same element after any partial work.
    with function Contents_Releasable
      (Element : Element_Type;
-      Budget : aliased Ownership.Byte_Budget) return Boolean;
+      Budget : aliased Giflib.Internal.Ownership.Byte_Budget) return Boolean;
    with function Release_Contents
      (Element : in out Element_Type;
-      Budget : aliased in out Ownership.Byte_Budget)
-      return Cleanup.Cleanup_Outcome;
-package Giflib.Internal.Owned_Element_Vectors
+      Budget : aliased in out Giflib.Internal.Ownership.Byte_Budget)
+      return Giflib.Internal.Cleanup.Cleanup_Outcome;
+package Giflib.Internal.Testing.Owned_Element_Vectors
   with Preelaborate
 is
-   pragma Compile_Time_Error
-     (not Element_Operations_Are_No_Throw,
-      "Owned_Element_Vectors requires non-raising finalization");
+   package Borrow_Guards renames Giflib.Internal.Borrow_Guards;
+   package Cleanup renames Giflib.Internal.Cleanup;
+   package Ownership renames Giflib.Internal.Ownership;
    type Handle is limited private;
 
    function Append_New
@@ -67,10 +65,9 @@ is
 private
    type Element_Access is access all Element_Type;
    type Index_Array is array (Positive range <>) of Element_Access;
-   package Index_Storage is new Owned_Arrays
-     (Positive, Element_Access, Index_Array, null,
-      Element_Operations_Are_No_Throw => True);
-   package Indexes is new Owned_Vectors
+   package Index_Storage is new Giflib.Internal.Owned_Arrays
+     (Positive, Element_Access, Index_Array, null);
+   package Indexes is new Giflib.Internal.Owned_Vectors
      (Element_Type => Element_Access, Storage => Index_Storage);
 
    type Handle is limited record
@@ -80,4 +77,4 @@ private
       Cleanup_Position : Natural := 0;
       Cleanup_Status : Cleanup.Cleanup_Status := Cleanup.Cleanup_Complete;
    end record;
-end Giflib.Internal.Owned_Element_Vectors;
+end Giflib.Internal.Testing.Owned_Element_Vectors;

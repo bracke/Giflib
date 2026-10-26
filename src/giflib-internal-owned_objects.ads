@@ -4,15 +4,10 @@ with Giflib.Internal.Cleanup;
 
 generic
    type Element_Type is limited private;
-   --  Required because deallocation finalizes Element_Type before release.
-   Element_Operations_Are_No_Throw : Boolean;
 package Giflib.Internal.Owned_Objects is
    pragma Preelaborate;
    pragma Unevaluated_Use_Of_Old (Allow);
    use type Cleanup.Cleanup_Status;
-   pragma Compile_Time_Error
-     (not Element_Operations_Are_No_Throw,
-      "Owned_Objects requires non-raising finalization");
 
    type Handle is limited private;
    --  A successful Ensure binds the handle to Budget until Release.  The

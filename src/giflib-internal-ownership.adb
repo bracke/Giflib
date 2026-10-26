@@ -97,7 +97,7 @@ package body Giflib.Internal.Ownership is
             Allocate;
             Commit (Ticket);
          exception
-            when Storage_Error =>
+            when others =>
                Cancel (Ticket, Outcome);
          end;
       end if;

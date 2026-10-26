@@ -12,7 +12,7 @@ with Giflib.Internal.Ownership_Arithmetic;
 with Giflib.Internal.Work_Budgets;
 with Giflib.Internal.Owned_Arrays;
 with Giflib.Internal.Owned_Buffers;
-with Giflib.Internal.Owned_Element_Vectors;
+with Giflib.Internal.Testing.Owned_Element_Vectors;
 with Giflib.Internal.Owned_Objects;
 with Giflib.Internal.Owned_Vectors;
 with Giflib.Streams;
@@ -26,16 +26,26 @@ package body Giflib.Testing.Test_Ownership_Failures is
 
    type Test_Array is array (Natural range <>) of Integer;
    package Test_Array_Ownership is new Giflib.Internal.Owned_Arrays
-     (Natural, Integer, Test_Array, 0,
-      Element_Operations_Are_No_Throw => True);
+     (Natural, Integer, Test_Array, 0);
    type Test_Vector_Array is array (Positive range <>) of Integer;
    package Test_Vector_Storage is new Giflib.Internal.Owned_Arrays
-     (Positive, Integer, Test_Vector_Array, 0,
-      Element_Operations_Are_No_Throw => True);
+     (Positive, Integer, Test_Vector_Array, 0);
    package Test_Vector is new Giflib.Internal.Owned_Vectors
      (Element_Type => Integer,
       Storage => Test_Vector_Storage,
       Initial_Capacity => 2);
+
+   function Raise_On_Default return Integer is
+   begin
+      return (raise Constraint_Error with "raising default probe");
+   end Raise_On_Default;
+
+   type Raising_Test_Object is limited record
+      Value : Integer := Raise_On_Default;
+   end record
+     with No_Controlled_Parts => True;
+   package Raising_Objects is new Giflib.Internal.Owned_Objects
+     (Raising_Test_Object);
 
    type Cleanup_Test_Element is limited record
       Value : Natural := 0;
@@ -43,7 +53,8 @@ package body Giflib.Testing.Test_Ownership_Failures is
       Cleanup_Succeeds : Boolean := True;
       Preflight_Raises : Boolean := False;
       Cleanup_Raises : Boolean := False;
-   end record;
+   end record
+     with No_Controlled_Parts => True;
    Released_Element_Contents : Natural := 0;
 
    function Can_Release_Element_Contents
@@ -76,9 +87,9 @@ package body Giflib.Testing.Test_Ownership_Failures is
          else (Status => Giflib.Internal.Cleanup.Cleanup_Callback_Failed));
    end Release_Element_Contents;
 
-   package Cleanup_Elements is new Giflib.Internal.Owned_Element_Vectors
+   package Cleanup_Elements is new
+     Giflib.Internal.Testing.Owned_Element_Vectors
      (Element_Type => Cleanup_Test_Element,
-      Element_Operations_Are_No_Throw => True,
       Contents_Releasable => Can_Release_Element_Contents,
       Release_Contents => Release_Element_Contents);
 
@@ -128,6 +139,8 @@ package body Giflib.Testing.Test_Ownership_Failures is
      (T : in out AUnit.Test_Cases.Test_Case'Class);
    procedure Failure_Injection_Is_Object_Local
      (T : in out AUnit.Test_Cases.Test_Case'Class);
+   procedure Raising_Initialization_Is_Structured
+     (T : in out AUnit.Test_Cases.Test_Case'Class);
    procedure Owned_Resources_Reject_Foreign_Ledgers
      (T : in out AUnit.Test_Cases.Test_Case'Class);
    procedure Owned_Array_Ranges_Are_Structured
@@ -164,6 +177,9 @@ package body Giflib.Testing.Test_Ownership_Failures is
       Register_Routine
         (T, Failure_Injection_Is_Object_Local'Access,
          "allocation_failures.object_local_injection");
+      Register_Routine
+        (T, Raising_Initialization_Is_Structured'Access,
+         "allocation_failures.raising_initialization");
       Register_Routine
         (T, Owned_Resources_Reject_Foreign_Ledgers'Access,
          "allocation_failures.owner_identity");
@@ -262,6 +278,24 @@ package body Giflib.Testing.Test_Ownership_Failures is
          "allocation failure injection crossed object boundaries");
    end Failure_Injection_Is_Object_Local;
 
+   procedure Raising_Initialization_Is_Structured
+     (T : in out AUnit.Test_Cases.Test_Case'Class)
+   is
+      pragma Unreferenced (T);
+      Object : Raising_Objects.Handle;
+      Budget : aliased Giflib.Internal.Ownership.Byte_Budget;
+      Fault : Giflib.Internal.Ownership.Fault_State;
+      Outcome : Giflib.Internal.Ownership.Allocation_Outcome;
+   begin
+      Outcome := Raising_Objects.Ensure
+        (Object, Budget, Fault, Raising_Objects.Allocation_Bytes);
+      Assert
+        (Outcome.Status = Giflib.Internal.Ownership.Allocation_Storage_Error
+         and then not Raising_Objects.Is_Allocated (Object)
+         and then Giflib.Internal.Ownership.Used (Budget) = 0,
+         "raising default initialization escaped or retained its reservation");
+   end Raising_Initialization_Is_Structured;
+
    procedure Owned_Resources_Reject_Foreign_Ledgers
      (T : in out AUnit.Test_Cases.Test_Case'Class)
    is
@@ -269,9 +303,10 @@ package body Giflib.Testing.Test_Ownership_Failures is
       package Buffers renames Giflib.Internal.Owned_Buffers;
       type Test_Object is limited record
          Value : Giflib.Byte := 0;
-      end record;
+      end record
+        with No_Controlled_Parts => True;
       package Objects is new Giflib.Internal.Owned_Objects
-        (Test_Object, Element_Operations_Are_No_Throw => True);
+        (Test_Object);
       Buffer : Buffers.Handle;
       Object : Objects.Handle;
       First_Budget : aliased Giflib.Internal.Ownership.Byte_Budget;

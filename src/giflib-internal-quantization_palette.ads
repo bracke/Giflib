@@ -13,7 +13,8 @@ package Giflib.Internal.Quantization_Palette is
       Counts : Histogram_Array := [others => 0];
       Occupied : Occupied_Array := [others => 0];
       Occupied_Count : Natural range 0 .. Occupied_Position'Last := 0;
-   end record;
+   end record
+     with No_Controlled_Parts => True;
 
    function Build_Median_Cut
      (Histogram       : in out Histogram_State;

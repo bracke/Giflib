@@ -46,7 +46,8 @@ package Giflib.Internal.LZW_Encoding is
 private
    type Workspace is limited record
       Dictionary : LZW_Encoder_Dictionary.Dictionary;
-   end record;
+   end record
+     with No_Controlled_Parts => True;
 
    function Encode
      (Context : in out Workspace;
@@ -56,7 +57,7 @@ private
       Statistics : out Encode_Statistics) return Results.Result;
 
    package Workspace_Ownership is new Owned_Objects
-     (Workspace, Element_Operations_Are_No_Throw => True);
+     (Workspace);
    type Workspace_Handle is limited record
       Owner : Workspace_Ownership.Handle;
    end record;

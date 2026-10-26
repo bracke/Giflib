@@ -59,16 +59,15 @@ private
       Value : Palette_Index := 0;
    end record;
    type Cache_Array is
-     array (Natural range 0 .. Cache_Capacity - 1) of Cache_Item;
+     array (Natural range 0 .. Cache_Capacity - 1) of Cache_Item
+       with No_Controlled_Parts => True;
 
    package Histogram_Ownership is new Owned_Objects
-     (Quantization_Palette.Histogram_State,
-      Element_Operations_Are_No_Throw => True);
+     (Quantization_Palette.Histogram_State);
    package Nearest_Cache_Ownership is new Owned_Objects
-     (Cache_Array, Element_Operations_Are_No_Throw => True);
+     (Cache_Array);
    package Error_Ownership is new Owned_Arrays
-     (Natural, Long_Integer, Quantization_Dithering.Error_Array, 0,
-      Element_Operations_Are_No_Throw => True);
+     (Natural, Long_Integer, Quantization_Dithering.Error_Array, 0);
 
    type Resources is new Ada.Finalization.Limited_Controlled with record
       Histogram_Data : Histogram_Ownership.Handle;

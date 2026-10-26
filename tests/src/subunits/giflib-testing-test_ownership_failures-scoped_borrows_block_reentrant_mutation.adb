@@ -6,9 +6,10 @@ is
    package Buffers renames Giflib.Internal.Owned_Buffers;
    type Test_Object is limited record
       Value : Natural := 0;
-   end record;
+   end record
+     with No_Controlled_Parts => True;
    package Objects is new Giflib.Internal.Owned_Objects
-     (Test_Object, Element_Operations_Are_No_Throw => True);
+     (Test_Object);
    package Object_Results is new Objects.Result_Operations (Boolean);
    Buffer : Buffers.Handle;
    Object : Objects.Handle;
