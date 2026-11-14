@@ -1,44 +1,70 @@
-with Ada.Containers.Vectors;
-with Ada.Strings.Unbounded;
+with Giflib_Tooling.Source_Limits;
+with Giflib_Tooling.Model_Storage_Budgets;
+with Giflib_Tooling.Source_Events;
+with Giflib_Tooling.Source_Units;
+with Giflib_Tooling.Source_Tokens;
+with Giflib_Tooling.Work_Budgets;
 
-package Giflib_Tooling.Source_Model is
-   use Ada.Strings.Unbounded;
-
-   type Token_Kind is (Identifier, String_Literal, Character_Literal, Symbol);
-   type Token is record
-      Kind : Token_Kind := Symbol;
-      Text : Unbounded_String;
-   end record;
-
-   package Token_Vectors is new Ada.Containers.Vectors
-     (Index_Type => Positive, Element_Type => Token);
-   package Name_Vectors is new Ada.Containers.Vectors
-     (Index_Type => Positive, Element_Type => Unbounded_String);
-
-   function Lex (Text : String) return Token_Vectors.Vector;
-   function Image (Item : Token) return String;
-   function Image (Items : Token_Vectors.Vector) return String;
-   function Lower (Value : String) return String;
-   function Contains_Code (Text : String; Pattern : String) return Boolean;
-   function Has_GPR_With (Text : String; Project_Path : String) return Boolean;
-   function GPR_Attribute_Strings
-     (Text : String; Attribute_Name : String) return Name_Vectors.Vector;
-   function Has_Config_Assignment
-     (Text : String; Key : String; Value : String) return Boolean;
-   function Record_Fields
-     (Text : String; Type_Name : String) return Name_Vectors.Vector;
-   function Session_Identifiers
-     (Text : String; Type_Name : String) return Name_Vectors.Vector;
-   function Nested_Program_Units (Text : String) return Name_Vectors.Vector;
+private package Giflib_Tooling.Source_Model is
+   type Parsed_Source is private;
+   function Lex
+     (Text : String;
+      Constraints : Giflib_Tooling.Source_Limits.Parsing_Limits :=
+        Giflib_Tooling.Source_Limits.Default_Parsing_Limits)
+      return Giflib_Tooling.Source_Tokens.Token_Vectors.Vector;
+   function Parse
+     (Text : String;
+      Constraints : Giflib_Tooling.Source_Limits.Parsing_Limits :=
+        Giflib_Tooling.Source_Limits.Default_Parsing_Limits)
+      return Parsed_Source;
+   function Parse
+     (Text : String;
+      Constraints : Giflib_Tooling.Source_Limits.Parsing_Limits;
+      Budget : in out Giflib_Tooling.Work_Budgets.Budget)
+      return Parsed_Source;
+   function Parse
+     (Text : String;
+      Constraints : Giflib_Tooling.Source_Limits.Parsing_Limits;
+      Budget : in out Giflib_Tooling.Work_Budgets.Budget;
+      Storage : in out Giflib_Tooling.Model_Storage_Budgets.Budget)
+      return Parsed_Source;
+   function Parse_Through
+     (Text : String;
+      Position : Natural;
+      Constraints : Giflib_Tooling.Source_Limits.Parsing_Limits :=
+        Giflib_Tooling.Source_Limits.Default_Parsing_Limits)
+      return Parsed_Source;
+   procedure Inspect_Tokens
+     (Source : Parsed_Source;
+      Process : not null access procedure
+        (Items : Giflib_Tooling.Source_Tokens.Token_Vectors.Vector));
+   procedure Inspect_Program_Units
+     (Source : Parsed_Source;
+      Process : not null access procedure
+        (Item : Giflib_Tooling.Source_Units.Program_Unit));
+   procedure Inspect_Syntax
+     (Source : Parsed_Source;
+      Process : not null access procedure
+        (Items : Giflib_Tooling.Source_Tokens.Token_Vectors.Vector;
+         Events : Giflib_Tooling.Source_Events.Structural_Event_Vectors.Vector));
+   function Separate_Clause_Of
+     (Source : Parsed_Source) return Giflib_Tooling.Source_Units.Separate_Clause;
+   function Storage_Work (Source : Parsed_Source) return Natural;
+   function Storage_Units (Source : Parsed_Source) return Natural;
    function Has_Nested_Program_Unit (Text : String) return Boolean;
-
+   procedure Scan_Statements
+     (Source : Parsed_Source;
+      Process : not null access procedure
+        (Statement : Giflib_Tooling.Source_Tokens.Token_Vectors.Vector));
    procedure Scan_Statements
      (Text : String;
-      Process : not null access procedure (Statement : Token_Vectors.Vector));
-
-   function Contains (Names : Name_Vectors.Vector; Name : String) return Boolean;
-   function Join_Callee
-     (Statement : Token_Vectors.Vector; Open_Paren : Positive) return String;
-   function Enclosing_Callee
-     (Statement : Token_Vectors.Vector; Actual : Positive) return String;
+      Process : not null access procedure
+        (Statement : Giflib_Tooling.Source_Tokens.Token_Vectors.Vector));
+private
+   type Parsed_Source is record
+      Token_Data : Giflib_Tooling.Source_Tokens.Token_Vectors.Vector;
+      Unit_Data : Giflib_Tooling.Source_Units.Program_Unit_Vectors.Vector;
+      Event_Data : Giflib_Tooling.Source_Events.Structural_Event_Vectors.Vector;
+      Clause_Data : Giflib_Tooling.Source_Units.Separate_Clause;
+   end record;
 end Giflib_Tooling.Source_Model;

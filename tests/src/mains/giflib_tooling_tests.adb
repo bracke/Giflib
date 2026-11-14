@@ -17,7 +17,7 @@ procedure Giflib_Tooling_Tests is
        (Ada.Directories.Containing_Directory (Ada.Command_Line.Command_Name),
         "giflib_tooling_probe");
 begin
-   Giflib_Tooling.Self_Tests.Run;
+   Giflib_Tooling.Self_Tests.Run (Root);
    Giflib_Tooling.Self_Tests.Run_Mutations (Root, Probe);
    Ada.Text_IO.Put_Line ("giflib tooling tests passed");
 exception

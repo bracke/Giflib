@@ -80,15 +80,17 @@ begin
    declare
       package Palette_Builder renames
         Giflib.Internal.Quantization_Palette;
-      Histogram : Palette_Builder.Histogram_State;
+      package Histograms renames
+        Giflib.Internal.Quantization_Histograms;
+      Histogram : Histograms.Histogram_State;
       Median_Palette : Giflib.Palettes.Palette;
       Work : Giflib.Internal.Work_Budgets.Meter (8);
    begin
       Histogram.Occupied_Count := 2;
       Histogram.Occupied (1) := 0;
-      Histogram.Occupied (2) := Palette_Builder.Histogram_Index'Last;
+      Histogram.Occupied (2) := Histograms.Histogram_Index'Last;
       Histogram.Counts (0) := 1;
-      Histogram.Counts (Palette_Builder.Histogram_Index'Last) := 1;
+      Histogram.Counts (Histograms.Histogram_Index'Last) := 1;
       Outcome := Palette_Builder.Build_Median_Cut
         (Histogram,
          Generated_Start => 0,

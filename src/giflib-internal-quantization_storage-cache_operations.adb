@@ -52,35 +52,24 @@ package body Giflib.Internal.Quantization_Storage.Cache_Operations is
          for Offset in 0 .. Cache_Probe_Limit - 1 loop
             Slot := (Start + Offset) mod Cache_Capacity;
             if not Cache (Slot).Used then
-               Result :=
-                 (Status => Outcomes.Budgeted_Ready,
-                  Found => False,
-                  Value => 0,
-                  Store_Slot => Slot);
+               Result := (Kind => Probe_Miss, Store_Slot => Slot);
                return;
             elsif Cache (Slot).Key = Key then
                Result :=
-                 (Status => Outcomes.Budgeted_Ready,
-                  Found => True,
-                  Value => Cache (Slot).Value,
-                  Store_Slot => Slot);
+                 (Kind => Probe_Hit, Value => Cache (Slot).Value);
                return;
             end if;
          end loop;
-         Result :=
-           (Status => Outcomes.Budgeted_Ready,
-            Found => False,
-            Value => 0,
-            Store_Slot => Start);
+         Result := (Kind => Probe_Miss, Store_Slot => Start);
       end Search;
    begin
       if not Nearest_Cache_Allocated (Object) or else Key > Cache_Key_Last then
-         return (others => <>);
+         return (Kind => Probe_Invariant_Failure);
       end if;
       Work_Budgets.Try_Charge
         (Work, Byte_Count (Cache_Probe_Limit), Accepted);
       if not Accepted then
-         return (Status => Outcomes.Budgeted_Work_Limit, others => <>);
+         return (Kind => Probe_Work_Limit);
       end if;
       Start := Cache_Start (Key);
       Nearest_Cache_Ownership.Query

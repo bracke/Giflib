@@ -4,7 +4,7 @@ with Giflib.Internal.Ownership;
 private with Giflib.Internal.Owned_Arrays;
 private with Giflib.Internal.Owned_Objects;
 private with Giflib.Internal.Quantization_Dithering;
-private with Giflib.Internal.Quantization_Palette;
+private with Giflib.Internal.Quantization_Histograms;
 
 package Giflib.Internal.Quantization_Storage is
    pragma Preelaborate;
@@ -62,11 +62,11 @@ private
      array (Natural range 0 .. Cache_Capacity - 1) of Cache_Item
        with No_Controlled_Parts => True;
 
-   package Histogram_Ownership is new Owned_Objects
-     (Quantization_Palette.Histogram_State);
-   package Nearest_Cache_Ownership is new Owned_Objects
+   package Histogram_Ownership is new Giflib.Internal.Owned_Objects
+     (Quantization_Histograms.Histogram_State);
+   package Nearest_Cache_Ownership is new Giflib.Internal.Owned_Objects
      (Cache_Array);
-   package Error_Ownership is new Owned_Arrays
+   package Error_Ownership is new Giflib.Internal.Owned_Arrays
      (Natural, Long_Integer, Quantization_Dithering.Error_Array, 0);
 
    type Resources is new Ada.Finalization.Limited_Controlled with record

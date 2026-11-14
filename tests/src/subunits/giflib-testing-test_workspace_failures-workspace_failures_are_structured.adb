@@ -8,6 +8,7 @@ is
    package Cache renames Storage.Cache_Operations;
    package Dither renames Storage.Dither_Operations;
    package Histogram renames Storage.Histogram_Operations;
+   use type Cache.Probe_Kind;
    Object : Storage.Resources;
    Fault : Giflib.Internal.Ownership.Fault_State;
    Outcome : Giflib.Internal.Ownership.Allocation_Outcome;
@@ -44,7 +45,7 @@ begin
    Probe := Cache.Probe (Object, 0, Missing_Work);
    Assert
      (Budgeted = Outcomes.Budgeted_Invariant_Failure
-      and then Probe.Status = Outcomes.Budgeted_Invariant_Failure
+      and then Probe.Kind = Cache.Probe_Invariant_Failure
       and then Cache.Store (Object, 0, 0, 0) =
         Outcomes.Storage_Invariant_Failure,
       "missing nearest cache accepted an operation");
@@ -72,7 +73,7 @@ begin
       "nearest-cache reset failed");
    Probe := Cache.Probe (Object, 0, Probe_Work);
    Assert
-     (Probe.Status = Outcomes.Budgeted_Work_Limit
+     (Probe.Kind = Cache.Probe_Work_Limit
       and then Giflib.Internal.Work_Budgets.Failed (Probe_Work),
       "cache probing did not reserve work before searching");
    Budgeted := Cache.Reset (Object, Cache_Work);

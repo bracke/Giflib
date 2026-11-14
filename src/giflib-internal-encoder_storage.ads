@@ -32,6 +32,8 @@ package Giflib.Internal.Encoder_Storage is
         then LZW_Allocated (Object));
    function Is_Released (Object : Resources) return Boolean;
    function Allocated_Bytes (Object : Resources) return Byte_Count;
+   function First_Cleanup_Status
+     (Object : Resources) return Cleanup.Cleanup_Status;
 
    function Release
      (Object : in out Resources) return Cleanup.Cleanup_Outcome;

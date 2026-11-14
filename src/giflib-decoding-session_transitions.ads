@@ -18,15 +18,10 @@ is
       and then Object.Total_Decoded_Pixels = 0
       and then Object.Total_Compressed_Bytes = 0
       and then Object.Extensions_Seen = 0
-      and then Object.Pending_Control = Frames.Default_Control
-      and then not Object.Has_Pending_Control
-      and then Object.Pending_Frame = Prepared_Frame'(others => <>)
-      and then not Object.Has_Pending_Frame
+      and then not Object.Pending_Control.Present
+      and then not Object.Pending_Frame.Present
       and then Object.Loop_Data = Animations.No_Loop
-      and then Object.Snapshot_Rectangle = Frames.Rectangle'(others => <>)
-      and then Object.Previous_Rectangle = Frames.Rectangle'(others => <>)
-      and then Object.Previous_Control = Frames.Default_Control
-      and then not Object.Has_Previous_Frame
+      and then not Object.Previous_Frame.Present
       and then Object.Stored_Warnings = 0);
 
    procedure Begin_Session
@@ -95,13 +90,14 @@ is
    procedure Await_Frame_Decision (Object : in out Decoder)
      with Pre => Object.Current_State = Decoding_Frame,
           Post => Object.Current_State = Awaiting_Frame_Decision
-                  and then Object.Has_Pending_Frame;
+                  and then Object.Pending_Frame.Present;
 
    procedure Stage_Frame
      (Object : in out Decoder;
       Frame : Prepared_Frame)
      with Pre => Object.Current_State = Decoding_Frame
-                 and then not Object.Has_Pending_Frame,
+                 and then not Object.Pending_Frame.Present
+                 and then Frame.Present,
           Post => Object.Pending_Frame = Frame;
 
    procedure Begin_Frame (Object : in out Decoder)
@@ -117,13 +113,12 @@ is
      (Object : in out Decoder;
       Control : Frames.Graphic_Control)
      with Pre => Object.Current_State = Header_Ready,
-          Post => Object.Pending_Control = Control
-                  and then Object.Has_Pending_Control;
+          Post => Object.Pending_Control.Present
+                  and then Object.Pending_Control.Value = Control;
 
    procedure Clear_Pending_Control (Object : in out Decoder)
      with Pre => Object.Current_State = Header_Ready,
-          Post => Object.Pending_Control = Frames.Default_Control
-                  and then not Object.Has_Pending_Control;
+          Post => not Object.Pending_Control.Present;
 
    procedure Set_Loop
      (Object : in out Decoder;
@@ -142,33 +137,23 @@ is
                   and then Object.Total_Compressed_Bytes = Compressed_Bytes;
 
    procedure Clear_Resource_State (Object : in out Decoder)
-     with Post => Object.Pending_Frame = Prepared_Frame'(others => <>)
-                  and then not Object.Has_Pending_Frame
-                  and then Object.Snapshot_Rectangle =
-                    Frames.Rectangle'(others => <>)
-                  and then Object.Previous_Rectangle =
-                    Frames.Rectangle'(others => <>)
-                  and then not Object.Has_Previous_Frame
-                  and then Object.Previous_Control = Frames.Default_Control;
+     with Post => not Object.Pending_Frame.Present
+                  and then not Object.Previous_Frame.Present;
 
    procedure Clear_Previous_Frame (Object : in out Decoder)
      with Pre => Object.Current_State = Decoding_Frame,
-          Post => not Object.Has_Previous_Frame;
-
-   procedure Commit_Snapshot
-     (Object : in out Decoder;
-      Rectangle : Frames.Rectangle)
-     with Pre => Object.Current_State = Decoding_Frame,
-          Post => Object.Snapshot_Rectangle = Rectangle;
+          Post => not Object.Previous_Frame.Present;
 
    procedure Commit_Composited_Frame
      (Object : in out Decoder;
       Rectangle : Frames.Rectangle;
       Control : Frames.Graphic_Control)
      with Pre => Object.Current_State = Decoding_Frame,
-          Post => Object.Previous_Rectangle = Rectangle
-                  and then Object.Previous_Control = Control
-                  and then Object.Has_Previous_Frame;
+          Post => Object.Previous_Frame.Present
+                  and then Object.Previous_Frame.Rectangle = Rectangle
+                  and then Object.Previous_Frame.Control = Control
+                  and then
+                    Object.Previous_Frame.Snapshot_Rectangle = Rectangle;
 
    procedure Complete_Stream (Object : in out Decoder)
      with Pre => Object.Current_State = Header_Ready,
@@ -181,13 +166,11 @@ is
 
    procedure Complete_Frame (Object : in out Decoder)
      with Pre => Object.Current_State = Decoding_Frame
-                 and then Object.Has_Pending_Frame
+                 and then Object.Pending_Frame.Present
                  and then Object.Frames_Seen < Frame_Ordinal'Last,
           Post => Object.Current_State = Header_Ready
-                  and then not Object.Has_Pending_Frame
-                  and then not Object.Has_Pending_Control
-                  and then Object.Pending_Control = Frames.Default_Control
-                  and then Object.Pending_Frame = Prepared_Frame'(others => <>)
+                  and then not Object.Pending_Frame.Present
+                  and then not Object.Pending_Control.Present
                   and then Object.Frames_Seen = Object.Frames_Seen'Old + 1;
 
    procedure Finalize_Session (Object : in out Decoder)

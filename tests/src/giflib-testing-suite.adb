@@ -45,7 +45,7 @@ package body Giflib.Testing.Suite is
         new Giflib.Testing.Test_Compositing.Test;
       Descriptors : constant AUnit.Test_Cases.Test_Case_Access :=
         new Giflib.Testing.Test_Descriptors.Test;
-      Decoder : constant AUnit.Test_Cases.Test_Case_Access :=
+      Primary_Decoder : constant AUnit.Test_Cases.Test_Case_Access :=
         new Giflib.Testing.Test_Decoder.Test;
       LZW : constant AUnit.Test_Cases.Test_Case_Access :=
         new Giflib.Testing.Test_LZW.Test;
@@ -80,7 +80,7 @@ package body Giflib.Testing.Suite is
       Suite.Add_Test (Container);
       Suite.Add_Test (Compositing);
       Suite.Add_Test (Descriptors);
-      Suite.Add_Test (Decoder);
+      Suite.Add_Test (Primary_Decoder);
       Suite.Add_Test (LZW);
       Suite.Add_Test (LZW_Encoding);
       Suite.Add_Test (Optimization);

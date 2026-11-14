@@ -8,7 +8,7 @@ is
    First_Length : Natural;
    Outcome : Results.Result;
 begin
-   Outcome := Read_Fixed_Block (Object, Info, Fixed);
+   Outcome := Transport.Read_Fixed_Block (Object, Info, Fixed);
    if not Results.Succeeded (Outcome) then
       return Outcome;
    end if;
@@ -20,12 +20,12 @@ begin
    end loop;
    Info.Payload_Length := 11;
    Info.Sub_Block_Count := 1;
-   Outcome := Start_Retention (Object, Info);
+   Outcome := Retention.Start (Object, Info);
    if Results.Succeeded (Outcome) then
-      Outcome := Retain_Chunk (Object, Fixed);
+      Outcome := Retention.Append (Object, Fixed);
    end if;
    if Results.Succeeded (Outcome) then
-      Outcome := Read_Sub_Blocks
+      Outcome := Transport.Read_Sub_Blocks
         (Object, Info, First_Data, First_Length);
    end if;
    if Results.Succeeded (Outcome)

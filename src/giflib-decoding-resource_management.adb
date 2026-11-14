@@ -1,12 +1,8 @@
 with Giflib.Internal.Diagnostics;
-with Giflib.Internal.Decoder_Storage.Image_Operations;
 with Giflib.Internal.Resource_Diagnostics;
-with Giflib.Internal.Geometry_Arithmetic;
-with Giflib.Palettes;
 with Giflib.Decoding.Session_Transitions;
 
 package body Giflib.Decoding.Resource_Management is
-   use type Internal.Ownership.Allocation_Status;
    use type Internal.Cleanup.Cleanup_Status;
 
    function Release
@@ -22,15 +18,15 @@ package body Giflib.Decoding.Resource_Management is
    begin
       Session_Transitions.Clear_Resource_State (Object);
       return
-        (if Internal.Decoder_Storage.First_Cleanup_Status (Object.Resources) /=
-              Internal.Cleanup.Cleanup_Complete
-         then
-           (Status =>
-              Internal.Decoder_Storage.First_Cleanup_Status (Object.Resources))
-         else Current);
+        (Status =>
+           (if Internal.Decoder_Storage.First_Cleanup_Status
+                 (Object.Resources) /= Internal.Cleanup.Cleanup_Complete
+            then Internal.Decoder_Storage.First_Cleanup_Status
+              (Object.Resources)
+            else Current.Status));
    end Release;
 
-   function Allocation_Result
+   function Complete_Allocation
      (Object : Decoder;
       Allocation : Internal.Ownership.Allocation_Outcome;
       Include_Frame : Boolean := True)
@@ -45,13 +41,12 @@ package body Giflib.Decoding.Resource_Management is
                else (Present => False)),
             others => <>));
    begin
-      return Results.Failure
-        (Internal.Resource_Diagnostics.Allocation_Error
-           (Allocation,
-            Object.Constraints.Max_Allocation_Bytes,
-            Allocation.Attempted,
-            Context));
-   end Allocation_Result;
+      return Internal.Resource_Diagnostics.Allocation_Result
+        (Allocation,
+         Object.Constraints.Max_Allocation_Bytes,
+         Allocation.Attempted,
+         Context);
+   end Complete_Allocation;
 
    function Ensure_Frame_Scratch
      (Object : in out Decoder;
@@ -67,10 +62,7 @@ package body Giflib.Decoding.Resource_Management is
          Object.Allocation_Fault,
          Required,
          Object.Constraints.Max_Allocation_Bytes);
-      if Allocation.Status /= Internal.Ownership.Allocation_Ready then
-         return Allocation_Result (Object, Allocation);
-      end if;
-      return Results.Success;
+      return Complete_Allocation (Object, Allocation);
    end Ensure_Frame_Scratch;
 
    function Ensure_LZW_Workspace
@@ -82,162 +74,43 @@ package body Giflib.Decoding.Resource_Management is
         (Object.Resources,
          Object.Allocation_Fault,
          Object.Constraints.Max_Allocation_Bytes);
-      if Allocation.Status /= Internal.Ownership.Allocation_Ready then
-         return Allocation_Result (Object, Allocation);
-      end if;
-      return Results.Success;
+      return Complete_Allocation (Object, Allocation);
    end Ensure_LZW_Workspace;
 
-   function Setup_Canvas
+   function Ensure_Snapshot
      (Object : in out Decoder;
-      Header : Header_Info) return Results.Result is
-      Pixels : constant Byte_Count :=
-        Internal.Geometry_Arithmetic.Area
-          (Header.Width, Header.Height);
-      Bytes : constant Byte_Count := Pixels * 4;
-      Background : Palettes.RGB_Color := (others => 0);
-      Has_Background : Boolean := False;
+      Required : Byte_Count) return Results.Result
+   is
       Allocation : Internal.Ownership.Allocation_Outcome;
    begin
-      if Pixels > Byte_Count (Object.Constraints.Max_Canvas_Pixels) then
-         return Results.Failure
-           (Errors.Make
-              (Errors.Limit_Exceeded,
-               Internal.Diagnostics.At_Source
-                 (Object.Input.all,
-                  (Expected => Byte_Count (Object.Constraints.Max_Canvas_Pixels),
-                   Actual => Pixels,
-                   Limit => Canvas_Pixel_Limit,
-                   others => <>))));
-      elsif Bytes > Object.Constraints.Max_Canvas_Bytes then
-         return Results.Failure
-           (Errors.Make
-              (Errors.Limit_Exceeded,
-               Internal.Diagnostics.At_Source
-                 (Object.Input.all,
-                  (Expected => Object.Constraints.Max_Canvas_Bytes,
-                   Actual => Bytes,
-                   Limit => Canvas_Byte_Limit,
-                   others => <>))));
-      elsif Bytes > Byte_Count (Natural'Last) then
-         return Results.Failure
-           (Errors.Make
-              (Errors.Integer_Overflow,
-               Internal.Diagnostics.At_Source (Object.Input.all)));
+      if Required > Byte_Count (Natural'Last) then
+         return Results.Failure (Errors.Make (Errors.Integer_Overflow));
+      end if;
+      Allocation := Internal.Decoder_Storage.Ensure_Snapshot
+        (Object.Resources,
+         Object.Allocation_Fault,
+         Required,
+         Object.Constraints.Max_Allocation_Bytes);
+      return Complete_Allocation (Object, Allocation);
+   end Ensure_Snapshot;
+
+   function Ensure_Canvas
+     (Object : in out Decoder;
+      Required : Byte_Count) return Results.Result
+   is
+      Allocation : Internal.Ownership.Allocation_Outcome;
+   begin
+      if Required > Byte_Count (Natural'Last) then
+         return Results.Failure (Errors.Make (Errors.Integer_Overflow));
       end if;
       Allocation := Internal.Decoder_Storage.Ensure_Canvas
         (Object.Resources,
          Object.Allocation_Fault,
-         Bytes,
+         Required,
          Object.Constraints.Max_Allocation_Bytes);
-      if Allocation.Status /= Internal.Ownership.Allocation_Ready then
-         return Allocation_Result (Object, Allocation, Include_Frame => False);
-      end if;
-      if Header.Has_Global_Palette
-        and then Palettes.Contains
-          (Header.Global_Palette, Header.Background_Index)
-      then
-         Background := Header.Global_Palette.Colors (Header.Background_Index);
-         Has_Background := True;
-      end if;
-      return Internal.Decoder_Storage.Image_Operations.Initialize_Canvas
-        (Object.Resources, Pixels, Background,
-         (if Has_Background then 255 else 0));
-   end Setup_Canvas;
-
-   function Fill_Background
-     (Object : in out Decoder;
-      Rectangle : Frames.Rectangle) return Results.Result
-   is
-      Color : Palettes.RGB_Color := (others => 0);
-      Alpha : Byte := 0;
-   begin
-      if Object.Header_Data.Has_Global_Palette
-        and then Palettes.Contains
-          (Object.Header_Data.Global_Palette, Object.Header_Data.Background_Index)
-      then
-         Color := Object.Header_Data.Global_Palette.Colors (Object.Header_Data.Background_Index);
-         Alpha := 255;
-      end if;
-      return Internal.Decoder_Storage.Image_Operations.Fill_Canvas_Rectangle
-        (Object.Resources, Object.Header_Data.Width, Rectangle, Color, Alpha);
-   end Fill_Background;
-
-   function Apply_Previous_Disposal (Object : in out Decoder) return Results.Result is
-      Outcome : Results.Result;
-   begin
-      if not Object.Has_Previous_Frame then
-         return Results.Success;
-      end if;
-      case Object.Previous_Control.Disposal is
-         when 2 =>
-            Outcome := Fill_Background (Object, Object.Previous_Rectangle);
-            if not Results.Succeeded (Outcome) then
-               return Outcome;
-            end if;
-         when 3 =>
-            if not Internal.Decoder_Storage.Snapshot_Allocated (Object.Resources) then
-               return Results.Failure
-                 (Errors.Make
-                    (Errors.Internal_Invariant_Failed,
-                     Internal.Diagnostics.At_Source
-                       (Object.Input.all,
-                        (Frame => Errors.Frame_At (Object.Frames_Seen),
-                         others => <>))));
-            end if;
-            Outcome :=
-              Internal.Decoder_Storage.Image_Operations.Restore_Snapshot
-                (Object.Resources, Object.Header_Data.Width,
-                 Object.Snapshot_Rectangle);
-            if not Results.Succeeded (Outcome) then
-               return Outcome;
-            end if;
-         when others =>
-            null;
-      end case;
-      Session_Transitions.Clear_Previous_Frame (Object);
-      return Results.Success;
-   end Apply_Previous_Disposal;
-
-   function Save_Snapshot
-     (Object : in out Decoder;
-      Rectangle : Frames.Rectangle) return Results.Result
-   is
-      Bytes : constant Byte_Count :=
-        Internal.Geometry_Arithmetic.Area (Rectangle.Width, Rectangle.Height) * 4;
-      Outcome : Results.Result;
-      Allocation : Internal.Ownership.Allocation_Outcome;
-   begin
-      if Bytes > Object.Constraints.Max_Compositor_Snapshot_Bytes then
-         return Results.Failure
-           (Errors.Make
-              (Errors.Limit_Exceeded,
-               Internal.Diagnostics.At_Source
-                 (Object.Input.all,
-                  (Frame => Errors.Frame_At (Object.Frames_Seen),
-                   Expected => Object.Constraints.Max_Compositor_Snapshot_Bytes,
-                   Actual => Bytes,
-                   Limit => Snapshot_Byte_Limit,
-                   others => <>))));
-      elsif Bytes > Byte_Count (Natural'Last) then
-         return Results.Failure (Errors.Make (Errors.Integer_Overflow));
-      end if;
-
-      Allocation := Internal.Decoder_Storage.Ensure_Snapshot
-        (Object.Resources,
-         Object.Allocation_Fault,
-         Bytes,
-         Object.Constraints.Max_Allocation_Bytes);
-      if Allocation.Status /= Internal.Ownership.Allocation_Ready then
-         return Allocation_Result (Object, Allocation);
-      end if;
-      Outcome := Internal.Decoder_Storage.Image_Operations.Capture_Snapshot
-        (Object.Resources, Object.Header_Data.Width, Rectangle);
-      if Results.Succeeded (Outcome) then
-         Session_Transitions.Commit_Snapshot (Object, Rectangle);
-      end if;
-      return Outcome;
-   end Save_Snapshot;
+      return Complete_Allocation
+        (Object, Allocation, Include_Frame => False);
+   end Ensure_Canvas;
 
 end Giflib.Decoding.Resource_Management;
 

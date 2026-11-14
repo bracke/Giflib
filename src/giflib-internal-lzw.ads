@@ -53,7 +53,7 @@ private
       Decoded_Count : out Byte_Count;
       Parameters : Decode_Parameters) return Results.Result;
 
-   package Workspace_Ownership is new Owned_Objects
+   package Workspace_Ownership is new Giflib.Internal.Owned_Objects
      (Workspace);
    type Workspace_Handle is limited record
       Owner : Workspace_Ownership.Handle;

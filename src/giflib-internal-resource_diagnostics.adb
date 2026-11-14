@@ -38,4 +38,18 @@ package body Giflib.Internal.Resource_Diagnostics is
             return Errors.Make (Errors.Internal_Invariant_Failed, Context);
       end case;
    end Allocation_Error;
+
+   function Allocation_Result
+     (Outcome : Ownership.Allocation_Outcome;
+      Maximum : Byte_Count;
+      Attempted : Byte_Count;
+      Base : Errors.Diagnostic_Context := (others => <>))
+      return Results.Result is
+   begin
+      if Outcome.Status = Ownership.Allocation_Ready then
+         return Results.Success;
+      end if;
+      return Results.Failure
+        (Allocation_Error (Outcome, Maximum, Attempted, Base));
+   end Allocation_Result;
 end Giflib.Internal.Resource_Diagnostics;

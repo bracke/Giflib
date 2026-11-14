@@ -145,6 +145,16 @@ tagging remains a post-verification release action.
 
 ### Ada tooling inventory
 
+- `giflib_tests`
+- `giflib_generate_samples`
+- `giflib_generate_fixtures`
+- `giflib_external_checks`
+- `giflib_benchmark`
+- `giflib_fuzz`
+- `giflib_check`
+- `giflib_tooling_tests`
+- `giflib_tooling_probe`
+
 The AUnit entry point is `giflib_tests`; the other repository-owned workflow
 programs are `giflib_check`, `giflib_generate_samples`,
 `giflib_generate_fixtures`, `giflib_external_checks`, `giflib_benchmark`, and

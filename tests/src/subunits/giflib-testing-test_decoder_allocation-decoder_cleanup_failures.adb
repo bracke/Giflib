@@ -27,8 +27,19 @@ begin
      (Outcome.First_Error.Code = Giflib.Errors.Internal_Invariant_Failed
       and then Giflib.Decoding.Testing.Resources_Released (Decoder)
       and then Giflib.Decoding.Testing.Last_Cleanup (Decoder) =
+        Giflib.Cleanup.Cleanup_Accounting_Failed
+      and then Giflib.Decoding.First_Cleanup_Status (Decoder) =
         Giflib.Cleanup.Cleanup_Accounting_Failed,
       "decoder cleanup failure lost its status or retained owned storage");
+   Giflib.Decoding.Testing.Repair_Allocation_Budget (Decoder);
+   Giflib.Decoding.Finalize (Decoder);
+   Outcome := Giflib.Decoding.Initialize (Decoder, Options);
+   Assert
+     (not Giflib.Results.Succeeded (Outcome)
+      and then Giflib.Decoding.State (Decoder) = Giflib.Decoding.Failed
+      and then Giflib.Decoding.First_Cleanup_Status (Decoder) =
+        Giflib.Cleanup.Cleanup_Accounting_Failed,
+      "decoder reused a session with a sticky cleanup failure");
    Finish_Scenario (Decoder);
 exception
    when others =>

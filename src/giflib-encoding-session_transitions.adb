@@ -7,10 +7,8 @@ package body Giflib.Encoding.Session_Transitions is
       Object.Options := Options;
       Object.Constraints := Constraints;
       Object.Screen := (others => <>);
-      Object.Global_Palette := (others => <>);
-      Object.Has_Global_Palette := False;
+      Object.Global_Palette := (Present => False);
       Object.Loop_Data := Animations.No_Loop;
-      Object.Header_Written := False;
       Object.Frames_Written := 0;
       Object.Extensions_Written := 0;
       Object.Bytes_Written := 0;
@@ -50,8 +48,7 @@ package body Giflib.Encoding.Session_Transitions is
      (Object : in out Encoder;
       Palette : Palettes.Palette) is
    begin
-      Object.Global_Palette := Palette;
-      Object.Has_Global_Palette := True;
+      Object.Global_Palette := (Present => True, Value => Palette);
    end Set_Global_Palette;
 
    procedure Set_Loop
@@ -68,7 +65,7 @@ package body Giflib.Encoding.Session_Transitions is
       if Loop_Extension_Written then
          State_Arithmetic.Record_Extension (Object.Extensions_Written);
       end if;
-      Object.Header_Written := True;
+      State_Arithmetic.Commit_Header (Object.Current_State);
    end Commit_Header;
 
    procedure Record_Extension (Object : in out Encoder) is

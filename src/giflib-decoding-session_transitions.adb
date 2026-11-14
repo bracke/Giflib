@@ -6,15 +6,10 @@ package body Giflib.Decoding.Session_Transitions is
       Object.Total_Decoded_Pixels := 0;
       Object.Total_Compressed_Bytes := 0;
       Object.Extensions_Seen := 0;
-      Object.Pending_Control := Frames.Default_Control;
-      Object.Has_Pending_Control := False;
-      Object.Pending_Frame := (others => <>);
-      Object.Has_Pending_Frame := False;
+      Object.Pending_Control := (Present => False);
+      Object.Pending_Frame := (Present => False);
       Object.Loop_Data := Animations.No_Loop;
-      Object.Snapshot_Rectangle := (others => <>);
-      Object.Previous_Rectangle := (others => <>);
-      Object.Previous_Control := Frames.Default_Control;
-      Object.Has_Previous_Frame := False;
+      Object.Previous_Frame := (Present => False);
       Object.Stored_Warnings := 0;
    end Reset_Session_Data;
 
@@ -89,8 +84,7 @@ package body Giflib.Decoding.Session_Transitions is
 
    procedure Await_Frame_Decision (Object : in out Decoder) is
    begin
-      State_Arithmetic.Await_Frame_Decision
-        (Object.Current_State, Object.Has_Pending_Frame);
+      State_Arithmetic.Await_Frame_Decision (Object.Current_State);
    end Await_Frame_Decision;
 
    procedure Stage_Frame
@@ -114,14 +108,12 @@ package body Giflib.Decoding.Session_Transitions is
      (Object : in out Decoder;
       Control : Frames.Graphic_Control) is
    begin
-      Object.Pending_Control := Control;
-      Object.Has_Pending_Control := True;
+      Object.Pending_Control := (Present => True, Value => Control);
    end Set_Pending_Control;
 
    procedure Clear_Pending_Control (Object : in out Decoder) is
    begin
-      Object.Pending_Control := Frames.Default_Control;
-      Object.Has_Pending_Control := False;
+      Object.Pending_Control := (Present => False);
    end Clear_Pending_Control;
 
    procedure Set_Loop
@@ -142,34 +134,25 @@ package body Giflib.Decoding.Session_Transitions is
 
    procedure Clear_Resource_State (Object : in out Decoder) is
    begin
-      Object.Pending_Frame := (others => <>);
-      Object.Has_Pending_Frame := False;
-      Object.Snapshot_Rectangle := (others => <>);
-      Object.Previous_Rectangle := (others => <>);
-      Object.Has_Previous_Frame := False;
-      Object.Previous_Control := Frames.Default_Control;
+      Object.Pending_Frame := (Present => False);
+      Object.Previous_Frame := (Present => False);
    end Clear_Resource_State;
 
    procedure Clear_Previous_Frame (Object : in out Decoder) is
    begin
-      Object.Has_Previous_Frame := False;
+      Object.Previous_Frame := (Present => False);
    end Clear_Previous_Frame;
-
-   procedure Commit_Snapshot
-     (Object : in out Decoder;
-      Rectangle : Frames.Rectangle) is
-   begin
-      Object.Snapshot_Rectangle := Rectangle;
-   end Commit_Snapshot;
 
    procedure Commit_Composited_Frame
      (Object : in out Decoder;
       Rectangle : Frames.Rectangle;
       Control : Frames.Graphic_Control) is
    begin
-      Object.Previous_Rectangle := Rectangle;
-      Object.Previous_Control := Control;
-      Object.Has_Previous_Frame := True;
+      Object.Previous_Frame :=
+        (Present => True,
+         Rectangle => Rectangle,
+         Control => Control,
+         Snapshot_Rectangle => Rectangle);
    end Commit_Composited_Frame;
 
    procedure Complete_Stream (Object : in out Decoder) is
@@ -185,13 +168,10 @@ package body Giflib.Decoding.Session_Transitions is
 
    procedure Complete_Frame (Object : in out Decoder) is
    begin
-      Object.Pending_Control := Frames.Default_Control;
-      Object.Pending_Frame := (others => <>);
+      Object.Pending_Control := (Present => False);
+      Object.Pending_Frame := (Present => False);
       State_Arithmetic.Complete_Frame
-        (Object.Current_State,
-         Object.Has_Pending_Control,
-         Object.Has_Pending_Frame,
-         Object.Frames_Seen);
+        (Object.Current_State, Object.Frames_Seen);
    end Complete_Frame;
 
    procedure Finalize_Session (Object : in out Decoder) is

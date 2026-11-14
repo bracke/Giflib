@@ -56,7 +56,7 @@ private
       Parameters : Encode_Parameters;
       Statistics : out Encode_Statistics) return Results.Result;
 
-   package Workspace_Ownership is new Owned_Objects
+   package Workspace_Ownership is new Giflib.Internal.Owned_Objects
      (Workspace);
    type Workspace_Handle is limited record
       Owner : Workspace_Ownership.Handle;

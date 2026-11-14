@@ -1,4 +1,3 @@
-with Giflib.Errors;
 with Giflib.Internal.Diagnostics;
 with Giflib.Internal.LZW_Work;
 
@@ -51,9 +50,7 @@ package body Giflib.Internal.LZW_Encoder_Dictionary is
       Prefix : LZW_Arithmetic.Code_Value;
       Suffix : Byte;
       Work : in out Work_Budgets.Meter;
-      Destination : Streams.Destination'Class;
-      Found : out Boolean;
-      Slot : out Slot_Index) return Results.Result
+      Destination : Streams.Destination'Class) return Lookup_Result
    is
       Position : Slot_Index := Slot_Index
         (LZW_Arithmetic.Hash_Start
@@ -63,28 +60,23 @@ package body Giflib.Internal.LZW_Encoder_Dictionary is
       for Probe in 1 .. Hash_Size loop
          Outcome := LZW_Work.Charge (Destination, Work, 1);
          if not Results.Succeeded (Outcome) then
-            Found := False;
-            Slot := Position;
-            return Outcome;
+            return
+              (Kind => Lookup_Failure, Error => Outcome.First_Error);
          elsif not Is_Occupied (Object, Position) then
-            Found := False;
-            Slot := Position;
-            return Results.Success;
+            return (Kind => Lookup_Miss, Slot => Position);
          elsif Matches (Object, Position, Prefix, Suffix) then
-            Found := True;
-            Slot := Position;
-            return Results.Success;
+            return (Kind => Lookup_Hit, Slot => Position);
          end if;
          Position := Slot_Index
            (LZW_Arithmetic.Next_Hash_Slot
               (LZW_Arithmetic.Hash_Slot (Position)));
       end loop;
-      Found := False;
-      Slot := Position;
-      return Results.Failure
-        (Errors.Make
-           (Errors.Internal_Invariant_Failed,
-            Diagnostics.At_Destination (Destination)));
+      return
+        (Kind => Lookup_Failure,
+         Error =>
+           Errors.Make
+             (Errors.Internal_Invariant_Failed,
+              Diagnostics.At_Destination (Destination)));
    end Find;
 
    procedure Insert

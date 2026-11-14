@@ -217,7 +217,6 @@ procedure Giflib_Fuzz is
             end loop;
          end;
       end if;
-      Giflib.Decoding.Finalize (Decoder);
    end Exercise;
 
    Length : Positive;

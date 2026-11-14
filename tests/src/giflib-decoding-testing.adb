@@ -24,6 +24,11 @@ package body Giflib.Decoding.Testing is
       Internal.Decoder_Storage.Testing.Corrupt_Budget (Object.Resources);
    end Corrupt_Allocation_Budget;
 
+   procedure Repair_Allocation_Budget (Object : in out Decoder) is
+   begin
+      Internal.Decoder_Storage.Testing.Repair_Budget (Object.Resources);
+   end Repair_Allocation_Budget;
+
    function Resources_Released (Object : Decoder) return Boolean is
      (Internal.Decoder_Storage.Is_Released (Object.Resources));
 

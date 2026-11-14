@@ -1,3 +1,5 @@
+with Giflib.Encoding.Frame_Pipeline;
+
 separate (Giflib.Encoding)
 function Add_Indexed_Frame
   (Object : in out Encoder;

@@ -74,22 +74,33 @@ private
      with No_Controlled_Parts => True;
    type Payload_Chunk_Array is
      array (Positive range <>) of Payload_Chunk;
-   package Payload_Storage is new Owned_Arrays
+   package Payload_Storage is new Giflib.Internal.Owned_Arrays
      (Positive, Payload_Chunk, Payload_Chunk_Array,
       (Length => 1, Data => [others => 0]));
    package Payload_Chunks is new Owned_Vectors
      (Element_Type => Payload_Chunk, Storage => Payload_Storage);
 
+   subtype Retained_Payload_Length is
+     Byte_Count range 1 .. Byte_Count'Last;
+   type Chunk_Span (Present : Boolean := False) is record
+      case Present is
+         when True =>
+            First : Positive := 1;
+            Count : Positive := 1;
+            Length : Retained_Payload_Length := 1;
+         when False =>
+            null;
+      end case;
+   end record
+     with No_Controlled_Parts => True;
    type Extension_Node is record
       Info : Metadata.Extension_Info;
-      First_Chunk : Natural := 0;
-      Chunk_Count : Natural := 0;
-      Retained_Length : Byte_Count := 0;
+      Span : Chunk_Span;
    end record
      with No_Controlled_Parts => True;
    type Extension_Node_Array is
      array (Positive range <>) of Extension_Node;
-   package Extension_Storage is new Owned_Arrays
+   package Extension_Storage is new Giflib.Internal.Owned_Arrays
      (Positive, Extension_Node, Extension_Node_Array,
       (Info =>
          (Kind => Metadata.Unknown_Extension,
@@ -98,8 +109,7 @@ private
           Payload_Length => 0,
           Sub_Block_Count => 0,
           Label => 0),
-       First_Chunk => 0, Chunk_Count => 0,
-       Retained_Length => 0));
+       Span => (Present => False)));
    package Extension_Nodes is new Owned_Vectors
      (Element_Type => Extension_Node, Storage => Extension_Storage);
 

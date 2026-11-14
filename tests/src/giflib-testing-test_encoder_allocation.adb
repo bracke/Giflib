@@ -1,4 +1,5 @@
 with AUnit.Assertions;
+with Giflib.Cleanup;
 with Giflib.Encoding;
 with Giflib.Encoding.Testing;
 with Giflib.Errors;

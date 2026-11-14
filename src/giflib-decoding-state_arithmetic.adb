@@ -11,23 +11,16 @@ is
    begin State := Header_Ready; end Header_Read;
    procedure Frame_Discovered (State : in out Decoder_State) is
    begin State := Decoding_Frame; end Frame_Discovered;
-   procedure Await_Frame_Decision
-     (State : in out Decoder_State;
-      Has_Pending_Frame : out Boolean) is
+   procedure Await_Frame_Decision (State : in out Decoder_State) is
    begin
-      Has_Pending_Frame := True;
       State := Awaiting_Frame_Decision;
    end Await_Frame_Decision;
    procedure Begin_Frame (State : in out Decoder_State) is
    begin State := Decoding_Frame; end Begin_Frame;
    procedure Complete_Frame
      (State : in out Decoder_State;
-      Has_Pending_Control : out Boolean;
-      Has_Pending_Frame : out Boolean;
       Frames_Seen : in out Frame_Ordinal) is
    begin
-      Has_Pending_Control := False;
-      Has_Pending_Frame := False;
       Frames_Seen := Frames_Seen + 1;
       State := Header_Ready;
    end Complete_Frame;

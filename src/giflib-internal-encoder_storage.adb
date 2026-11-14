@@ -26,6 +26,9 @@ package body Giflib.Internal.Encoder_Storage is
       and then not LZW_Encoding.Is_Allocated (Object.LZW_Data));
    function Allocated_Bytes (Object : Resources) return Byte_Count is
      (Ownership.Used (Object.Allocation_Budget));
+   function First_Cleanup_Status
+     (Object : Resources) return Cleanup.Cleanup_Status
+   is (Object.Cleanup_State);
    function Release
      (Object : in out Resources) return Cleanup.Cleanup_Outcome
    is

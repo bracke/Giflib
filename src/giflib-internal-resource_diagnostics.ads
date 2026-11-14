@@ -1,4 +1,5 @@
 with Giflib.Errors;
+with Giflib.Results;
 with Giflib.Internal.Ownership;
 with Giflib.Internal.Work_Budgets;
 
@@ -19,4 +20,11 @@ package Giflib.Internal.Resource_Diagnostics is
       Attempted : Byte_Count;
       Base : Errors.Diagnostic_Context := (others => <>)) return Errors.Error
      with Pre => Outcome.Status /= Ownership.Allocation_Ready;
+
+   function Allocation_Result
+     (Outcome : Ownership.Allocation_Outcome;
+      Maximum : Byte_Count;
+      Attempted : Byte_Count;
+      Base : Errors.Diagnostic_Context := (others => <>))
+      return Results.Result;
 end Giflib.Internal.Resource_Diagnostics;

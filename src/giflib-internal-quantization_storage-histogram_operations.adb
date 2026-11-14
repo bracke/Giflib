@@ -17,7 +17,7 @@ package body Giflib.Internal.Quantization_Storage.Histogram_Operations is
       Work : in out Work_Budgets.Meter) return Outcomes.Budgeted_Status
    is
       procedure Clear
-        (Histogram : in out Quantization_Palette.Histogram_State) is
+        (Histogram : in out Quantization_Histograms.Histogram_State) is
       begin
          Histogram.Counts := [others => 0];
          Histogram.Occupied_Count := 0;
@@ -27,7 +27,7 @@ package body Giflib.Internal.Quantization_Storage.Histogram_Operations is
          return Outcomes.Budgeted_Invariant_Failure;
       end if;
       if not Charge
-        (Work, Byte_Count (Quantization_Palette.Histogram_Array'Length))
+        (Work, Byte_Count (Quantization_Histograms.Histogram_Array'Length))
       then
          return Outcomes.Budgeted_Work_Limit;
       end if;
@@ -39,12 +39,12 @@ package body Giflib.Internal.Quantization_Storage.Histogram_Operations is
      (Object : in out Resources;
       Bucket : Histogram_Index) return Outcomes.Storage_Status
    is
-      Palette_Bucket : constant Quantization_Palette.Histogram_Index :=
-        Quantization_Palette.Histogram_Index (Bucket);
+      Palette_Bucket : constant Quantization_Histograms.Histogram_Index :=
+        Quantization_Histograms.Histogram_Index (Bucket);
       Result : Outcomes.Storage_Status :=
         Outcomes.Storage_Invariant_Failure;
       procedure Add
-        (Histogram : in out Quantization_Palette.Histogram_State) is
+        (Histogram : in out Quantization_Histograms.Histogram_State) is
       begin
          if Histogram.Counts (Palette_Bucket) = 0 then
             if Histogram.Occupied_Count = Histogram.Occupied'Length then
@@ -77,7 +77,7 @@ package body Giflib.Internal.Quantization_Storage.Histogram_Operations is
    is
       Outcome : Results.Result;
       procedure Build
-        (Histogram : in out Quantization_Palette.Histogram_State) is
+        (Histogram : in out Quantization_Histograms.Histogram_State) is
       begin
          Outcome := Quantization_Palette.Build_Median_Cut
            (Histogram,

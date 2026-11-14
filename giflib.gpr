@@ -64,6 +64,7 @@ library project Giflib is
       "Giflib.Internal.Ownership_Arithmetic",
       "Giflib.Internal.Quantization_Buffer_Arithmetic",
       "Giflib.Internal.Quantization_Dithering",
+      "Giflib.Internal.Quantization_Histograms",
       "Giflib.Internal.Quantization_Palette",
       "Giflib.Internal.Quantization_Storage",
       "Giflib.Internal.Work_Budgets");

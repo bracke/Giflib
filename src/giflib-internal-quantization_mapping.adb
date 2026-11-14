@@ -10,7 +10,6 @@ package body Giflib.Internal.Quantization_Mapping is
    package Cache renames Quantization_Storage.Cache_Operations;
    package Outcomes renames Quantization_Storage.Outcomes;
    package Pixels renames Quantization_Pixels;
-   use type Outcomes.Budgeted_Status;
    use type Outcomes.Storage_Status;
 
    function Find
@@ -41,14 +40,18 @@ package body Giflib.Internal.Quantization_Mapping is
         (Results.Failure (Errors.Make (Errors.Internal_Invariant_Failed)));
    begin
       Chosen := 0;
-      if Probe.Status = Outcomes.Budgeted_Work_Limit then
-         return Work_Failure;
-      elsif Probe.Status /= Outcomes.Budgeted_Ready then
-         return Invariant_Failure;
-      elsif Probe.Found then
-         Chosen := Probe.Value;
-         return Results.Success;
-      elsif Output_Palette.Length <= First then
+      case Probe.Kind is
+         when Cache.Probe_Work_Limit =>
+            return Work_Failure;
+         when Cache.Probe_Invariant_Failure =>
+            return Invariant_Failure;
+         when Cache.Probe_Hit =>
+            Chosen := Probe.Value;
+            return Results.Success;
+         when Cache.Probe_Miss =>
+            null;
+      end case;
+      if Output_Palette.Length <= First then
          return Invariant_Failure;
       end if;
       Work_Budgets.Try_Charge

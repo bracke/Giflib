@@ -1,54 +1,65 @@
 with Ada.Exceptions;
+with Ada.Text_IO;
 
-with Project_Tools.AUnit_Checks;
-with Project_Tools.Files;
 with Project_Tools.Release_Checks;
 
-with Giflib_Tooling.Architecture;
 with Giflib_Tooling.Boundaries;
-with Giflib_Tooling.Transitions;
+with Giflib_Tooling.Repository_Diagnostics;
+with Giflib_Tooling.Repository_Searches;
+with Giflib_Tooling.Validation_Plans;
+with Giflib_Tooling.Validation_Runner;
+with Giflib_Tooling.Work_Budgets;
 
 package body Giflib_Tooling is
-   package Files renames Project_Tools.Files;
-
    procedure Fail (Message : String) is
    begin
       Project_Tools.Release_Checks.Fail ("giflib tooling: " & Message);
    end Fail;
 
-   procedure Validate_Structure (Root : String) is
-   begin
-      Boundaries.Validate_Static (Root);
-      Architecture.Validate (Root);
-      Transitions.Validate (Root);
-      Project_Tools.Release_Checks.Require_GPR_Main_Inventory
-        (Project_File => Files.Join (Root, "tests/unit_tests.gpr"),
-         Documentation_File => Files.Join (Root, "docs/IMPLEMENTATION_PLAN.md"),
-         Source_Directory => Files.Join (Root, "tests/src/test_mains"),
-         Quiet => True);
-      Project_Tools.Release_Checks.Require_GPR_Main_Inventory
-        (Project_File => Files.Join (Root, "tests/tools.gpr"),
-         Documentation_File => Files.Join (Root, "docs/IMPLEMENTATION_PLAN.md"),
-         Source_Directory => Files.Join (Root, "tests/src/mains"),
-         Quiet => True);
-      Project_Tools.AUnit_Checks.Require_Registered_Test_Packages
-        (Test_Dir => Files.Join (Root, "tests/src"),
-         Spec_Pattern => "giflib-testing-test_*.ads",
-         Suite_Path => Files.Join (Root, "tests/src/giflib-testing-suite.adb"),
-         Suite_Add_Prefix => "new ", Suite_Add_Suffix => ".Test",
-         Required_Stem_Suffix => "", Quiet => True);
-   end Validate_Structure;
-
    procedure Validate (Root : String) is
+      package Searches renames Giflib_Tooling.Repository_Searches;
+      use type Searches.Cleanup_Status;
+      Cleanup_State : aliased Searches.Cleanup_Status :=
+        Searches.Cleanup_Complete;
+      function With_Cleanup (Message : String) return String is
+        (if Cleanup_State = Searches.Cleanup_Failed
+         then Message & "; repository directory search cleanup also failed"
+         else Message);
+      procedure Report_Secondary_Cleanup is
+      begin
+         Ada.Text_IO.Put_Line
+           (Ada.Text_IO.Standard_Error,
+            "secondary failure: repository directory search cleanup " &
+            "also failed");
+      exception
+         when others =>
+            --  Reporting must not replace the active invariant failure.
+            null;
+      end Report_Secondary_Cleanup;
    begin
-      Validate_Structure (Root);
+      Validation_Runner.Run
+        (Root, Validation_Plans.Default_Plan, Cleanup_State'Access);
       Boundaries.Validate_API (Root);
    exception
+      when E : Giflib_Tooling.Work_Budgets.Work_Limit_Exceeded =>
+         Fail (With_Cleanup (Ada.Exceptions.Exception_Message (E)));
+      when E : Input_Error =>
+         Fail (With_Cleanup (Ada.Exceptions.Exception_Message (E)));
       when Program_Error =>
+         if Cleanup_State = Searches.Cleanup_Failed then
+            Report_Secondary_Cleanup;
+         end if;
          raise;
       when E : others =>
-         Fail
-           ("validation raised an unexpected exception: " &
-            Ada.Exceptions.Exception_Information (E));
+         if Giflib_Tooling.Repository_Diagnostics.Is_Repository_Error (E) then
+            Fail
+              (With_Cleanup
+                 (Giflib_Tooling.Repository_Diagnostics.Rendered_Message (E)));
+         else
+            Fail
+              (With_Cleanup
+                 ("validation raised an unexpected exception: " &
+                  Ada.Exceptions.Exception_Information (E)));
+         end if;
    end Validate;
 end Giflib_Tooling;

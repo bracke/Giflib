@@ -5,11 +5,17 @@ package Giflib.Internal.Quantization_Storage.Cache_Operations is
    pragma Preelaborate;
    use type Outcomes.Budgeted_Status;
 
-   type Probe_Result is record
-      Status : Outcomes.Budgeted_Status := Outcomes.Budgeted_Invariant_Failure;
-      Found : Boolean := False;
-      Value : Palette_Index := 0;
-      Store_Slot : Natural := 0;
+   type Probe_Kind is
+     (Probe_Hit, Probe_Miss, Probe_Work_Limit, Probe_Invariant_Failure);
+   type Probe_Result (Kind : Probe_Kind := Probe_Invariant_Failure) is record
+      case Kind is
+         when Probe_Hit =>
+            Value : Palette_Index;
+         when Probe_Miss =>
+            Store_Slot : Natural;
+         when Probe_Work_Limit | Probe_Invariant_Failure =>
+            null;
+      end case;
    end record;
 
    function Reset
@@ -23,7 +29,7 @@ package Giflib.Internal.Quantization_Storage.Cache_Operations is
       Key : Natural;
       Work : in out Work_Budgets.Meter) return Probe_Result
      with Post =>
-       (if Probe'Result.Status = Outcomes.Budgeted_Work_Limit
+       (if Probe'Result.Kind = Probe_Work_Limit
         then Work_Budgets.Failed (Work));
    function Store
      (Object : in out Resources;

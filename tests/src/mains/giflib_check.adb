@@ -5,7 +5,6 @@ with Ada.Text_IO;
 with Project_Tools.Files;
 with Project_Tools.Processes;
 with Project_Tools.Release_Checks;
-with Giflib_Tooling;
 
 procedure Giflib_Check is
    package Files renames Project_Tools.Files;
@@ -14,9 +13,18 @@ procedure Giflib_Check is
    Root : constant String :=
      Files.Find_Root_Upward (Ada.Directories.Current_Directory, "giflib.gpr");
    Development_Tests_Bin : constant String := Files.Join (Root, "tests/bin");
-   Active_Tests_Bin : constant String :=
-     Ada.Directories.Containing_Directory
-       (Ada.Directories.Full_Name (Ada.Command_Line.Command_Name));
+   function Active_Binary_Directory return String is
+      Executable : constant String :=
+        Processes.Locate_Command (Ada.Command_Line.Command_Name);
+   begin
+      if Executable = "" then
+         Project_Tools.Release_Checks.Fail
+           ("giflib_check: cannot locate its executable on PATH");
+      end if;
+      return Ada.Directories.Containing_Directory
+        (Ada.Directories.Full_Name (Executable));
+   end Active_Binary_Directory;
+   Active_Tests_Bin : constant String := Active_Binary_Directory;
    Release_Tests_Bin : constant String :=
      Files.Join (Development_Tests_Bin, "release");
    Command : constant String :=
@@ -37,7 +45,10 @@ procedure Giflib_Check is
       Run_Tool
         ("giflib_tooling_tests", Processes.No_Arguments,
          "tooling mutation tests", Bin_Directory);
-      Giflib_Tooling.Validate (Root);
+      Run_Tool
+        ("giflib_tooling_probe",
+         Processes.Arguments ([Processes.Argument (Root)]),
+         "tooling structure validation", Bin_Directory);
    end Validate_Tooling;
 
    procedure Run_Tool

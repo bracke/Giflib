@@ -1,5 +1,6 @@
 with Giflib.Errors;
 with Giflib.Animations;
+with Giflib.Cleanup;
 with Giflib.Frames;
 with Giflib.Limits;
 with Giflib.Metadata;
@@ -131,6 +132,8 @@ package Giflib.Decoding is
        (if Results.Succeeded (Cancel'Result)
         then State (Object) = Cancelled);
    function First_Error (Object : Decoder) return Errors.Error;
+   function First_Cleanup_Status
+     (Object : Decoder) return Cleanup.Cleanup_Status;
    function Warning_Count (Object : Decoder) return Natural;
    function Warning_At
      (Object : Decoder;
@@ -160,16 +163,39 @@ package Giflib.Decoding is
    procedure Finalize (Object : in out Decoder);
 
 private
-   type Prepared_Frame is record
-      Left : Coordinate := 0;
-      Top : Coordinate := 0;
-      Width : Image_Width := Image_Width'First;
-      Height : Image_Height := Image_Height'First;
-      Has_Local_Palette : Boolean := False;
-      Interlaced : Boolean := False;
-      Local_Palette_Sorted : Boolean := False;
-      Palette : Palettes.Palette;
-      Control : Frames.Graphic_Control := Frames.Default_Control;
+   type Prepared_Frame (Present : Boolean := False) is record
+      case Present is
+         when True =>
+            Left : Coordinate := 0;
+            Top : Coordinate := 0;
+            Width : Image_Width := Image_Width'First;
+            Height : Image_Height := Image_Height'First;
+            Has_Local_Palette : Boolean := False;
+            Interlaced : Boolean := False;
+            Local_Palette_Sorted : Boolean := False;
+            Palette : Palettes.Palette;
+            Control : Frames.Graphic_Control := Frames.Default_Control;
+         when False =>
+            null;
+      end case;
+   end record;
+   type Optional_Control (Present : Boolean := False) is record
+      case Present is
+         when True =>
+            Value : Frames.Graphic_Control := Frames.Default_Control;
+         when False =>
+            null;
+      end case;
+   end record;
+   type Previous_Frame_State (Present : Boolean := False) is record
+      case Present is
+         when True =>
+            Rectangle : Frames.Rectangle;
+            Control : Frames.Graphic_Control := Frames.Default_Control;
+            Snapshot_Rectangle : Frames.Rectangle;
+         when False =>
+            null;
+      end case;
    end record;
 
    type Warning_Array is
@@ -188,15 +214,10 @@ private
       Total_Decoded_Pixels : Pixel_Count := 0;
       Total_Compressed_Bytes : Byte_Count := 0;
       Extensions_Seen : Natural := 0;
-      Pending_Control : Frames.Graphic_Control := Frames.Default_Control;
-      Has_Pending_Control : Boolean := False;
+      Pending_Control : Optional_Control;
       Pending_Frame : Prepared_Frame;
-      Has_Pending_Frame : Boolean := False;
       Loop_Data : Animations.Loop_Info := Animations.No_Loop;
-      Snapshot_Rectangle : Frames.Rectangle;
-      Previous_Rectangle : Frames.Rectangle;
-      Previous_Control : Frames.Graphic_Control := Frames.Default_Control;
-      Has_Previous_Frame : Boolean := False;
+      Previous_Frame : Previous_Frame_State;
       Warnings : Warning_Array;
       Stored_Warnings : Limits.Warning_Record_Limit := 0;
       Diagnostic : Errors.Error := Errors.Make (Errors.No_Error);
@@ -204,21 +225,4 @@ private
       Allocation_Fault : Internal.Ownership.Fault_State;
    end record;
 
-   procedure Add_Warning
-     (Object : in out Decoder;
-      Code : Errors.Warning_Code;
-      Severity : Errors.Warning_Severity;
-      Context : Errors.Diagnostic_Context := (others => <>));
-   function Fail
-     (Object : in out Decoder;
-      Item : Errors.Error) return Results.Result;
-   function Invalid_Transition (Object : Decoder) return Results.Result;
-   function Validate_Frame_Output
-     (Object : Decoder;
-      Target_Length : Byte_Count;
-      Expected_Length : Byte_Count;
-      Info_Is_Constrained : Boolean;
-      Info_Has_Local_Palette : Boolean) return Results.Result;
-   function Input_Position
-     (Object : Decoder) return Streams.Source_Position_Result;
 end Giflib.Decoding;

@@ -87,8 +87,6 @@ package body Giflib.Internal.LZW_Encoding is
 
       Prefix : LZW_Arithmetic.Code_Value;
       Suffix : Byte;
-      Found : Boolean;
-      Slot : LZW_Encoder_Dictionary.Slot_Index;
       Outcome : Results.Result;
    begin
       Compressed_Bytes := 0;
@@ -130,39 +128,44 @@ package body Giflib.Internal.LZW_Encoding is
          if Suffix > Maximum_Index then
             return Accounted (Invalid_Index (Suffix));
          end if;
-         Outcome := LZW_Encoder_Dictionary.Find
-           (Context.Dictionary, Prefix, Suffix, Work, Object, Found, Slot);
-         if not Results.Succeeded (Outcome) then
-            return Accounted (Outcome);
-         elsif Found then
-            Prefix := LZW_Encoder_Dictionary.Code_At
-              (Context.Dictionary, Slot);
-         else
-            Outcome := LZW_Encoder_Writer.Put
-              (Codes, Writer, Object, Work, Prefix, Width);
-            if not Results.Succeeded (Outcome) then
-               return Accounted (Outcome);
-            end if;
-            if LZW_Arithmetic.Can_Insert (Next_Free) then
-               LZW_Encoder_Dictionary.Insert
-                 (Context.Dictionary, Slot, Prefix, Suffix,
-                  LZW_Arithmetic.Code_Value (Next_Free));
-               Next_Free := LZW_Arithmetic.After_Insert (Next_Free);
-               Width := LZW_Arithmetic.Encoder_Width_After_Insert
-                 (Next_Free, Width);
-            else
-               Outcome := LZW_Encoder_Writer.Put
-                 (Codes, Writer, Object, Work, Clear_Code, Width);
-               if not Results.Succeeded (Outcome) then
-                  return Accounted (Outcome);
-               end if;
-               Outcome := Clear_Dictionary;
-               if not Results.Succeeded (Outcome) then
-                  return Accounted (Outcome);
-               end if;
-            end if;
-            Prefix := LZW_Arithmetic.Code_Value (Suffix);
-         end if;
+         declare
+            Lookup : constant LZW_Encoder_Dictionary.Lookup_Result :=
+              LZW_Encoder_Dictionary.Find
+                (Context.Dictionary, Prefix, Suffix, Work, Object);
+         begin
+            case Lookup.Kind is
+               when LZW_Encoder_Dictionary.Lookup_Failure =>
+                  return Accounted (Results.Failure (Lookup.Error));
+               when LZW_Encoder_Dictionary.Lookup_Hit =>
+                  Prefix := LZW_Encoder_Dictionary.Code_At
+                    (Context.Dictionary, Lookup.Slot);
+               when LZW_Encoder_Dictionary.Lookup_Miss =>
+                  Outcome := LZW_Encoder_Writer.Put
+                    (Codes, Writer, Object, Work, Prefix, Width);
+                  if not Results.Succeeded (Outcome) then
+                     return Accounted (Outcome);
+                  end if;
+                  if LZW_Arithmetic.Can_Insert (Next_Free) then
+                     LZW_Encoder_Dictionary.Insert
+                       (Context.Dictionary, Lookup.Slot, Prefix, Suffix,
+                        LZW_Arithmetic.Code_Value (Next_Free));
+                     Next_Free := LZW_Arithmetic.After_Insert (Next_Free);
+                     Width := LZW_Arithmetic.Encoder_Width_After_Insert
+                       (Next_Free, Width);
+                  else
+                     Outcome := LZW_Encoder_Writer.Put
+                       (Codes, Writer, Object, Work, Clear_Code, Width);
+                     if not Results.Succeeded (Outcome) then
+                        return Accounted (Outcome);
+                     end if;
+                     Outcome := Clear_Dictionary;
+                     if not Results.Succeeded (Outcome) then
+                        return Accounted (Outcome);
+                     end if;
+                  end if;
+                  Prefix := LZW_Arithmetic.Code_Value (Suffix);
+            end case;
+         end;
       end loop;
       Outcome := LZW_Encoder_Writer.Put
         (Codes, Writer, Object, Work, Prefix, Width);

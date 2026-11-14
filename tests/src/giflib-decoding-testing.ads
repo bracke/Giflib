@@ -10,6 +10,7 @@ package Giflib.Decoding.Testing is
    procedure Disable_Failure_Injection (Object : in out Decoder);
 
    procedure Corrupt_Allocation_Budget (Object : in out Decoder);
+   procedure Repair_Allocation_Budget (Object : in out Decoder);
    function Resources_Released (Object : Decoder) return Boolean;
    function Last_Cleanup (Object : Decoder) return Cleanup.Cleanup_Status;
 end Giflib.Decoding.Testing;

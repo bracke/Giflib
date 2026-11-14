@@ -1,45 +1,91 @@
+with Giflib_Tooling.Name_Collections;
 with Ada.Strings.Unbounded;
 
-with Project_Tools.Alire_Manifests;
 with Project_Tools.Files;
 with Project_Tools.Processes;
 with Project_Tools.Text;
 
+with Giflib_Tooling.Configuration_Source;
+with Giflib_Tooling.GPR_Analysis;
 with Giflib_Tooling.Source_Model;
+with Giflib_Tooling.Token_Patterns;
+with Giflib_Tooling.Text_Case;
 
 package body Giflib_Tooling.Boundaries is
    use Ada.Strings.Unbounded;
    package Files renames Project_Tools.Files;
    package Processes renames Project_Tools.Processes;
-   package Source renames Giflib_Tooling.Source_Model;
+   package Config renames Giflib_Tooling.Configuration_Source;
+   package GPR renames Giflib_Tooling.GPR_Analysis;
+   package Patterns renames Giflib_Tooling.Token_Patterns;
+   package Snapshots renames Giflib_Tooling.Repository_Snapshots;
+   package Text_Case renames Giflib_Tooling.Text_Case;
+   use type Config.Query_Result;
 
    procedure Require_GPR_With
-     (Root : String; Path : String; Dependency : String)
+     (Repository : Snapshots.Snapshot;
+      Path : String;
+      Dependency : String;
+      Budget : in out Giflib_Tooling.Work_Budgets.Budget)
    is
+      Found : Boolean := False;
+      procedure Inspect (Text : String) is
+      begin
+         Giflib_Tooling.Work_Budgets.Charge_Scan (Budget, Text'Length);
+         Found := GPR.Has_With (Text, Dependency);
+      end Inspect;
    begin
-      if not Source.Has_GPR_With
-        (Files.Read_Raw_File (Files.Join (Root, Path)), Dependency)
-      then
+      Snapshots.Inspect_Text (Repository, Path, Inspect'Access);
+      if not Found then
          Fail (Path & " does not import " & Dependency);
       end if;
    end Require_GPR_With;
 
    procedure Require_Config
-     (Root : String; Path : String; Key : String; Value : String)
+     (Repository : Snapshots.Snapshot;
+      Path : String;
+      Key : String;
+      Value : String;
+      Section : String := "";
+      Array_Section : Boolean := False;
+      Budget : in out Giflib_Tooling.Work_Budgets.Budget)
    is
+      Result : Config.Query_Result;
+      procedure Inspect (Text : String) is
+      begin
+         Giflib_Tooling.Work_Budgets.Charge_Scan (Budget, Text'Length);
+         Result := Config.Find_Config_Assignment
+           (Text, Key, Value, Section, Array_Section);
+      end Inspect;
    begin
-      if not Source.Has_Config_Assignment
-        (Files.Read_Raw_File (Files.Join (Root, Path)), Key, Value)
-      then
-         Fail (Path & " is missing exact assignment for " & Key);
-      end if;
+      Snapshots.Inspect_Text (Repository, Path, Inspect'Access);
+      case Result is
+         when Config.Assignment_Found =>
+            null;
+         when Config.Assignment_Absent =>
+            Fail (Path & " is missing exact assignment for " & Key);
+         when Config.Malformed_Input =>
+            Fail (Path & " contains malformed configuration syntax");
+      end case;
    end Require_Config;
 
-   procedure Require_Project_Tools_With (Root : String; Path : String) is
+   procedure Require_Project_Tools_With
+     (Cached_Sources : Giflib_Tooling.Repository_Source_Cache.Cache;
+      Path : String;
+      Budget : in out Giflib_Tooling.Work_Budgets.Budget) is
+      Found : Boolean := False;
+      procedure Inspect (Parsed : Giflib_Tooling.Source_Model.Parsed_Source) is
+      begin
+         Found := Patterns.Contains_Code (Parsed, "with Project_Tools.");
+      end Inspect;
    begin
-      if not Source.Contains_Code
-        (Files.Read_Raw_File (Files.Join (Root, Path)), "with Project_Tools.")
-      then
+      Giflib_Tooling.Work_Budgets.Charge_Scan
+        (Budget,
+         Giflib_Tooling.Repository_Source_Cache.Source_Length
+           (Cached_Sources, Path));
+      Giflib_Tooling.Repository_Source_Cache.Inspect
+        (Cached_Sources, Path, Inspect'Access);
+      if not Found then
          Fail (Path & " does not import Project_Tools in Ada code");
       end if;
    end Require_Project_Tools_With;
@@ -62,7 +108,8 @@ package body Giflib_Tooling.Boundaries is
          if Result.Status = 0 then
             Fail (Failure & " unexpectedly compiled");
          elsif not Project_Tools.Text.Contains
-           (Source.Lower (To_String (Result.Output)), Source.Lower (Expected))
+           (Text_Case.Lower (To_String (Result.Output)),
+            Text_Case.Lower (Expected))
          then
             Fail (Failure & " failed for an unexpected reason");
          end if;
@@ -87,43 +134,81 @@ package body Giflib_Tooling.Boundaries is
    end Check_API_Boundaries;
 
    procedure Require_Project_Tools_Mains
-     (Root : String; Project_Path : String; Source_Dir : String)
+     (Repository : Snapshots.Snapshot;
+      Cached_Sources : Giflib_Tooling.Repository_Source_Cache.Cache;
+      Project_Path : String;
+      Source_Dir : String;
+      Budget : in out Giflib_Tooling.Work_Budgets.Budget)
    is
-      Mains : constant Source.Name_Vectors.Vector :=
-        Source.GPR_Attribute_Strings
-          (Files.Read_Raw_File (Files.Join (Root, Project_Path)), "Main");
+      Mains : Giflib_Tooling.Name_Collections.Name_Vectors.Vector;
+      procedure Inspect (Text : String) is
+      begin
+         Giflib_Tooling.Work_Budgets.Charge_Scan (Budget, Text'Length);
+         Mains := GPR.Attribute_Strings (Text, "Main");
+      end Inspect;
    begin
+      Snapshots.Inspect_Text (Repository, Project_Path, Inspect'Access);
       if Mains.Is_Empty then
          Fail (Project_Path & " has no exact Main attribute");
       end if;
       for Name of Mains loop
          Require_Project_Tools_With
-           (Root, Files.Join (Source_Dir, To_String (Name)));
+           (Cached_Sources, Files.Join (Source_Dir, To_String (Name)), Budget);
       end loop;
    end Require_Project_Tools_Mains;
 
-   procedure Validate_Static (Root : String) is
+   procedure Validate_Static
+     (Repository : Snapshots.Snapshot;
+      Cached_Sources : Giflib_Tooling.Repository_Source_Cache.Cache;
+      Budget : in out Giflib_Tooling.Work_Budgets.Budget) is
+      Pin : Config.Query_Result;
+      procedure Inspect_Pin (Text : String) is
+      begin
+         Giflib_Tooling.Work_Budgets.Charge_Scan (Budget, Text'Length);
+         Pin := Config.Find_Workspace_Pin
+           (Text, "project_tools", "../../project_tools");
+      end Inspect_Pin;
    begin
-      Require_Config (Root, "alire.toml", "gnat_native", """^15""");
-      Require_Config (Root, "tests/alire.toml", "gnat_native", """^15""");
       Require_Config
-        (Root, "tests/alire.toml", "executables", "[""giflib_tests""]");
+        (Repository, "alire.toml", "gnat_native", """^15""",
+         Section => "depends-on", Array_Section => True, Budget => Budget);
       Require_Config
-        (Root, "tests/alire.toml", "project-files", "[""unit_tests.gpr""]");
-      Require_GPR_With (Root, "giflib.gpr", "giflib_build.gpr");
+        (Repository, "tests/alire.toml", "gnat_native", """^15""",
+         Section => "depends-on", Array_Section => True, Budget => Budget);
+      Require_Config
+        (Repository, "tests/alire.toml", "executables", "[""giflib_tests""]",
+         Budget => Budget);
+      Require_Config
+        (Repository, "tests/alire.toml", "project-files", "[""unit_tests.gpr""]",
+         Budget => Budget);
       Require_GPR_With
-        (Root, "tests/giflib_whitebox.gpr", "../giflib_build.gpr");
-      Require_GPR_With (Root, "tests/public_api.gpr", "../giflib.gpr");
+        (Repository, "giflib.gpr", "giflib_build.gpr", Budget);
       Require_GPR_With
-        (Root, "tests/unit_tests.gpr", "giflib_whitebox.gpr");
-      Require_GPR_With (Root, "tests/tools.gpr", "../giflib.gpr");
-      Project_Tools.Alire_Manifests.Require_Workspace_Pin
-        (Files.Join (Root, "tests/alire.toml"), "project_tools",
-         "../../project_tools", Quiet => True);
+        (Repository, "tests/giflib_whitebox.gpr", "../giflib_build.gpr",
+         Budget);
+      Require_GPR_With
+        (Repository, "tests/public_api.gpr", "../giflib.gpr", Budget);
+      Require_GPR_With
+        (Repository, "tests/unit_tests.gpr", "giflib_whitebox.gpr", Budget);
+      Require_GPR_With
+        (Repository, "tests/tools.gpr", "../giflib.gpr", Budget);
+      Snapshots.Inspect_Text
+        (Repository, "tests/alire.toml", Inspect_Pin'Access);
+      case Pin is
+         when Config.Assignment_Found =>
+            null;
+         when Config.Assignment_Absent =>
+            Fail
+              ("tests/alire.toml is missing the project_tools workspace pin");
+         when Config.Malformed_Input =>
+            Fail ("tests/alire.toml contains malformed configuration syntax");
+      end case;
       Require_Project_Tools_Mains
-        (Root, "tests/unit_tests.gpr", "tests/src/test_mains");
+        (Repository, Cached_Sources, "tests/unit_tests.gpr",
+         "tests/src/test_mains", Budget);
       Require_Project_Tools_Mains
-        (Root, "tests/tools.gpr", "tests/src/mains");
+        (Repository, Cached_Sources, "tests/tools.gpr", "tests/src/mains",
+         Budget);
    end Validate_Static;
 
    procedure Validate_API (Root : String) is

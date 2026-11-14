@@ -8,7 +8,7 @@ package body Giflib.Internal.Quantization_Pixels is
       Column_Offset : Byte_Count;
       Offset : Byte_Count;
       Position : Positive;
-      Result : Pixel_Result;
+      Value : Source_Pixel := (Color => (others => 0), Alpha => 255);
    begin
       if X >= Natural (Source.Width)
         or else Y >= Natural (Source.Height)
@@ -17,45 +17,44 @@ package body Giflib.Internal.Quantization_Pixels is
                  and then Byte_Count (Source.Stride) >
                    Byte_Count'Last / Byte_Count (Y))
       then
-         return Result;
+         return (Valid => False);
       end if;
       Row_Offset := Byte_Count (Y) * Byte_Count (Source.Stride);
       Column_Offset := Byte_Count (X) * Byte_Count (BPP);
       if Column_Offset > Byte_Count'Last - Row_Offset then
-         return Result;
+         return (Valid => False);
       end if;
       Offset := Row_Offset + Column_Offset;
       if Source.Accessible_Bytes < Byte_Count (BPP)
         or else Offset > Source.Accessible_Bytes - Byte_Count (BPP)
         or else Offset > Byte_Count (Source.Data'Length) - Byte_Count (BPP)
       then
-         return Result;
+         return (Valid => False);
       end if;
       Position := Source.Data'First + Natural (Offset);
       case Source.Format is
          when RGB_24 =>
-            Result.Value.Color :=
+            Value.Color :=
               (Source.Data (Position), Source.Data (Position + 1),
                Source.Data (Position + 2));
          when BGR_24 =>
-            Result.Value.Color :=
+            Value.Color :=
               (Source.Data (Position + 2), Source.Data (Position + 1),
                Source.Data (Position));
          when RGBA_32 =>
-            Result.Value.Color :=
+            Value.Color :=
               (Source.Data (Position), Source.Data (Position + 1),
                Source.Data (Position + 2));
-            Result.Value.Alpha := Source.Data (Position + 3);
+            Value.Alpha := Source.Data (Position + 3);
          when BGRA_32 =>
-            Result.Value.Color :=
+            Value.Color :=
               (Source.Data (Position + 2), Source.Data (Position + 1),
                Source.Data (Position));
-            Result.Value.Alpha := Source.Data (Position + 3);
+            Value.Alpha := Source.Data (Position + 3);
          when Indexed_8 =>
             null;
       end case;
-      Result.Valid := True;
-      return Result;
+      return (Valid => True, Value => Value);
    end Read_Pixel;
 
    function Is_Transparent

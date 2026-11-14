@@ -1,3 +1,4 @@
+with Giflib.Errors;
 with Giflib.Internal.LZW_Arithmetic;
 with Giflib.Internal.Work_Budgets;
 with Giflib.Results;
@@ -31,18 +32,28 @@ is
         then Is_Initialized (Object)
           and then Occupied_Count (Object) = 0);
 
+   type Lookup_Kind is (Lookup_Hit, Lookup_Miss, Lookup_Failure);
+   type Lookup_Result (Kind : Lookup_Kind) is record
+      case Kind is
+         when Lookup_Hit | Lookup_Miss =>
+            Slot : Slot_Index;
+         when Lookup_Failure =>
+            Error : Errors.Error;
+      end case;
+   end record;
+
    function Find
      (Object : Dictionary;
       Prefix : LZW_Arithmetic.Code_Value;
       Suffix : Byte;
       Work : in out Work_Budgets.Meter;
-      Destination : Streams.Destination'Class;
-      Found : out Boolean;
-      Slot : out Slot_Index) return Results.Result
+      Destination : Streams.Destination'Class) return Lookup_Result
      with Pre => Is_Initialized (Object),
           Post =>
-       (if Results.Succeeded (Find'Result)
-        then Found = Matches (Object, Slot, Prefix, Suffix));
+       (if Find'Result.Kind = Lookup_Hit
+        then Matches (Object, Find'Result.Slot, Prefix, Suffix)
+        elsif Find'Result.Kind = Lookup_Miss
+        then not Is_Occupied (Object, Find'Result.Slot));
 
    function Code_At
      (Object : Dictionary;

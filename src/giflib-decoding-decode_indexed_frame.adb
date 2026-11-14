@@ -1,3 +1,5 @@
+with Giflib.Decoding.Frame_Pipeline;
+
 separate (Giflib.Decoding)
 function Decode_Indexed_Frame
   (Object : in out Decoder;
@@ -21,5 +23,5 @@ begin
    if not Results.Succeeded (Outcome) then
       return Outcome;
    end if;
-   return Complete_Frame (Object, Info);
+   return Frame_Pipeline.Finish (Object, Info);
 end Decode_Indexed_Frame;

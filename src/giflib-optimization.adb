@@ -6,14 +6,42 @@ with Giflib.Internal.Optimization_Arithmetic;
 with Giflib.Internal.Pixel_Arithmetic;
 
 package body Giflib.Optimization is
-   function Charge_One
-     (Object : in out Internal.Work_Budgets.Meter) return Boolean
+   type Visit_Action is (Continue_Visit, Stop_Visit);
+
+   function Walk_Rectangle
+     (Work : in out Internal.Work_Budgets.Meter;
+      Left : Natural;
+      Top : Natural;
+      Width : Natural;
+      Height : Natural;
+      Canvas_Width : Image_Width;
+      Visit : not null access function
+        (X : Natural; Y : Natural; Position : Natural) return Visit_Action)
+      return Results.Result
    is
       Accepted : Boolean;
    begin
-      Internal.Work_Budgets.Try_Charge (Object, 1, Accepted);
-      return Accepted;
-   end Charge_One;
+      for Y in Top .. Top + Height - 1 loop
+         for X in Left .. Left + Width - 1 loop
+            Internal.Work_Budgets.Try_Charge (Work, 1, Accepted);
+            if not Accepted then
+               return Results.Failure
+                 (Errors.Make
+                    (Errors.Limit_Exceeded,
+                     Internal.Resource_Diagnostics.With_Work_Limit
+                       (Work, Optimization_Work_Limit)));
+            elsif Visit
+              (X, Y,
+               Natural
+                 (Internal.Pixel_Arithmetic.Pixel_Index
+                    (X, Y, Canvas_Width))) = Stop_Visit
+            then
+               return Results.Success;
+            end if;
+         end loop;
+      end loop;
+      return Results.Success;
+   end Walk_Rectangle;
 
    function Analyze_Indexed
      (Previous : Streams.Byte_Array;
@@ -34,13 +62,42 @@ package body Giflib.Optimization is
       Has_Unchanged_Interior : Boolean := False;
       Has_Transparent_Index_Conflict : Boolean := False;
       Requires_Transparency : Boolean := False;
-      Pixel_Position : Natural;
-      Position_Previous : Natural := 0;
-      Position_Current : Natural := 0;
       Safe : constant Boolean :=
         Internal.Optimization_Arithmetic.Is_Safe
           (Previous_Control, Current_Control, Palettes_Are_Equivalent);
       Analysis : Frame_Analysis;
+      Outcome : Results.Result;
+
+      function Observe_Change
+        (X : Natural; Y : Natural; Position : Natural) return Visit_Action is
+      begin
+         if Previous (Previous'First + Position)
+           /= Current (Current'First + Position)
+         then
+            Bounds := Internal.Optimization_Arithmetic.Include
+              (Bounds,
+               Internal.Optimization_Arithmetic.Pixel_Coordinate (X),
+               Internal.Optimization_Arithmetic.Pixel_Coordinate (Y));
+         end if;
+         return Continue_Visit;
+      end Observe_Change;
+
+      function Observe_Interior
+        (X : Natural; Y : Natural; Position : Natural) return Visit_Action
+      is
+         pragma Unreferenced (X, Y);
+      begin
+         if Previous (Previous'First + Position)
+           = Current (Current'First + Position)
+         then
+            Has_Unchanged_Interior := True;
+         elsif Current (Current'First + Position)
+           = Byte (Options.Transparent_Index)
+         then
+            Has_Transparent_Index_Conflict := True;
+         end if;
+         return Continue_Visit;
+      end Observe_Interior;
 
    begin
       if Byte_Count (Previous'Length) /= Required then
@@ -56,27 +113,12 @@ package body Giflib.Optimization is
                (Expected => Required,
                 Actual => Byte_Count (Current'Length), others => <>)));
       end if;
-      for Y in 0 .. Natural (Height) - 1 loop
-         for X in 0 .. Natural (Width) - 1 loop
-            if not Charge_One (Work) then
-               return Results.Failure
-                 (Errors.Make
-                    (Errors.Limit_Exceeded,
-                     Internal.Resource_Diagnostics.With_Work_Limit
-                       (Work, Optimization_Work_Limit)));
-            end if;
-            if Previous (Previous'First + Position_Previous)
-              /= Current (Current'First + Position_Current)
-            then
-               Bounds := Internal.Optimization_Arithmetic.Include
-                 (Bounds,
-                  Internal.Optimization_Arithmetic.Pixel_Coordinate (X),
-                  Internal.Optimization_Arithmetic.Pixel_Coordinate (Y));
-            end if;
-            Position_Previous := Position_Previous + 1;
-            Position_Current := Position_Current + 1;
-         end loop;
-      end loop;
+      Outcome := Walk_Rectangle
+        (Work, 0, 0, Natural (Width), Natural (Height), Width,
+         Observe_Change'Access);
+      if not Results.Succeeded (Outcome) then
+         return Outcome;
+      end if;
       if Bounds.Empty then
          if Safe
            and then Internal.Optimization_Arithmetic.Can_Merge_Delay
@@ -94,28 +136,15 @@ package body Giflib.Optimization is
          end if;
       elsif Safe and then Options.Trim_Unchanged_Border then
          if Options.Make_Interior_Unchanged_Transparent then
-            for Y in Natural (Bounds.Min_Y) .. Natural (Bounds.Max_Y) loop
-               for X in Natural (Bounds.Min_X) .. Natural (Bounds.Max_X) loop
-                  if not Charge_One (Work) then
-                     return Results.Failure
-                       (Errors.Make
-                          (Errors.Limit_Exceeded,
-                           Internal.Resource_Diagnostics.With_Work_Limit
-                             (Work, Optimization_Work_Limit)));
-                  end if;
-                  Pixel_Position := Natural
-                    (Internal.Pixel_Arithmetic.Pixel_Index (X, Y, Width));
-                  if Previous (Previous'First + Pixel_Position)
-                    = Current (Current'First + Pixel_Position)
-                  then
-                     Has_Unchanged_Interior := True;
-                  elsif Current (Current'First + Pixel_Position)
-                    = Byte (Options.Transparent_Index)
-                  then
-                     Has_Transparent_Index_Conflict := True;
-                  end if;
-               end loop;
-            end loop;
+            Outcome := Walk_Rectangle
+              (Work,
+               Natural (Bounds.Min_X), Natural (Bounds.Min_Y),
+               Natural (Bounds.Max_X - Bounds.Min_X) + 1,
+               Natural (Bounds.Max_Y - Bounds.Min_Y) + 1,
+               Width, Observe_Interior'Access);
+            if not Results.Succeeded (Outcome) then
+               return Outcome;
+            end if;
             Requires_Transparency :=
               Has_Unchanged_Interior and then not Has_Transparent_Index_Conflict;
          end if;
@@ -161,13 +190,48 @@ package body Giflib.Optimization is
          then Byte_Count (Item.Width) * Byte_Count (Item.Height)
          else 0);
       Output_Position : Natural := 0;
-      Source_Position : Natural;
       Work : Internal.Work_Budgets.Meter
         (Constraints.Max_Optimization_Work);
       Use_Transparency : Boolean :=
         Item.Action = Trim_To_Rectangle
         and then Item.Requires_Transparency
         and then Options.Make_Interior_Unchanged_Transparent;
+      Outcome : Results.Result;
+
+      function Check_Transparent_Conflict
+        (X : Natural; Y : Natural; Position : Natural) return Visit_Action
+      is
+         pragma Unreferenced (X, Y);
+      begin
+         if Previous (Previous'First + Position)
+           /= Current (Current'First + Position)
+           and then Current (Current'First + Position)
+             = Byte (Options.Transparent_Index)
+         then
+            Use_Transparency := False;
+            return Stop_Visit;
+         end if;
+         return Continue_Visit;
+      end Check_Transparent_Conflict;
+
+      function Write_Pixel
+        (X : Natural; Y : Natural; Position : Natural) return Visit_Action
+      is
+         pragma Unreferenced (X, Y);
+      begin
+         if Use_Transparency
+           and then Previous (Previous'First + Position)
+             = Current (Current'First + Position)
+         then
+            Output (Output'First + Output_Position) :=
+              Byte (Options.Transparent_Index);
+         else
+            Output (Output'First + Output_Position) :=
+              Current (Current'First + Position);
+         end if;
+         Output_Position := Output_Position + 1;
+         return Continue_Visit;
+      end Write_Pixel;
 
    begin
       if Item.Action /= Trim_To_Rectangle
@@ -199,54 +263,18 @@ package body Giflib.Optimization is
       --  analysis call. Recheck the selected index so either can safely differ
       --  from the values originally analyzed.
       if Use_Transparency then
-         for Y in Natural (Item.Top) .. Natural (Item.Top) + Natural (Item.Height) - 1 loop
-            for X in Natural (Item.Left) .. Natural (Item.Left) + Natural (Item.Width) - 1 loop
-               if not Charge_One (Work) then
-                  return Results.Failure
-                    (Errors.Make
-                       (Errors.Limit_Exceeded,
-                        Internal.Resource_Diagnostics.With_Work_Limit
-                          (Work, Optimization_Work_Limit)));
-               end if;
-               Source_Position := Natural
-                 (Internal.Pixel_Arithmetic.Pixel_Index (X, Y, Canvas_Width));
-               if Previous (Previous'First + Source_Position)
-                 /= Current (Current'First + Source_Position)
-                 and then Current (Current'First + Source_Position)
-                   = Byte (Options.Transparent_Index)
-               then
-                  Use_Transparency := False;
-                  exit;
-               end if;
-            end loop;
-            exit when not Use_Transparency;
-         end loop;
+         Outcome := Walk_Rectangle
+           (Work, Natural (Item.Left), Natural (Item.Top),
+            Natural (Item.Width), Natural (Item.Height), Canvas_Width,
+            Check_Transparent_Conflict'Access);
+         if not Results.Succeeded (Outcome) then
+            return Outcome;
+         end if;
       end if;
 
-      for Y in Natural (Item.Top) .. Natural (Item.Top) + Natural (Item.Height) - 1 loop
-         for X in Natural (Item.Left) .. Natural (Item.Left) + Natural (Item.Width) - 1 loop
-            if not Charge_One (Work) then
-               return Results.Failure
-                 (Errors.Make
-                    (Errors.Limit_Exceeded,
-                     Internal.Resource_Diagnostics.With_Work_Limit
-                       (Work, Optimization_Work_Limit)));
-            end if;
-            Source_Position := Natural
-              (Internal.Pixel_Arithmetic.Pixel_Index (X, Y, Canvas_Width));
-            if Use_Transparency
-              and then Previous (Previous'First + Source_Position)
-                = Current (Current'First + Source_Position)
-            then
-               Output (Output'First + Output_Position) :=
-                 Byte (Options.Transparent_Index);
-            else
-               Output (Output'First + Output_Position) :=
-                 Current (Current'First + Source_Position);
-            end if;
-            Output_Position := Output_Position + 1;
-         end loop;
-      end loop;
-      return Results.Success;
+      return Walk_Rectangle
+        (Work, Natural (Item.Left), Natural (Item.Top),
+         Natural (Item.Width), Natural (Item.Height), Canvas_Width,
+         Write_Pixel'Access);
    end Extract_Indexed_Rectangle;
 end Giflib.Optimization;

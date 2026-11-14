@@ -11,15 +11,13 @@ is
 
    function Session_Data_Is_Initialized (Object : Encoder) return Boolean is
      (Object.Screen = Screen_Info'(others => <>)
-      and then Object.Global_Palette = Palettes.Palette'(others => <>)
-      and then not Object.Has_Global_Palette
+      and then not Object.Global_Palette.Present
       and then Object.Loop_Data = Animations.No_Loop
-      and then not Object.Header_Written
       and then Object.Frames_Written = 0
       and then Object.Extensions_Written = 0
       and then Object.Bytes_Written = 0
       and then Object.Compressed_Bytes_Written = 0
-      and then Object.Cleanup_State = Cleanup.Cleanup_Complete
+      and then First_Cleanup_Status (Object) = Cleanup.Cleanup_Complete
       and then Object.Diagnostic.Code = Errors.No_Error);
 
    procedure Begin_Session
@@ -55,27 +53,24 @@ is
    procedure Set_Global_Palette
      (Object : in out Encoder;
       Palette : Palettes.Palette)
-     with Pre => State_Arithmetic.Can_Configure
-                   (Object.Current_State, Object.Header_Written),
-          Post => Object.Global_Palette = Palette
-                  and then Object.Has_Global_Palette;
+     with Pre => State_Arithmetic.Can_Configure (Object.Current_State),
+          Post => Object.Global_Palette.Present
+                  and then Object.Global_Palette.Value = Palette;
 
    procedure Set_Loop
      (Object : in out Encoder;
       Looping : Animations.Loop_Info)
-     with Pre => State_Arithmetic.Can_Configure
-                   (Object.Current_State, Object.Header_Written),
+     with Pre => State_Arithmetic.Can_Configure (Object.Current_State),
           Post => Object.Loop_Data = Looping;
 
    procedure Commit_Header
      (Object : in out Encoder;
       Loop_Extension_Written : Boolean)
-     with Pre => State_Arithmetic.Can_Accept_Data (Object.Current_State)
-                 and then not Object.Header_Written
+     with Pre => Object.Current_State = Screen_Defined
                  and then (not Loop_Extension_Written
                            or else Object.Extensions_Written
                              < Natural'Last),
-          Post => Object.Header_Written
+          Post => Object.Current_State = Header_Committed
                   and then Object.Extensions_Written =
                     Object.Extensions_Written'Old
                       + Boolean'Pos (Loop_Extension_Written);

@@ -1,8 +1,21 @@
-with Giflib.Internal.Geometry_Arithmetic;
-
 private package Giflib.Decoding.Frame_Pipeline
   with Preelaborate
 is
+   function Prepare (Object : in out Decoder) return Results.Result
+     with Post =>
+       (if Results.Succeeded (Prepare'Result)
+        then Object.Pending_Frame.Present);
+
+   function Finish
+     (Object : in out Decoder;
+      Info : out Frame_Info) return Results.Result
+     with Pre => Object.Current_State = Decoding_Frame
+                 and then Object.Pending_Frame.Present,
+          Post =>
+            (if Results.Succeeded (Finish'Result)
+             then Object.Current_State = Header_Ready
+               and then not Object.Pending_Frame.Present);
+
    function Start_Decode
      (Object : in out Decoder;
       Required_Mode : Output_Mode;
@@ -12,7 +25,7 @@ is
      with Post =>
        (if Results.Succeeded (Start_Decode'Result)
         then Object.Current_State = Decoding_Frame
-          and then Object.Has_Pending_Frame
+          and then Object.Pending_Frame.Present
           and then Internal.Decoder_Storage.LZW_Allocated
             (Object.Resources));
 
@@ -20,28 +33,25 @@ is
      with Post =>
        (if Results.Succeeded (Start_Skip'Result)
         then Object.Current_State = Decoding_Frame
-          and then Object.Has_Pending_Frame);
+          and then Object.Pending_Frame.Present);
 
    function Decode_Indices
      (Object : in out Decoder;
       Output : out Streams.Byte_Array) return Results.Result
      with Pre => Object.Current_State = Decoding_Frame
-                 and then Object.Has_Pending_Frame
+                 and then Object.Pending_Frame.Present
                  and then Internal.Decoder_Storage.LZW_Allocated
                    (Object.Resources);
 
-   function Decode_Scratch
+   function Composite
      (Object : in out Decoder;
-      Pixel_Bytes : Byte_Count) return Results.Result
+      Target : out Streams.Byte_Array) return Results.Result
      with Pre => Object.Current_State = Decoding_Frame
-                 and then Object.Has_Pending_Frame
+                 and then Object.Pending_Frame.Present
                  and then Internal.Decoder_Storage.LZW_Allocated
-                   (Object.Resources)
-                 and then Internal.Decoder_Storage.Frame_Scratch_Allocated
-                   (Object.Resources)
-                 and then Pixel_Bytes = Internal.Geometry_Arithmetic.Area
-                   (Object.Pending_Frame.Width, Object.Pending_Frame.Height)
-                 and then Pixel_Bytes <= Byte_Count (Natural'Last)
-                 and then Internal.Decoder_Storage.Frame_Scratch_Length
-                   (Object.Resources) >= Pixel_Bytes;
+                   (Object.Resources);
+
+   function Skip_Data (Object : in out Decoder) return Results.Result
+     with Pre => Object.Current_State = Decoding_Frame
+                 and then Object.Pending_Frame.Present;
 end Giflib.Decoding.Frame_Pipeline;

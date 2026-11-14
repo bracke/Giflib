@@ -2,6 +2,7 @@ with Giflib.Internal.Ownership.Testing;
 with Giflib.Internal.Encoder_Storage.Testing;
 with Giflib.Internal.Budget_Arithmetic;
 with Giflib.Quantization.Testing;
+with Giflib.Encoding.Wire_Output;
 
 package body Giflib.Encoding.Testing is
    function Allocated_Bytes (Object : Encoder) return Byte_Count is
@@ -29,7 +30,7 @@ package body Giflib.Encoding.Testing is
       Data : Streams.Byte_Array) return Results.Result
    is
    begin
-      return Encoding.Write_Raw (Object, Data);
+      return Wire_Output.Write (Object, Data);
    end Write_Raw;
 
    procedure Inject_Storage_Error_After
@@ -63,10 +64,21 @@ package body Giflib.Encoding.Testing is
       Quantization.Testing.Corrupt_Allocation_Budget (Object.Quantizer_Data);
    end Corrupt_Quantizer_Allocation_Budget;
 
+   procedure Repair_Quantizer_Allocation_Budget
+     (Object : in out Encoder) is
+   begin
+      Quantization.Testing.Repair_Allocation_Budget (Object.Quantizer_Data);
+   end Repair_Quantizer_Allocation_Budget;
+
    procedure Corrupt_Allocation_Budget (Object : in out Encoder) is
    begin
       Internal.Encoder_Storage.Testing.Corrupt_Budget (Object.Resources);
    end Corrupt_Allocation_Budget;
+
+   procedure Repair_Allocation_Budget (Object : in out Encoder) is
+   begin
+      Internal.Encoder_Storage.Testing.Repair_Budget (Object.Resources);
+   end Repair_Allocation_Budget;
 
    function Resources_Released (Object : Encoder) return Boolean is
      (Internal.Encoder_Storage.Is_Released (Object.Resources)
@@ -77,5 +89,5 @@ package body Giflib.Encoding.Testing is
 
    function Last_Cleanup
      (Object : Encoder) return Cleanup.Cleanup_Status
-   is (Object.Cleanup_State);
+   is (First_Cleanup_Status (Object));
 end Giflib.Encoding.Testing;

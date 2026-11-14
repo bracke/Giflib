@@ -1,3 +1,7 @@
+with Giflib.Decoding.Frame_Pipeline;
+with Giflib.Internal.Geometry_Arithmetic;
+with Giflib.Internal.Pixel_Arithmetic;
+
 separate (Giflib.Decoding)
 function Decode_Expanded_Frame
   (Object : in out Decoder;
@@ -43,5 +47,5 @@ begin
          then 0
          else 255);
    end loop;
-   return Complete_Frame (Object, Info);
+   return Frame_Pipeline.Finish (Object, Info);
 end Decode_Expanded_Frame;

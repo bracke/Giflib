@@ -8,14 +8,14 @@ is
    Control : Frames.Graphic_Control;
    Outcome : Results.Result;
 begin
-   Outcome := Read_Fixed_Block (Object, Info, Fixed);
+   Outcome := Transport.Read_Fixed_Block (Object, Info, Fixed);
    if not Results.Succeeded (Outcome) then
       return Outcome;
    end if;
    Outcome := Internal.Bytes.Read_Byte
      (Object.Input.all, Terminator, Graphic_Control_Extension_Block);
    if not Results.Succeeded (Outcome) then
-      return Truncated (Object, Info, Outcome);
+      return Transport.Truncated (Object, Info, Outcome);
    elsif Terminator /= 0 then
       declare
          Prior : constant Streams.Source_Position_Result :=
@@ -33,7 +33,7 @@ begin
                 Actual => Byte_Count (Terminator),
                 others => <>)));
       end;
-   elsif Object.Has_Pending_Control
+   elsif Object.Pending_Control.Present
      and then Object.Options.Strictness = Strict
    then
       return Results.Failure
@@ -56,7 +56,7 @@ begin
                 Actual => Byte_Count (Fixed (1)),
                 others => <>)));
       end if;
-      Add_Warning
+      Failure_Handling.Record_Warning
         (Object,
          Errors.Reserved_Value_Accepted,
          Errors.Compatibility,
@@ -67,8 +67,8 @@ begin
           Actual => Byte_Count (Fixed (1)),
           others => <>));
    end if;
-   if Object.Has_Pending_Control then
-      Add_Warning
+   if Object.Pending_Control.Present then
+      Failure_Handling.Record_Warning
         (Object,
          Errors.Compatibility_Issue,
          Errors.Compatibility,
@@ -83,9 +83,9 @@ begin
    Info.Graphic_Control := Control;
    Info.Payload_Length := 4;
    Info.Sub_Block_Count := 1;
-   Outcome := Start_Retention (Object, Info);
+   Outcome := Retention.Start (Object, Info);
    if Results.Succeeded (Outcome) then
-      Outcome := Retain_Chunk (Object, Fixed);
+      Outcome := Retention.Append (Object, Fixed);
    end if;
    return Outcome;
 end Read_Graphic_Control;

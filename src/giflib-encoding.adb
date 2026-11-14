@@ -1,193 +1,14 @@
 with Giflib.Encoding.Extensions;
-with Giflib.Encoding.Frame_Pipeline;
-with Giflib.Encoding.Resource_Management;
+with Giflib.Encoding.Failure_Handling;
+with Giflib.Encoding.Request_Validation;
 with Giflib.Encoding.Session_Transitions;
-with Giflib.Internal.Diagnostics;
-with Giflib.Internal.Cleanup;
-with Giflib.Internal.Budget_Arithmetic;
-with Giflib.Internal.Container_Writer;
 with Giflib.Encoding.State_Arithmetic;
-with Giflib.Internal.Geometry_Arithmetic;
-with Giflib.Internal.Loop_Extensions;
-with Giflib.Internal.Session_Arithmetic;
-with Giflib.Internal.Wire_Format;
 
 package body Giflib.Encoding is
    use type Animations.Loop_State;
+   use type Cleanup.Cleanup_Status;
    use type Errors.Error_Code;
-   use type Errors.Position_State;
-   use type Frames.Graphic_Control;
    use type Metadata.Extension_Kind;
-   package Geometry_Arithmetic renames Internal.Geometry_Arithmetic;
-   package Session_Arithmetic renames Internal.Session_Arithmetic;
-
-   function Invalid_Transition (Object : Encoder) return Results.Result is
-   begin
-      return Results.Failure
-        (Errors.Make
-           (Errors.Invalid_State,
-            Internal.Diagnostics.At_Destination (Object.Output.all)));
-   end Invalid_Transition;
-
-   function Fail (Object : in out Encoder; Item : Errors.Error) return Results.Result is
-      Enriched : Errors.Error := Item;
-      Cleanup_Outcome : Internal.Cleanup.Cleanup_Outcome;
-      pragma Unreferenced (Cleanup_Outcome);
-   begin
-      if Enriched.Context.Destination_Position.State =
-        Errors.Position_Not_Checked
-      then
-         Enriched.Context := Internal.Diagnostics.At_Destination
-           (Object.Output.all, Enriched.Context);
-      end if;
-      Cleanup_Outcome := Resource_Management.Release (Object);
-      Session_Transitions.Fail_Session (Object, Enriched);
-      return Results.Failure (Object.Diagnostic);
-   end Fail;
-
-   function Reject_Request
-     (Object : Encoder;
-      Item : Errors.Error) return Results.Result
-   is
-      Enriched : Errors.Error := Item;
-   begin
-      if Enriched.Context.Destination_Position.State =
-        Errors.Position_Not_Checked
-      then
-         Enriched.Context := Internal.Diagnostics.At_Destination
-           (Object.Output.all, Enriched.Context);
-      end if;
-      return Results.Failure (Enriched);
-   end Reject_Request;
-
-   function Reject_Frame_Request
-     (Object : Encoder;
-      Item : Errors.Error) return Results.Result
-   is
-      Enriched : Errors.Error := Item;
-   begin
-      if not Enriched.Context.Frame.Present then
-         Enriched.Context.Frame := Errors.Frame_At (Object.Frames_Written);
-      end if;
-      return Reject_Request (Object, Enriched);
-   end Reject_Frame_Request;
-
-   function Fail_Frame
-     (Object : in out Encoder;
-      Item   : Errors.Error) return Results.Result
-   is
-      Enriched : Errors.Error := Item;
-   begin
-      if not Enriched.Context.Frame.Present then
-         Enriched.Context.Frame := Errors.Frame_At (Object.Frames_Written);
-      end if;
-      return Fail (Object, Enriched);
-   end Fail_Frame;
-
-   function Has_Extension_Capacity
-     (Object : Encoder;
-      Additional : Natural) return Boolean
-   is
-   begin
-      return Session_Arithmetic.Has_Natural_Capacity
-        (Object.Extensions_Written,
-         Object.Constraints.Max_Extensions,
-         Additional);
-   end Has_Extension_Capacity;
-
-   function Validate_Frame_Request
-     (Object : Encoder;
-      Info   : Frame_Info) return Results.Result
-   is
-      Geometry : constant Geometry_Arithmetic.Rectangle_Analysis :=
-        Geometry_Arithmetic.Analyze_Rectangle
-          (Info.Left,
-           Info.Top,
-           Info.Width,
-           Info.Height,
-           Object.Screen.Width,
-           Object.Screen.Height);
-      Additional_Extensions : constant Natural :=
-        (if Object.Loop_Data.State /= Animations.No_Loop_Extension
-             and then not Object.Header_Written
-         then 1 else 0)
-        + (if Info.Control /= Frames.Default_Control then 1 else 0);
-   begin
-      if Object.Frames_Written >= Object.Constraints.Max_Frames then
-         return Results.Failure
-           (Errors.Make
-              (Errors.Limit_Exceeded,
-               (Expected => Byte_Count (Object.Constraints.Max_Frames),
-                Actual => Byte_Count (Object.Frames_Written) + 1,
-                Limit => Frame_Count_Limit,
-                others => <>)));
-      elsif Geometry.Pixel_Area
-        > Byte_Count (Object.Constraints.Max_Frame_Pixels)
-      then
-         return Results.Failure
-           (Errors.Make
-              (Errors.Limit_Exceeded,
-               (Expected => Byte_Count (Object.Constraints.Max_Frame_Pixels),
-                Actual => Geometry.Pixel_Area,
-                Limit => Frame_Pixel_Limit,
-                others => <>)));
-      elsif not Geometry.Fits then
-         return Results.Failure
-           (Errors.Make (Errors.Frame_Out_Of_Bounds));
-      elsif Object.Options.Version = Force_GIF87a
-        and then Info.Control /= Frames.Default_Control
-      then
-         return Results.Failure
-           (Errors.Make (Errors.Unsupported_Feature));
-      elsif not Has_Extension_Capacity (Object, Additional_Extensions) then
-         return Results.Failure
-           (Errors.Make
-              (Errors.Limit_Exceeded,
-               (Expected => Byte_Count (Object.Constraints.Max_Extensions),
-                Actual => Byte_Count (Object.Extensions_Written)
-                  + Byte_Count (Additional_Extensions),
-                Limit => Extension_Count_Limit,
-                others => <>)));
-      end if;
-      return Results.Success;
-   end Validate_Frame_Request;
-
-   function Write_Raw
-     (Object : in out Encoder;
-      Data : Streams.Byte_Array) return Results.Result
-   is
-      Outcome : Results.Result;
-      Written : Byte_Count;
-      Budget : constant Internal.Budget_Arithmetic.Charge_Result :=
-        Internal.Budget_Arithmetic.Charge
-          (Object.Bytes_Written,
-           Object.Constraints.Max_Output_Bytes,
-           Byte_Count (Data'Length));
-   begin
-      if not Budget.Accepted then
-         return Results.Failure
-           (Errors.Make
-              (Errors.Limit_Exceeded,
-               Internal.Diagnostics.At_Destination
-                 (Object.Output.all,
-                  (Expected => Object.Constraints.Max_Output_Bytes,
-                   Actual => Budget.Attempted,
-                   Limit => Output_Byte_Limit,
-                   others => <>))));
-      end if;
-      Outcome := Streams.Write_All (Object.Output.all, Data, Written);
-      Session_Transitions.Record_Wire_Bytes (Object, Written);
-      return Outcome;
-   end Write_Raw;
-
-   function Write_Palette
-     (Object : in out Encoder;
-      Palette : Palettes.Palette) return Results.Result
-   is
-   begin
-      return Write_Raw
-        (Object, Internal.Container_Writer.Palette_Data (Palette));
-   end Write_Palette;
 
    function Write_Header (Object : in out Encoder) return Results.Result
    is separate;
@@ -199,31 +20,24 @@ package body Giflib.Encoding is
       return Results.Result
    is separate;
 
-   function Define_Screen (Object : in out Encoder; Screen : Screen_Info) return Results.Result is
-      Pixels : constant Byte_Count := Geometry_Arithmetic.Area (Screen.Width, Screen.Height);
+   function Define_Screen
+     (Object : in out Encoder; Screen : Screen_Info) return Results.Result
+   is
    begin
       if not State_Arithmetic.Can_Define_Screen
         (Object.Current_State)
       then
-         return Invalid_Transition (Object);
-      elsif Screen.Width > Object.Constraints.Max_Logical_Width then
-         return Reject_Request
-           (Object, Errors.Make (Errors.Limit_Exceeded,
-                                 (Expected => Byte_Count (Object.Constraints.Max_Logical_Width),
-                                  Actual => Byte_Count (Screen.Width),
-                                  Limit => Logical_Width_Limit, others => <>)));
-      elsif Screen.Height > Object.Constraints.Max_Logical_Height then
-         return Reject_Request
-           (Object, Errors.Make (Errors.Limit_Exceeded,
-                                 (Expected => Byte_Count (Object.Constraints.Max_Logical_Height),
-                                  Actual => Byte_Count (Screen.Height),
-                                  Limit => Logical_Height_Limit, others => <>)));
-      elsif Pixels > Byte_Count (Object.Constraints.Max_Canvas_Pixels) then
-         return Reject_Request
-           (Object, Errors.Make (Errors.Limit_Exceeded,
-                                 (Expected => Byte_Count (Object.Constraints.Max_Canvas_Pixels),
-                                  Actual => Pixels, Limit => Canvas_Pixel_Limit, others => <>)));
+         return Failure_Handling.Invalid_State (Object);
       end if;
+      declare
+         Validation : constant Results.Result :=
+           Request_Validation.Validate_Screen (Object, Screen);
+      begin
+         if not Results.Succeeded (Validation) then
+            return Failure_Handling.Reject
+              (Object, Validation.First_Error);
+         end if;
+      end;
       Session_Transitions.Define_Screen (Object, Screen);
       return Results.Success;
    end Define_Screen;
@@ -233,17 +47,19 @@ package body Giflib.Encoding is
       Palette : Palettes.Palette) return Results.Result
    is
    begin
-      if not State_Arithmetic.Can_Configure
-        (Object.Current_State, Object.Header_Written)
+      if not State_Arithmetic.Can_Configure (Object.Current_State)
       then
-         return Invalid_Transition (Object);
-      elsif Palette.Length < 2 then
-         return Reject_Request
-           (Object, Errors.Make (Errors.Missing_Color_Table));
-      elsif not Palettes.Contains (Palette, Object.Screen.Background_Index) then
-         return Reject_Request
-           (Object, Errors.Make (Errors.Palette_Index_Out_Of_Range));
+         return Failure_Handling.Invalid_State (Object);
       end if;
+      declare
+         Validation : constant Results.Result :=
+           Request_Validation.Validate_Global_Palette (Object, Palette);
+      begin
+         if not Results.Succeeded (Validation) then
+            return Failure_Handling.Reject
+              (Object, Validation.First_Error);
+         end if;
+      end;
       Session_Transitions.Set_Global_Palette (Object, Palette);
       return Results.Success;
    end Set_Global_Palette;
@@ -253,28 +69,19 @@ package body Giflib.Encoding is
       Count : Natural) return Results.Result
    is
    begin
-      if not State_Arithmetic.Can_Configure
-        (Object.Current_State, Object.Header_Written)
+      if not State_Arithmetic.Can_Configure (Object.Current_State)
       then
-         return Invalid_Transition (Object);
-      elsif Count > 65_535 then
-         return Reject_Request
-           (Object, Errors.Make (Errors.Integer_Overflow));
-      elsif Object.Options.Version = Force_GIF87a then
-         return Reject_Request
-           (Object, Errors.Make (Errors.Unsupported_Feature));
-      elsif Object.Loop_Data.State = Animations.No_Loop_Extension
-        and then not Has_Extension_Capacity (Object, 1)
-      then
-         return Reject_Request
-           (Object,
-            Errors.Make
-              (Errors.Limit_Exceeded,
-               (Expected => Byte_Count (Object.Constraints.Max_Extensions),
-                Actual => Byte_Count (Object.Extensions_Written) + 1,
-                Limit => Extension_Count_Limit,
-                others => <>)));
+         return Failure_Handling.Invalid_State (Object);
       end if;
+      declare
+         Validation : constant Results.Result :=
+           Request_Validation.Validate_Loop_Count (Object, Count);
+      begin
+         if not Results.Succeeded (Validation) then
+            return Failure_Handling.Reject
+              (Object, Validation.First_Error);
+         end if;
+      end;
       Session_Transitions.Set_Loop
         (Object,
          (if Count = 0
@@ -349,7 +156,7 @@ package body Giflib.Encoding is
       Conversion : constant Descriptor_Conversion := Descriptor_For (Info);
    begin
       if not Conversion.Supported then
-         return Reject_Request
+         return Failure_Handling.Reject
            (Object, Errors.Make (Errors.Unsupported_Feature));
       end if;
       return Add_Extension (Object, Conversion.Descriptor, Payload);
@@ -364,7 +171,7 @@ package body Giflib.Encoding is
       Conversion : constant Descriptor_Conversion := Descriptor_For (Info);
    begin
       if not Conversion.Supported then
-         return Reject_Request
+         return Failure_Handling.Reject
            (Object, Errors.Make (Errors.Unsupported_Feature));
       end if;
       return Add_Extension_Exact
@@ -393,6 +200,18 @@ package body Giflib.Encoding is
    begin
       return Object.Diagnostic;
    end First_Error;
+
+   function First_Cleanup_Status
+     (Object : Encoder) return Cleanup.Cleanup_Status is
+      Quantizer_Status : constant Cleanup.Cleanup_Status :=
+        Quantization.First_Cleanup_Status (Object.Quantizer_Data);
+   begin
+      return
+        (if Quantizer_Status /= Cleanup.Cleanup_Complete
+         then Quantizer_Status
+         else Internal.Encoder_Storage.First_Cleanup_Status
+           (Object.Resources));
+   end First_Cleanup_Status;
 
    procedure Finalize (Object : in out Encoder)
    is separate;

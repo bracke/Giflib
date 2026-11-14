@@ -1,3 +1,11 @@
+with Giflib.Decoding.Frame_Pipeline;
+with Giflib.Decoding.Output_Validation;
+with Giflib.Decoding.Trailing_Data;
+with Giflib.Internal.Bytes;
+with Giflib.Internal.Diagnostics;
+with Giflib.Internal.Geometry_Arithmetic;
+with Giflib.Internal.Wire_Format;
+
 separate (Giflib.Decoding)
 function Next_Event
   (Object : in out Decoder;
@@ -12,22 +20,22 @@ is
    Pixels : Byte_Count;
 begin
    if Object.Current_State = Completed then
-      Position := Input_Position (Object);
+      Position := Failure_Handling.Input_Position_Of (Object);
       if not Position.Available then
-         return Fail
+         return Failure_Handling.Fail
            (Object, Errors.Make
               (Errors.Source_Read_Failed,
                (Source_Position => (State => Errors.Position_Unavailable),
                 others => <>)));
       end if;
-      return Deliver_Event
+      return Output_Validation.Deliver
         (Object, Event, (Kind => End_Event, Offset => Position.Value));
    elsif not State_Arithmetic.Can_Read_Event (Object.Current_State) then
-      return Invalid_Transition (Object);
+      return Failure_Handling.Invalid_State (Object);
    end if;
-   Position := Input_Position (Object);
+   Position := Failure_Handling.Input_Position_Of (Object);
    if not Position.Available then
-      return Fail
+      return Failure_Handling.Fail
         (Object, Errors.Make
            (Errors.Source_Read_Failed,
             (Source_Position => (State => Errors.Position_Unavailable),
@@ -40,37 +48,37 @@ begin
          if Object.Options.Strictness = Recover_When_Safe
            and then Object.Frames_Seen > 0
          then
-            Position := Input_Position (Object);
+            Position := Failure_Handling.Input_Position_Of (Object);
             if not Position.Available then
-               return Fail
+               return Failure_Handling.Fail
                  (Object, Errors.Make
                     (Errors.Source_Read_Failed,
                      (Source_Position =>
                         (State => Errors.Position_Unavailable),
                       others => <>)));
             end if;
-            Add_Warning
+            Failure_Handling.Record_Warning
               (Object, Errors.Recovery_Applied, Errors.Recovery,
                (Source_Position => Errors.Source_Position_At (Position.Value),
                 Block => Trailer_Block, Expected => 1, Actual => 0,
                 others => <>));
             Session_Transitions.Complete_Stream (Object);
-            return Deliver_Event
+            return Output_Validation.Deliver
               (Object, Event, (Kind => End_Event, Offset => Position.Value));
          end if;
-         return Fail
+         return Failure_Handling.Fail
            (Object, Errors.Make
               (Errors.Truncated_Block,
                Internal.Diagnostics.At_Source
                  (Object.Input.all, (Expected => 1, Actual => 0,
                                      others => <>))));
       end if;
-      return Fail (Object, Outcome.First_Error);
+      return Failure_Handling.Fail (Object, Outcome.First_Error);
    end if;
    case Marker is
       when Internal.Wire_Format.Image_Separator =>
          if Object.Frames_Seen >= Object.Constraints.Max_Frames then
-            return Fail
+            return Failure_Handling.Fail
               (Object, Errors.Make
                  (Errors.Limit_Exceeded,
                   (Source_Position => Errors.Source_Position_At (Marker_Offset),
@@ -81,14 +89,14 @@ begin
                    Limit => Frame_Count_Limit, others => <>)));
          end if;
          Session_Transitions.Discover_Frame (Object);
-         Outcome := Prepare_Frame (Object);
+         Outcome := Frame_Pipeline.Prepare (Object);
          if not Results.Succeeded (Outcome) then
-            return Fail (Object, Outcome.First_Error);
+            return Failure_Handling.Fail (Object, Outcome.First_Error);
          end if;
          Pixels := Internal.Geometry_Arithmetic.Area
            (Object.Pending_Frame.Width, Object.Pending_Frame.Height);
          Session_Transitions.Await_Frame_Decision (Object);
-         return Deliver_Event
+         return Output_Validation.Deliver
            (Object, Event,
             (Kind => Image_Event, Offset => Marker_Offset,
              Frame => Object.Frames_Seen,
@@ -99,29 +107,29 @@ begin
              Interlaced => Object.Pending_Frame.Interlaced,
              Indexed_Bytes => Pixels, Expanded_Bytes => Pixels * 4));
       when Internal.Wire_Format.Trailer =>
-         Outcome := Check_Trailing_Data (Object);
+         Outcome := Trailing_Data.Validate (Object);
          if not Results.Succeeded (Outcome) then
-            return Fail (Object, Outcome.First_Error);
+            return Failure_Handling.Fail (Object, Outcome.First_Error);
          end if;
          Session_Transitions.Complete_Stream (Object);
-         return Deliver_Event
+         return Output_Validation.Deliver
            (Object, Event, (Kind => End_Event, Offset => Marker_Offset));
       when Internal.Wire_Format.Extension_Introducer =>
          Outcome := Internal.Bytes.Read_Byte (Object.Input.all, Label_Value);
          if not Results.Succeeded (Outcome) then
-            return Fail (Object, Outcome.First_Error);
+            return Failure_Handling.Fail (Object, Outcome.First_Error);
          end if;
          Outcome := Read_Extension
            (Object, Marker_Offset, Label_Value, Extension_Info);
          if not Results.Succeeded (Outcome) then
-            return Fail (Object, Outcome.First_Error);
+            return Failure_Handling.Fail (Object, Outcome.First_Error);
          end if;
-         return Deliver_Event
+         return Output_Validation.Deliver
            (Object, Event,
             (Kind => Extension_Event, Offset => Marker_Offset,
              Extension => Extension_Info));
       when others =>
-         return Fail
+         return Failure_Handling.Fail
            (Object, Errors.Make
               (Errors.Invalid_Block,
                (Source_Position => Errors.Source_Position_At (Marker_Offset),

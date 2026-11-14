@@ -43,13 +43,15 @@ package Giflib.Internal.Blocks is
    function Total_Wire_Bytes (Writer : Sub_Block_Writer) return Byte_Count;
 
 private
+   type Reader_State is (Reading, Read_Finished, Read_Failed);
+   type Writer_State is (Writing, Write_Finished, Write_Failed);
    type Sub_Block_Reader is limited record
       Remaining : Natural range 0 .. 255 := 0;
       Total : Byte_Count := 0;
       Maximum : Byte_Count := 0;
       Applied_Limit : Limit_Kind := No_Limit;
       Owner_Block : Block_Kind := No_Block;
-      At_End : Boolean := False;
+      State : Reader_State := Reading;
    end record;
 
    type Sub_Block_Writer is limited record
@@ -60,6 +62,6 @@ private
       Wire_Total : Byte_Count := 0;
       Maximum_Payload : Byte_Count := 0;
       Maximum_Wire : Byte_Count := 0;
-      Is_Finished : Boolean := False;
+      State : Writer_State := Writing;
    end record;
 end Giflib.Internal.Blocks;

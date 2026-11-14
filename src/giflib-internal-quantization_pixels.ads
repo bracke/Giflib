@@ -9,9 +9,13 @@ package Giflib.Internal.Quantization_Pixels is
       Alpha : Byte := 255;
    end record;
 
-   type Pixel_Result is record
-      Valid : Boolean := False;
-      Value : Source_Pixel := (Color => (others => 0), Alpha => 255);
+   type Pixel_Result (Valid : Boolean := False) is record
+      case Valid is
+         when True =>
+            Value : Source_Pixel;
+         when False =>
+            null;
+      end case;
    end record;
 
    function Read_Pixel

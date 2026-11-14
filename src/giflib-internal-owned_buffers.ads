@@ -6,7 +6,7 @@ with Giflib.Streams;
 package Giflib.Internal.Owned_Buffers is
    pragma Preelaborate;
 
-   package Storage is new Owned_Arrays
+   package Storage is new Giflib.Internal.Owned_Arrays
      (Positive, Byte, Streams.Byte_Array, 0);
    type Handle is limited private;
    --  A successful Ensure binds the handle to Budget until Release.  The

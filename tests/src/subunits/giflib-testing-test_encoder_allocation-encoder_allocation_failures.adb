@@ -83,8 +83,20 @@ begin
       and then not Giflib.Encoding.Testing.Quantizer_Cleanup_Succeeded
         (Cleanup_Encoder)
       and then Giflib.Encoding.Testing.Last_Cleanup (Cleanup_Encoder) =
-        Giflib.Quantization.Cleanup_Accounting_Failed,
+        Giflib.Quantization.Cleanup_Accounting_Failed
+      and then Giflib.Encoding.First_Cleanup_Status (Cleanup_Encoder) =
+        Giflib.Cleanup.Cleanup_Accounting_Failed,
       "quantizer cleanup failure was not propagated to the encoder");
+   Giflib.Encoding.Testing.Repair_Quantizer_Allocation_Budget
+     (Cleanup_Encoder);
+   Giflib.Encoding.Finalize (Cleanup_Encoder);
+   Outcome := Giflib.Encoding.Initialize (Cleanup_Encoder);
+   Assert
+     (not Giflib.Results.Succeeded (Outcome)
+      and then Giflib.Encoding.State (Cleanup_Encoder) = Giflib.Encoding.Failed
+      and then Giflib.Encoding.First_Cleanup_Status (Cleanup_Encoder) =
+        Giflib.Cleanup.Cleanup_Accounting_Failed,
+      "encoder reused a session with a sticky cleanup failure");
    Giflib.Encoding.Finalize (Cleanup_Encoder);
 
    Giflib.Streams.Open (Outer_Cleanup_Destination);
@@ -109,7 +121,9 @@ begin
       and then Giflib.Encoding.Testing.Resources_Released
         (Outer_Cleanup_Encoder)
       and then Giflib.Encoding.Testing.Last_Cleanup (Outer_Cleanup_Encoder) =
-        Giflib.Quantization.Cleanup_Accounting_Failed,
+        Giflib.Quantization.Cleanup_Accounting_Failed
+      and then Giflib.Encoding.First_Cleanup_Status
+        (Outer_Cleanup_Encoder) = Giflib.Cleanup.Cleanup_Accounting_Failed,
       "outer encoder cleanup failure lost its status or retained owned storage");
    Giflib.Encoding.Finalize (Outer_Cleanup_Encoder);
 

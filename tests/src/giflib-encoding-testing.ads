@@ -26,8 +26,11 @@ package Giflib.Encoding.Testing is
 
    procedure Corrupt_Quantizer_Allocation_Budget
      (Object : in out Encoder);
+   procedure Repair_Quantizer_Allocation_Budget
+     (Object : in out Encoder);
 
    procedure Corrupt_Allocation_Budget (Object : in out Encoder);
+   procedure Repair_Allocation_Budget (Object : in out Encoder);
    function Resources_Released (Object : Encoder) return Boolean;
 
    function Quantizer_Cleanup_Succeeded (Object : Encoder) return Boolean;

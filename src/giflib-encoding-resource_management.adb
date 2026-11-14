@@ -3,7 +3,6 @@ with Giflib.Internal.Diagnostics;
 with Giflib.Internal.Resource_Diagnostics;
 
 package body Giflib.Encoding.Resource_Management is
-   use type Internal.Ownership.Allocation_Status;
    use type Errors.Error_Code;
    use type Internal.Cleanup.Cleanup_Status;
 
@@ -20,14 +19,11 @@ package body Giflib.Encoding.Resource_Management is
       Resource_Status : constant Internal.Cleanup.Cleanup_Outcome :=
         Release (Object.Resources);
    begin
-      if Object.Cleanup_State = Internal.Cleanup.Cleanup_Complete then
-         if Quantizer_Status /= Internal.Cleanup.Cleanup_Complete then
-            Object.Cleanup_State := Quantizer_Status;
-         elsif Resource_Status.Status /= Internal.Cleanup.Cleanup_Complete then
-            Object.Cleanup_State := Resource_Status.Status;
-         end if;
-      end if;
-      return (Status => Object.Cleanup_State);
+      return
+        (Status =>
+           (if Quantizer_Status /= Internal.Cleanup.Cleanup_Complete
+            then Quantizer_Status
+            else Resource_Status.Status));
    end Release;
 
    function Combined_Amount
@@ -49,7 +45,7 @@ package body Giflib.Encoding.Resource_Management is
          else Object.Constraints.Max_Allocation_Bytes - Reserved);
    end Outer_Maximum;
 
-   function Allocation_Result
+   function Complete_Allocation
      (Object : Encoder;
       Allocation : Internal.Ownership.Allocation_Outcome)
       return Results.Result
@@ -60,13 +56,12 @@ package body Giflib.Encoding.Resource_Management is
            (Frame => Errors.Frame_At (Object.Frames_Written),
             others => <>));
    begin
-      return Results.Failure
-        (Internal.Resource_Diagnostics.Allocation_Error
-           (Allocation,
-            Object.Constraints.Max_Allocation_Bytes,
-            Combined_Amount (Quantizer_Bytes (Object), Allocation.Attempted),
-            Context));
-   end Allocation_Result;
+      return Internal.Resource_Diagnostics.Allocation_Result
+        (Allocation,
+         Object.Constraints.Max_Allocation_Bytes,
+         Combined_Amount (Quantizer_Bytes (Object), Allocation.Attempted),
+         Context);
+   end Complete_Allocation;
 
    function Ensure_Truecolor_Pixels
      (Object : in out Encoder;
@@ -82,10 +77,7 @@ package body Giflib.Encoding.Resource_Management is
          Object.Allocation_Fault,
          Required,
          Outer_Maximum (Object));
-      if Allocation.Status /= Internal.Ownership.Allocation_Ready then
-         return Allocation_Result (Object, Allocation);
-      end if;
-      return Results.Success;
+      return Complete_Allocation (Object, Allocation);
    end Ensure_Truecolor_Pixels;
 
    function Ensure_LZW_Workspace
@@ -101,10 +93,7 @@ package body Giflib.Encoding.Resource_Management is
         (Object.Resources,
          Object.Allocation_Fault,
          Outer_Maximum (Object));
-      if Allocation.Status /= Internal.Ownership.Allocation_Ready then
-         return Allocation_Result (Object, Allocation);
-      end if;
-      return Results.Success;
+      return Complete_Allocation (Object, Allocation);
    end Ensure_LZW_Workspace;
 
    function Quantization_Constraints

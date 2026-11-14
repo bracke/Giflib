@@ -1,3 +1,5 @@
+with Giflib.Encoding.Lifecycle_Sequence;
+
 separate (Giflib.Encoding)
 function Initialize
   (Object : in out Encoder;
@@ -5,16 +7,14 @@ function Initialize
    Constraints : Limits.Limit_Set := Limits.Default_Limits)
    return Results.Result
 is
-   Cleanup_Outcome : Internal.Cleanup.Cleanup_Outcome;
+   Outcome : Results.Result;
 begin
    if not State_Arithmetic.Can_Initialize (Object.Current_State) then
-      return Invalid_Transition (Object);
+      return Failure_Handling.Invalid_State (Object);
    end if;
-   Cleanup_Outcome := Resource_Management.Release (Object);
-   if not Internal.Cleanup.Succeeded (Cleanup_Outcome) then
-      Session_Transitions.Fail_Session
-        (Object, Errors.Make (Errors.Internal_Invariant_Failed));
-      return Results.Failure (Object.Diagnostic);
+   Outcome := Lifecycle_Sequence.Prepare_Initialization (Object);
+   if not Results.Succeeded (Outcome) then
+      return Outcome;
    end if;
    Session_Transitions.Begin_Session (Object, Options, Constraints);
    return Results.Success;
