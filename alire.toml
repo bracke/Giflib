@@ -26,16 +26,16 @@ gnat_native = "^15"
 
 [[actions]]
 type = "test"
-command = ["alr", "--chdir", "tests", "build", "--development"]
+command = ["alr", "--chdir=tests", "build", "--development"]
 
 [[actions]]
 type = "test"
-command = ["alr", "--chdir", "tests", "exec", "--", "gprbuild", "-q", "-p", "-P", "tools.gpr"]
+command = ["alr", "--chdir=tests", "exec", "--", "gprbuild", "-q", "-p", "-P", "tools.gpr"]
 
 [[actions]]
 type = "test"
-command = ["alr", "--chdir", "tests", "exec", "--", "./bin/giflib_tooling_probe", ".."]
+command = ["alr", "--chdir=tests", "exec", "--", "./bin/giflib_tooling_probe", ".."]
 
 [[actions]]
 type = "test"
-command = ["alr", "--chdir", "tests", "exec", "--", "./bin/giflib_tests"]
+command = ["alr", "--chdir=tests", "exec", "--", "./bin/giflib_tests"]
