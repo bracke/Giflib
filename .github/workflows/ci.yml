@@ -1,0 +1,48 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  focused:
+    name: Build, unit tests, and structure
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: alire-project/setup-alire@1ff7d9224297858cc9ecce29b08bc6109f93e49a # v6
+        with:
+          version: 2.1.1
+      - run: alr test
+      - run: alr --chdir tests exec -- ./bin/giflib_fuzz 10000 3235823838
+
+  interoperability:
+    name: Independent decoder oracles
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: alire-project/setup-alire@1ff7d9224297858cc9ecce29b08bc6109f93e49a # v6
+        with:
+          version: 2.1.1
+      - run: sudo apt-get update
+      - run: sudo apt-get install --yes ffmpeg imagemagick
+      - run: alr --chdir tests exec -- gprbuild -q -p -P tools.gpr
+      - run: alr --chdir tests exec -- ./bin/giflib_check external
+
+  tooling:
+    name: Tooling mutation gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: alire-project/setup-alire@1ff7d9224297858cc9ecce29b08bc6109f93e49a # v6
+        with:
+          version: 2.1.1
+      - run: alr --chdir tests exec -- gprbuild -q -p -P tools.gpr
+      - run: alr --chdir tests exec -- ./bin/giflib_check tooling

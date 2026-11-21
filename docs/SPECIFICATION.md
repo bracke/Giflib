@@ -45,8 +45,10 @@ The GIF format has a logical screen and zero or more graphic rendering blocks. A
 - LZW decoding may prefetch at most one 255-byte GIF data sub-block. Prefetch
   must preserve compressed-byte limits, source offsets, short-read behavior,
   and exact positioning at the following container block.
-- LZW encoding may stage at most one 255-byte payload block before handing it
-  to the sub-block writer. Indexed palette validation is performed as pixels
+- LZW encoding shall stage at most one 255-byte payload block in total; the
+  bit-code writer feeds the sub-block writer's buffer directly and shall not
+  retain a second payload-sized buffer. Indexed palette validation is performed
+  as pixels
   enter the compressor, so invalid caller input can leave a nonseekable
   destination with partial output as described by the encoder state contract.
 - Decoder orchestration separates code reading, output placement, and
@@ -62,6 +64,12 @@ The GIF format has a logical screen and zero or more graphic rendering blocks. A
   layout rather than width/height sentinel values. Production codec entry
   points accept only allocation-accounted workspace handles; direct workspace
   access is confined to package private parts and white-box testing children.
+- Decoder output shall select sequential or interlaced placement once per
+  decoded sequence. Sequential output uses direct contiguous writes; interlaced
+  output preserves the specified pass order without repeating a layout branch
+  for every emitted byte. Measured leaf helpers in the code, bit, work, and
+  dictionary paths may be forced inline when this does not weaken their proved
+  contracts or bounded behavior.
 - Support interlace passes in this order (zero-based rows): `(0,8)`, `(4,8)`, `(2,4)`, `(1,2)` and inverse reordering on encode. Include heights smaller than eight in tests.
 
 ### 3.3 Palettes, transparency, disposal and looping
@@ -74,6 +82,13 @@ The GIF format has a logical screen and zero or more graphic rendering blocks. A
 - Validate frame rectangle containment (`left + width <= screen_width`, `top + height <= screen_height`) without arithmetic overflow; do not clip silently in strict mode.
 
 ## 4. Public package layout
+
+The supported public package names in this section are normative. Private-child
+names and the internal package inventory are an informative implementation map,
+not part of the codec contract; private refactors do not require a specification
+revision when public behavior and the stated dependency boundaries are
+unchanged. Detailed validator design belongs in
+[TOOLING_ARCHITECTURE.md](TOOLING_ARCHITECTURE.md).
 
 ```text
 Giflib                        -- shared scalar types and enums
@@ -132,6 +147,8 @@ Giflib.Internal.Quantization_Storage.Outcomes -- phase-specific service statuses
 Giflib.Internal.Quantization_Storage.*_Operations -- checked workspace services
 Giflib.Quantization.Workspace_Operations -- allocation and failure translation
 Giflib.Quantization.Palette_Building -- fixed/generated palette preparation
+Giflib.Quantization.Palette_Building.Fixed_Strategy -- fixed-palette transparency scan
+Giflib.Quantization.Palette_Building.Generated_Strategy -- histogram/exact-color palette construction
 Giflib.Quantization.Pixel_Mapping -- indexed output and optional dithering
 Giflib.Internal.Interlacing   -- pass addressing
 Giflib.Internal.Stream_Arithmetic -- proved transfer windows/progress
@@ -143,7 +160,9 @@ Giflib.Decoding.Frame_Pipeline -- private frame lifecycle orchestration facade
 Giflib.Decoding.Frame_Lifecycle -- private preparation/start/finish transactions
 Giflib.Decoding.Frame_Execution -- private decode/composite/skip accounting
 Giflib.Decoding.Frame_Data -- private raw indexed decode and skip operations
-Giflib.Decoding.Frame_Compositing -- private canvas/disposal orchestration with one background policy
+Giflib.Decoding.Frame_Compositing -- private frame rendering orchestration
+Giflib.Decoding.Canvas_Policy -- private canvas setup and background resolution
+Giflib.Decoding.Disposal_Policy -- private disposal application and bounded snapshots
 Giflib.Decoding.Failure_Handling -- private diagnostic and failure transitions
 Giflib.Decoding.Output_Validation -- private output variant and extent checks
 Giflib.Decoding.Trailing_Data -- private trailing-input policy
@@ -152,7 +171,9 @@ Giflib.Encoding.Failure_Handling -- private diagnostic and failure transitions
 Giflib.Encoding.Request_Validation -- private request and resource-limit checks
 Giflib.Encoding.Wire_Output -- private budgeted destination writes
 Giflib.Encoding.Session_Transitions -- private complete encoder state commits
-Giflib.Encoding.Frame_Pipeline -- private shared frame transaction orchestration
+Giflib.Encoding.Frame_Pipeline -- private pixel-source dispatch orchestration
+Giflib.Encoding.Frame_Preparation -- private palette and frame-request preparation
+Giflib.Encoding.Frame_Transaction -- private wire-prefix and lifecycle transaction
 Giflib.Encoding.Frame_Sources -- private indexed/stored source strategies
 Giflib.Encoding/Decoding lifecycle operations -- separate facade subunits
 Giflib.Internal.Lifecycle_Protocol -- shared release/init/cancel/finalize protocol
@@ -184,8 +205,12 @@ Giflib.Internal.Owned_Objects -- budget-bound fixed-object ownership
 Giflib.Internal.Borrow_Guards -- exception-safe scoped borrow acquisition
 Giflib.Internal.Optimization_Arithmetic -- proved optimizer decisions/bounds
 Giflib.Internal.Pixel_Arithmetic -- proved row-major/component offsets
+Giflib.Internal.Image_Data.Transport -- image-data sub-block transport and accounting
 Giflib.Decoding.Resource_Management -- private decoder resource lifecycle
 Giflib.Encoding.Resource_Management -- private encoder resource lifecycle
+Giflib.Optimization.Analysis -- conservative frame optimization decisions
+Giflib.Optimization.Extraction -- checked optimized-rectangle materialization
+Giflib.Optimization.Rectangle_Walker -- shared bounded optimization scan
 ```
 
 Only the documented non-private `Giflib.*` packages constitute the supported
@@ -323,17 +348,22 @@ A palette is a bounded count and array of at most 256 RGB entries; tables writte
   code while a view of its owned storage is live. Algorithms receive storage
   through focused workspace services, and re-entry into the owning resource is
   forbidden by construction rather than callback convention.
-- Convert heap exhaustion to a bounded `Limit_Exceeded` result at every
-  allocation site. Allocation accounting uses a shared budget abstraction and
+- Convert heap exhaustion to a bounded `Allocation_Failed` result at every
+  allocation site. `Limit_Exceeded` remains reserved for a rejected configured
+  budget charge, so callers can distinguish host resource exhaustion from a
+  limit that they may deliberately raise. Allocation accounting uses a shared budget abstraction and
   one overflow-safe charge operation; individual session/workspace resources
   reserve before allocation through a scoped transaction. A committed
   transaction transfers the charge to the resource; every uncommitted exit,
   including an unexpected exception, rolls the charge back automatically.
   Encoder-owned buffers and its independently owned quantization workspace each
   retain their own ledger; the resource manager subtracts retained charges when
-  deriving either ledger's growth ceiling. A nested allocation failure reports
-  the enclosing configured maximum and combined attempted total, not a derived
-  remaining allowance. No retained resource stores an access to a caller-owned
+  deriving either ledger's growth ceiling. A nested configured-limit failure
+  reports the enclosing configured maximum and combined attempted total, not a
+  derived remaining allowance. A nested host allocation failure likewise
+  reports the combined enclosing-session attempted total without claiming that
+  the configured limit was exceeded. No retained
+  resource stores an access to a caller-owned
   ledger: handles keep only a ledger identity and require the ledger explicitly
   for release. Ledger-identity mismatches are checked in production code and
   return deterministic internal failures; assertions are supplementary only.
@@ -404,298 +434,16 @@ counters, retained-warning state, compositor history/snapshot state,
 completion, failure, reset, and cancellation). Orchestrators may ask
 the proved state-arithmetic packages whether an operation is legal, but must not
 invoke their mutating operations directly or duplicate a multi-field commit.
-The repository structure check derives the transition-owned field manifest from
-the decoder and encoder records and derives session-object names, within their
-lexical scopes, from Ada declarations and the transitive closure of subtype
-aliases inherited from package specifications and separate-parent bodies.  It
-derives component inventories from ordinary, discriminated, and variant record
-declarations without treating variant selectors as fields.  Inherited callable
-overloads remain distinct by lexical scope, formal types, defaulted-argument
-bounds, and normalized profile so a later non-session result cannot erase an
-earlier session-bearing result.  Formal type identity retains complete selected
-and class-wide names rather than only their terminal identifier; anonymous
-access-to-subprogram indications remain conservatively unknown, and an exact
-typed overload match takes precedence over an unknown formal type.
-Ordinary nested package declarations introduce lexical scopes, so their types,
-callables, and package aliases cannot escape into the enclosing package
-context.  Context export is based on explicit unit-context membership rather
-than raw lexical-depth constants.  A descendant declaration replaces inherited
-homonyms across non-component declaration kinds; owner-qualified record
-components remain independently selectable.  Structural events distinguish
-introducing a lexical scope from being an actual body, including package
-specifications and expression functions; every event kind exposes only its
-applicable payload, every event position is positive, and callable consumers
-require the callable event subtype. All structural consumers share one
-subprogram-header type whose optional return and declaration positions are
-discriminated between absence and a positive token position. Null procedures
-and boxed generic formal subprograms are terminal declarations and never
-introduce structural scopes.
-Session-bearing depth is discriminated from
-absence instead of encoding absence as a numeric sentinel.  Literal token
-values are exposed only through normalized accessors, and validated
-kind-specific token factories distinguish identifiers, reserved words,
-numerics, decoded string values, source-spelled characters, and symbols.
-Reserved words cannot be represented as defining identifiers. Identifier and numeric
-validation enforces Ada separator, based-literal, decimal-point, and exponent
-placement instead of accepting token-kind prefixes. Tokens are indefinite,
-factory-only values with positive source positions, so default construction
-cannot bypass those invariants. Positions are relative to the supplied string,
-including non-1-based values; unterminated strings and unsupported symbol
-spellings are rejected at the lexical boundary. Cursor-oriented semantic
-queries use the same relative coordinate system and analyze complete tokens,
-so a cursor inside a literal never creates an artificial unterminated token.
-Cursor analysis builds a bounded token/event snapshot at the requested
-position; lexing stops after completing the token that contains the cursor, so
-later malformed or oversized text is not inspected, and declaration handlers
-cannot inspect tokens that start after it.
-Legal context clauses before a separate subunit do not prevent discovery of
-the separate parent. Separate-clause discovery anchors at the first library
-unit introducer, distinguishes absence, a valid parent, and malformed syntax,
-and requires a complete body introducer using the structural analyzer's shared
-body-marker service; malformed separate subunits are rejected through
-the tooling diagnostic boundary rather than analyzed as ordinary bodies.
-Expected source and context-ancestry failures use a dedicated tooling-input
-exception and the common diagnostic boundary, while `Program_Error` remains
-reserved for internal invariant failures. Repository failures use an internal
-exception identity for each stable typed reason; callers recover reasons only
-through the diagnostic service and cannot raise those identities directly.
-Reason recovery never parses rendered message text. Exact-diagnostic
-regressions own their expected text rather than deriving it from the production
-renderer.
-Source analysis is bounded before allocation by source,
-token, structural-event, program-unit, and structural-work limits, and reports
-exhaustion deterministically. Every repository tooling walk streams directory
-entries in deterministic order under entry, file, depth, and source-size limits
-instead of first materializing an unbounded tree; symbolic-link entries are
-rejected and canonical paths remain below the requested root. All source-text
-reads owned by the repository tooling, including project/configuration files
-and dependency-policy sources, pass through bounded reads that enforce the size
-cap while reading rather than relying on a prior metadata check. Budget-aware
-reads charge the descriptor-reported bounded length before allocating their
-result. Descriptor-stability reading is isolated from secure path opening and
-canonical identity enforcement; the repository-reading facade selects and
-budgets those services. Repository
-replacement hooks distinguish mutation after descriptor acquisition from
-mutation after the first read. Reads open the requested target before validating its canonical in-root
-identity, so validation and reading use the same descriptor. The bounded
-content is read and compared twice through that descriptor to reject in-place
-changes as well as size changes. Regular-file status is checked on the opened
-descriptor, and a readable descriptor path is required
-to prove that the opened object retains the same canonical identity; when the
-platform cannot supply that proof, repository inspection fails closed.
-Directory enumeration and child processing remain anchored to one opened
-descriptor rather than a pathname that can be replaced after validation.
-Discovery revalidates each entry
-between canonicalization, classification, and callback dispatch so replacement
-is rejected rather than followed. Deferred indexes retain the trusted root and
-revalidate their path rather than
-later reopening an unchecked pathname. Inventory, AUnit-registration, and
-Alire-pin validation use those same bounded text snapshots and deterministic
-walk limits instead of path-only helper APIs. Canonical containment is decided
-from one immutable root/target snapshot. Parsing, discovery, snapshot, and
-parsed-cache limits are separate policy records assembled with an aggregate
-validation-work policy into one repository
-policy. Parsing-layer interfaces accept only parsing policy; repository policy
-is split at the capture/cache boundary. Parsing policy independently bounds
-retained model storage for convenience entry points that own their meters.
-Snapshot storage uses portable logical
-units for retained text, path/name copies, map keys, directory keys, directory
-membership indexes, and fixed records; the transient read copy is reserved
-before allocation. Snapshot storage measurement and index mutation are owned by
-one storage child; filesystem capture remains in the snapshot builder. Snapshot consumers borrow retained text while parsing, so
-cache construction does not allocate an unreserved second text copy. Directory
-walks use the capture-time ancestry index and visit only entries below the
-requested directory. A directory-search cleanup failure is reported directly
-when it is the only failure; during exceptional unwinding it is written to
-command-owned cleanup state without replacing the primary exception.
-Executable inventories are checked in
-both directions against discovered main procedures, and AUnit inventory checks
-build one suite inventory and require the constructed test object to occur in
-an `Add_Test` call on the suite object that is returned. Scope-derived body
-ranges select the unique parameterless `All_Tests` function directly enclosed
-by the suite package, ignore nested same-name helpers, and require every direct
-return path to name the same suite. Token grammar recognition is isolated from
-inventory assembly. Duplicate additions are rejected, and
-every test body must call `Register_Routine` from the executable part of its
-directly enclosed `Register_Tests` body. Listed project mains must declare the
-matching library-level procedure. Configuration-line parsing accepts LF and
-CRLF through one shared scanner, preserves complete physical multiline string
-values within arrays, respects table context, and ignores insignificant
-whitespace in structured values.
-Shared
-source types and parsed-source storage form the lower layer beneath lexing,
-rendering, and queries; the compatibility facade does not participate in a
-dependency cycle. Token images retain
-source delimiters, so string contents that resemble keywords,
-delimiters, or operators cannot create structural events or statement
-boundaries.  Lexical visibility is resolved across all directly visible
-declaration kinds before a binding is classified; a nested type, package, or
-callable therefore hides an outer session object with the same name.  Implicit
-package-name aliases are compared only within their declaring scope, while a
-nested alias shadows an outer alias.  It
-rejects assignments, renames, address extraction, and access-value aliases of
-those objects or fields outside the transition units, including through grouped
-expressions and component iterators whose declared element type is a session or
-access-to-session type, including selected, conditional, and case-expression
-iterables, with component relations qualified by their owning record type and
-callable result types inherited through package and subunit context, including
-component selections applied to callable results.  Selected callable names
-retain and match their package qualifier, lexical scope, and normalized profile
-identity; short package names and bounded local or inherited package-renaming
-chains resolve to that identity only when the short name identifies one visible
-package; ambiguous implicit short names require the full qualifier.  An
-unrelated, ambiguous, or locally shadowing terminal name therefore cannot
-supply the selected callable's result type.  Cyclic package-renaming chains
-fail conservatively rather than using a partially rewritten qualifier, and
-package-renaming analysis distinguishes absent, applied, and malformed
-renamings; a selected target must alternate identifiers and dots and cannot
-start or end with a dot, and reserved words cannot serve as alias or target
-components.  Type-relation
-traversal is cycle-bounded and fails conservatively on malformed relation
-graphs. Selected type indications are resolved as complete qualified or
-class-wide identities through bounded package-renaming chains rather than as a
-collection of terminal identifiers, so
-local homonyms cannot hide a qualified session type or lend session identity to
-an unrelated selected type. Qualified context types retain qualified parent
-links and record-component owner identities. One normalized target-identity
-value carries the simple and qualified session names through transition
-indexing and semantic analysis; declaration qualification is owned by that
-service rather than reconstructed by individual handlers. Construction rejects
-empty, malformed, reserved, or terminally inconsistent target identities. The transition-family
-caller supplies this canonical identity; the generic semantic layer does not
-embed decoder or encoder names. Recursive expression typing has explicit work
-and nesting budgets and passes one shared meter through declaration, qualifier,
-callable, component, iterable, token-navigation, structural body recognition,
-context inheritance, and context-index operations for the complete source
-scan; helper queries must not create replacement meters. Every meter is charged
-before the covered work. A charge consumes exactly its stated item count;
-fixed traversal overhead is charged explicitly, and the shared budget engine
-raises a tooling-neutral exhaustion signal which only the command boundary
-turns into a diagnostic and exit status. The budget engine is a neutral lower
-layer; semantic/session packages may expose domain-specific adapters but
-structural analysis does not depend on them. Transition declaration analysis,
-semantic resolution, and statement inspection share one caller-owned per-unit
-meter and charge repeated name, prefix, and callee scans before they run.
-State bindings maintain name and owner-component indexes rather than repeatedly
-scanning heterogeneous storage. Index buckets are updated incrementally on
-scope exit and represented as linked prior bindings, avoiding whole-index
-rebuilding and candidate-vector copies. Indexed queries charge bounded candidate work
-and traverse callable candidates in place. Inherited contexts are assembled
-iteratively into an operation-local vector; the index does not retain a
-complete copied vector for every ancestor. Nested separate subunits inherit the
-context of every enclosing separate parent within the same transition family,
-with cycle and one combined
-specification/subunit depth limit, before applying their own context clauses.
-The repository snapshot retains each immutable, budget-accounted source text
-once and exposes it only through scoped borrowed inspection; validators do not
-materialize full-text return values. One analysis context exclusively owns the
-snapshot, its parsed-source cache, and both aggregate validation ledgers, so their
-lifetimes cannot be mixed. Snapshot/cache allocation is hidden behind one
-controlled analysis-data owner; the context itself contains no raw owning
-access fields or manual finalizer. It lends all four resources only through one scoped
-inspection callback; validators and indexes cannot retain owner-managed pointers
-or assemble resources from different contexts. A transition source index binds
-that complete resource set once at construction; build and query operations do
-not accept replacement caches or ledgers. Cache construction charges source bytes before borrowing
-and again before parsing, uses the context-owned work ledger, and accounts
-portable logical storage units for model records and dynamic text. Before a
-source-model allocation, the lexer and structural builders use one model-schema
-accounting package to charge an allocation-path storage meter before retaining
-each container, record, and dynamic string. Measurement uses the same schema.
-The cache gives parsing at most half its remaining model
-storage, which reserves the other half for the retained deep copy without a
-source-length heuristic. The measured model and charged storage must agree;
-regressions exercise every retained model variant and every intermediate
-storage cutoff. Model inspection,
-deep-copy, path allocation, hashing, and index insertion are also charged
-before their work or allocation begins. The transition index retains only
-source paths, bounded
-declaration and clause metadata, and a small budget-accounted context cache, so
-ancestry discovery is not
-reparsed for every descendant and common ancestors are not semantically
-reapplied for every target. One transition-storage schema measures source-index
-records, declaration names, clause entries, context-map entries, and eviction-order
-keys. Every retained name and cached-context copy is charged to the shared
-validation-storage ledger before its first allocation, including keys,
-classification records, nested strings, profiles, and formal-type entries.
-Exact charged-versus-measured regressions prevent accounting drift; the cache entry
-cap and shared ledgers jointly bound retained context memory. Every failed
-retention step rolls its provisional storage reservation back through a
-controlled transaction whose finalizer cannot raise. Provisional and retained
-charges are distinct ledger states, so eviction cannot invalidate a live
-transaction. Each context entry retains its exact storage measurement so
-eviction releases it without retraversing semantic data. Source-index vector/map publication is
-transactional, so a failed map insertion cannot leave an unreachable vector
-entry or a stale ledger charge. Cache-key construction
-and hashing are charged before
-the key is allocated or looked up. One deepest-context lookup owns selection,
-copying, and its work charge; callers do not probe and then reload the same key.
-Repository traversal and cache interfaces accept only the policy slices they
-consume. Repository traversal keeps counters and immutable policy in one state
-record and isolates recursive directory visitation from command setup. Cache construction and every validation phase share the analysis
-context's work ledger; retained validation indexes also share its storage ledger,
-and no phase silently starts an independent budget.
-Cache construction additionally receives a child meter capped by cache policy,
-while the parent meter is capped only by validation policy. Snapshot policy
-accessors expose individual slices rather than the aggregate configuration.
-Repository path keys are resolved by one canonical identity service shared by
-snapshots and parsed caches. Ada-source classification belongs to the source-name
-layer, and validators that need Ada syntax consume the captured parsed model
-instead of starting a parallel lexer. Validation orchestration consumes an
-explicit plan containing bounded paths and a bounded project inventory, exposed by
-scoped visitation rather than vector-copy access, so cutoff tests can run the same
-pipeline as the command. Project-path/source-directory pairs are unique within a
-plan; duplicate inventory entries are rejected when the plan is created. A
-successful run returns a phase/work report with completed state plus work before
-and after every phase and aggregate final work as ordinary orchestration output;
-the phase enumeration defines execution order and one phase executor owns all
-start/finish accounting. Production validation does not carry test-observer callbacks. Transition-family
-prefixes, owners, session identities, specifications, and exempt resource fields
-come from one typed `Family_Definition` inventory with named fields rather than
-positional strings or orchestration literals.
-Source bytes are charged before allocation and again before parsing. Ancestry
-relationship errors are classified before depth
-consumption so specific malformed-input diagnostics are not hidden by the
-depth limit. Budget
-exhaustion is reported through the normal tooling diagnostic boundary. Nesting is
-owned by a finalizable scope guard so every return and exception path restores
-the depth automatically. The shared stack close operations reject named,
-anonymous, and record endings that have no matching active scope, so no caller
-can silently leave a stale structural stack.
-Call-argument analysis is discriminated: only a valid
-result can expose a positive closing-parenthesis position and argument types.
-An unmatched call parenthesis is invalid and cannot select an overload. Scope-top queries are total on empty
-state, and relation lookup accepts only object and type binding kinds.  Scope,
-binding, and visibility operations are separate state implementation units;
-unmetered visibility primitives remain private to the state implementation and
-the public resolution surface always requires the shared budget;
-implicit-alias policy reaches binding storage only through the binding operation
-boundary.  Universal literals conservatively remain possible matches for
-user-defined formal types, and incomplete conditional branches fail without
-recursing over an invalid token range.  Structural header analysis and
-program-unit derivation are separate from structural event recognition.
-Record-declaration discovery is a single forward bounded pass and does not
-rescan an ever-growing token prefix for each malformed `record` token;
-structural record naming uses that same forward declaration state.
-call-argument, branch-expression, and selection parsing are separate from the
-expression-resolution coordinator.  Budget inspection and forced-limit
-operations remain test-only.  The check rejects
-direct use of mutating state-arithmetic
-operations there.  Transition source-family matching accepts only the exact
-family root or a child separated by `.` or `-`; similarly prefixed unrelated
-units are excluded.  Reviewed helper-call identities may not be shadowed by
-subprograms or packages at any nesting level.  Reviewed declarations are pinned
-to readable normalized profiles, and every reviewed alias, declaration, and
-call allowance must still resolve to a use in its declared source unit.  This
-includes indexed warning storage and prevents a newly added transition-owned
-field, differently named or subtype-aliased session formal, shadowed or
-reprofiled helper, or stale authorization from silently escaping the check.
-Call-allowance accounting and forbidden-transition detection share one
-statement traversal and one resolved callee identity. The reviewed
-alias/declaration catalogue and the global/local call-allowance catalogue are
-separate data units behind the policy query interface. A reviewed alias is
-unique by unit and alias name; its target is policy data rather than part of the
-uniqueness key.
+
+### Repository tooling boundary
+
+The repository validator enforces the transition-mutation boundary and other
+release policies as defense in depth. Its implementation is non-normative and
+is maintained in [TOOLING_ARCHITECTURE.md](TOOLING_ARCHITECTURE.md); private
+validator refactors do not revise this codec contract.
+
+### Normative lifecycle and codec orchestration
+
 Public lifecycle operations state
 success-conditioned postconditions without turning invalid calls into raising
 preconditions.
@@ -831,12 +579,37 @@ allocation/work limits. Once exact-palette discovery has exceeded its capacity,
 it shall not continue redundant exact-color searches. Median-cut shall operate
 on occupied histogram buckets partitioned into box-local ranges rather than
 rescanning the entire histogram for every box. Fixed-palette conversion shall
-not construct a generated-palette histogram. Nearest-color memoization may be
+not construct a generated-palette histogram. When fixed-palette alpha policy
+requires advance transparency discovery, that pass reads only alpha bytes and
+charges row batches rather than decoding complete source pixels. Nearest-color memoization may be
 used only with exact RGB keys so it does not change deterministic color choice;
-its hash must mix all three channels. Cache probes and palette scans are charged
-in batches before their loops. The stateless quantization entry point releases
+its hash must mix all three channels. Cache probes, palette scans, row-level
+pixel work, and bounded search-index construction are charged in batches before
+their loops; cache-probe and variable nearest-color search work may be
+accumulated locally and committed once before accepting a row. Exact-palette
+discovery shall defer histogram allocation and updates until the exact-color
+capacity is exceeded, retaining bounded per-color counts so median-cut can be
+seeded without rereading the accepted prefix. The stateless quantization entry point releases
 temporary storage, while the workspace overload retains bounded storage for
-explicit reuse.
+explicit reuse. Median-cut bucket scans shall batch exact work rather than
+mutating the shared meter once per bucket. The exact nearest-color search shall
+choose subtree split axes from color extent and retain exact subtree bounds so
+branches whose minimum possible squared distance exceeds the current best can
+be pruned without changing lowest-index tie behavior. Its depth-bounded
+traversal shall accumulate visited-node work in a bounded local counter and
+commit it once per lookup rather than mutating the wide row counter at every
+node. Search-index construction shall canonicalize duplicate RGB entries to
+the lowest non-excluded palette index with one lexicographic merge sort and an
+adjacent collapse, reuse that ordering as the red-axis list, charge the bounded
+`O(n log n)` construction work, and retain the original palette for hint lookup.
+Nearest-color caching shall use bounded rolling observation windows with hysteresis, allowing
+a cache disabled by a low-hit region to be reconsidered after a bounded
+interval. A recovery sample shall be strictly shorter than the ordinary
+observation and cooldown windows so persistently hostile input cannot spend
+half its pixels probing the cache;
+benchmark coverage shall include cache-friendly repeated colors,
+high-cardinality input, and a phase-changing input whose low-locality prefix is
+followed by a repeated-color region.
 
 Pixel access, palette construction, nearest-color mapping, and dithering are
 separate internal phases. Each phase states its buffer and geometry invariants
@@ -855,7 +628,7 @@ Owned scratch containers expose contents only through scoped query/update
 callbacks. Storage addresses are not part of their interface and cannot be
 retained across ensure, growth, or release operations.
 
-Optimization is a separate opt-in layer: trim unchanged regions, select subrectangles, consider transparent unchanged pixels, deduplicate safe frame segments, and optimize LZW/palette size. All pixel scans share one charged rectangle walker. Its contract is *rendered equivalence*, not necessarily exact preservation of frame structure or extensions. Disposal and delay semantics must remain observably equivalent under the documented reference renderer. Lossless indexed pass-through must be available independently of optimization.
+Optimization is a separate opt-in layer: trim unchanged regions, select subrectangles, consider transparent unchanged pixels, deduplicate safe frame segments, and optimize LZW/palette size. Analysis policy and rectangle extraction are separate private services, while all pixel scans share one rectangle walker that charges bounded row batches before traversal. Its contract is *rendered equivalence*, not necessarily exact preservation of frame structure or extensions. Disposal and delay semantics must remain observably equivalent under the documented reference renderer. Lossless indexed pass-through must be available independently of optimization.
 
 ## 9. Extension/metadata policy
 
@@ -863,13 +636,13 @@ Offer `Discard_All`, `Parse_Known_Without_Retention`, `Retain_Selected`, `Retain
 
 ## 10. Resource limits and security
 
-`Giflib.Limits.Limit_Set` shall include at minimum: maximum logical width/height, maximum canvas pixels/bytes, maximum frames, maximum per-frame pixels, maximum total decoded frame pixels, maximum compressed bytes, maximum extension count, maximum retained metadata bytes, maximum per-extension bytes, maximum allocation bytes, maximum output bytes, maximum LZW work (e.g. output pixels + code operations), maximum retained warning records, and maximum compositor snapshot bytes. Warning retention is caller-adjustable from zero through the public `Maximum_Warning_Records` storage bound; values beyond that bound are rejected by the Ada subtype rather than silently reduced. Reasonable safe defaults must be documented and caller-adjustable within their declared ranges; limits of the wire format are not memory-allocation permissions.
+`Giflib.Limits.Limit_Set` shall include at minimum: maximum logical width/height, maximum canvas pixels/bytes, maximum frames, maximum per-frame pixels, maximum total decoded frame pixels, maximum compressed bytes, maximum extension count, maximum retained metadata bytes, maximum per-extension bytes, maximum allocation bytes, maximum output bytes, maximum LZW work (e.g. output pixels + code operations), maximum retained warning records, and maximum compositor snapshot bytes. LZW input-byte, code, dictionary-traversal, and output work shall be accumulated in bounded local counters and charged in exact batches before a decoded sequence, lookup result, or encoded code is accepted. Successful code reading, code processing, dictionary lookup, byte staging, and internal sub-block transport shall use fixed-size statuses and shall not construct or return public diagnostic results. Decoder sequence bytes shall be validated while the dictionary stack is constructed so successful output requires only one reverse stack traversal. Public stream callbacks retain structured errors, but successful adapters shall use a canonical no-error value rather than constructing one through the diagnostic factory. Warning retention is caller-adjustable from zero through the public `Maximum_Warning_Records` storage bound; values beyond that bound are rejected by the Ada subtype rather than silently reduced. `Default_Limits` must be a conservative profile suitable for untrusted inputs and shall cap LZW work at `2 ** 26`, quantization work at `2 ** 28`, and optimization work at `2 ** 26`. A separately named high-capacity profile may preserve larger opt-in ceilings for trusted batch workloads. Limits remain caller-adjustable within their declared ranges; limits of the wire format are not memory-allocation permissions.
 
 Reject overflow before allocating or multiplying geometry; bounds-check every palette lookup, bit shift, code-table reference, sub-block length, row/stride calculation and decoded output count. No unbounded recursion. Do not process untrusted lengths into unconstrained stack arrays. Dictionary reset must clear necessary state. Fuzz malformed GCE, misordered extensions, endless zero-progress streams, invalid widths, oversized chunk chains, truncated compressed data, dictionary exhaustion, invalid transparent index, undefined disposal, and compressed decompression bombs. Deterministic failures (no unhandled exceptions) for all malformed inputs under default limits.
 
 ## 11. Errors and diagnostics
 
-Retain `jpeglib`-style `Results.Result` (status and first error) and structured `Errors.Error` with stable machine-readable identifiers, e.g. `gif.invalid_signature`, `gif.truncated_block`, `gif.lzw.invalid_code`, `gif.palette.index_out_of_range`, `gif.argument.index_out_of_range`, `gif.argument.buffer_size_mismatch`, `gif.argument.output_variant_mismatch`, `gif.frame.out_of_bounds`, `gif.limit.exceeded`, `gif.state.invalid`, `gif.stream.zero_progress`. Caller indexes outside an exposed collection return `Invalid_Index`; incorrectly sized caller-owned buffers return `Buffer_Size_Mismatch`. A constrained discriminated output whose discriminant cannot represent the produced value returns `Output_Variant_Mismatch`; no public operation may leak `Constraint_Error` for that case. `Limit_Exceeded` is reserved for configured resource budgets, and `Invalid_State` for lifecycle or protocol-state violations. Diagnostic context should include source/destination offsets, frame ordinal, block/extension label, compressed code location (when known), expected/actual values and limit implicated. Source position, destination position, frame, extension label, LZW details, and underlying callback code are discriminated optional values, so inactive alternatives cannot retain stale payload. Error decorators preserve an existing position state and never resample a position that a lower layer already checked. Public stream helpers attach the position captured for a callback when its returned or normalized error has not already checked that position. Stream-position decoration is isolated from allocation/work failure presentation. Warning records for compatibility fallbacks must be bounded. Public data errors must not be reported as internal invariants.
+Retain `jpeglib`-style `Results.Result` (status and first error) and structured `Errors.Error` with stable machine-readable identifiers, e.g. `gif.invalid_signature`, `gif.truncated_block`, `gif.lzw.invalid_code`, `gif.palette.index_out_of_range`, `gif.argument.index_out_of_range`, `gif.argument.buffer_size_mismatch`, `gif.argument.output_variant_mismatch`, `gif.frame.out_of_bounds`, `gif.limit.exceeded`, `gif.allocation.failed`, `gif.state.invalid`, `gif.stream.zero_progress`. Caller indexes outside an exposed collection return `Invalid_Index`; incorrectly sized caller-owned buffers return `Buffer_Size_Mismatch`. A constrained discriminated output whose discriminant cannot represent the produced value returns `Output_Variant_Mismatch`; no public operation may leak `Constraint_Error` for that case. `Limit_Exceeded` is reserved for configured resource budgets, `Allocation_Failed` reports host heap exhaustion below an accepted budget, and `Invalid_State` reports lifecycle or protocol-state violations. Allocation failure context reports the attempted total without setting a resource-limit discriminator. Diagnostic context should include source/destination offsets, frame ordinal, block/extension label, compressed code location (when known), expected/actual values and limit implicated. Source position, destination position, frame, extension label, LZW details, and underlying callback code are discriminated optional values, so inactive alternatives cannot retain stale payload. Error decorators preserve an existing position state and never resample a position that a lower layer already checked. Public stream helpers attach the position captured for a callback when its returned or normalized error has not already checked that position. Stream-position decoration is isolated from allocation/work failure presentation. Warning records for compatibility fallbacks must be bounded. Public data errors must not be reported as internal invariants.
 
 ## 12. Crate and project structure
 
@@ -903,7 +676,7 @@ giflib/
     fixtures/ (goldens, malformed cases, animation cases)
 ```
 
-Root `alire.toml` shall declare `name = "giflib"`, `version = "0.1.0-dev"`, MIT, and `gnat_native = "^15"` using `jpeglib`'s organization. The child Alire crate named `tests` shall independently pin `gnat_native = "^15"` and depend on `aunit` and `project_tools`. Its test-only `giflib_whitebox.gpr` compiles the workspace production sources with internal units visible, while the production `giflib.gpr` exports only its supported `Library_Interface`. Production, white-box, and test projects shall import one shared project containing compiler-switch policy. A production-project consumer compile and an expected-failure private-child import shall guard the interface boundary. Auxiliary test-only image tools may be used for cross-verification, not by the production crate. `AGENTS.md` shall state that builds and compiler invocation run through Alire and pinned GNAT. Exact test binary names may be concise (`giflib_tests`, `giflib_check`, `giflib_conformance`, `giflib_fuzz`, `giflib_benchmark`).
+Root `alire.toml` shall declare `name = "giflib"`, `version = "0.1.0-dev"`, MIT, and `gnat_native = "^15"` using `jpeglib`'s organization. The child Alire crate named `tests` shall independently pin `gnat_native = "^15"` and depend on `aunit` and `project_tools`; the development-only `project_tools` source shall use an immutable Git commit pin rather than a mutable branch or machine-local path. Its test-only `giflib_whitebox.gpr` compiles the workspace production sources with internal units visible, while the production `giflib.gpr` exports only its supported `Library_Interface`. Production, white-box, and test projects shall import one shared project containing compiler-switch policy. A production-project consumer compile and an expected-failure private-child import shall guard the interface boundary. The root test action shall run the fast current-tree structure validator as well as AUnit; the slower validator mutation suite shall remain an explicit gate and run in versioned CI. Auxiliary test-only image tools may be used for cross-verification, not by the production crate. `AGENTS.md` shall state that builds and compiler invocation run through Alire and pinned GNAT. Exact test binary names may be concise (`giflib_tests`, `giflib_check`, `giflib_conformance`, `giflib_fuzz`, `giflib_benchmark`).
 
 Alire-generated `config/` trees, local build-profile settings, build hashes, and
 test reports are workspace state and must remain ignored rather than committed.
@@ -934,7 +707,7 @@ Lock files remain version-controlled for reproducibility.
 | Stress | large dimensions with tight limits, many frames, many extension blocks, LZW expansion, cancellation and reset |
 | Compatibility | decode externally generated GIFs; independently decode giflib output with two widely used implementations |
 
-AUnit shall compare decoded indexed pixels and palette values to known expected data; rendered animations shall compare each composited RGBA canvas frame to a verified reference. For lossy quantization only, assert output dimension/alpha correctness and a defined quality metric threshold; do not demand exact RGB equality. Include deterministic metamorphic/round-trip tests and fuzz seed regression corpora. Validate GIF89a conformance separately from implementation-specific APIs. Benchmark decode/encode throughput and maximum memory without making performance an initial release blocker. Performance measurements shall use an optimized release profile, include a raw true-color input with more than 256 colors and nontrivial multi-frame inputs, encode every measured animation frame, repeat samples, and report a stable aggregate rather than a single cold timing. The release workflow shall run benchmark cases in separate processes and enforce conservative timing and peak-memory guardrails so gross regressions fail while ordinary host variance remains tolerated.
+AUnit shall compare decoded indexed pixels and palette values to known expected data; rendered animations shall compare each composited RGBA canvas frame to a verified reference. For lossy quantization only, assert output dimension/alpha correctness and a defined quality metric threshold; do not demand exact RGB equality. Include deterministic metamorphic/round-trip tests and fuzz seed regression corpora. Validate GIF89a conformance separately from implementation-specific APIs. Benchmark decode/encode throughput and maximum memory without making performance an initial release blocker. Performance measurements shall use an optimized release profile, include raw RGB and RGBA inputs covering opaque and mixed-alpha behavior, include exact palettes near their capacity, isolate indexed LZW encoding and indexed LZW decoding of an independently generated GIF, include more than 256 colors and a large independently generated composited animation exercising background and restore-previous disposal, encode every measured animation frame, repeat samples, and report a stable aggregate rather than a single cold timing. File re-encoding shall be reported explicitly as a complete decode/re-encode transcode operation so one timer interval can cover the measured operation without subtractive timing. Enforced timing shall use process CPU time to exclude descheduling delay; because shared cache, memory bandwidth, CPU-frequency, and thermal effects remain observable, the harness shall warm each operation, adaptively select a bounded batch whose measured whole-batch duration is at least 20 ms, and use one clock pair around each complete batch. Reported medians and the fixed timing allowance shall be divided by the selected batch size, and process CPU time shall be described as reducing rather than eliminating shared-runner noise. Failure to reach the target within the explicit batch bound shall be a benchmark error rather than a silently short sample. A benchmark executable shall return a distinct status for a timing or peak-RSS guardrail failure; the release runner shall retry that workload once in a fresh process and fail unless the first or second run passes, while non-guardrail failures shall not be retried. The release matrix shall cover generated and fixed palettes, cache-friendly repeated and phase-changing fixed-palette input, dithering, multi-frame workspace reuse, and frame optimization. The release workflow shall resolve its built-in fixtures independently of the caller's working directory, run benchmark cases in separate processes, and enforce workload-specific, baseline-sensitive timing ceilings no more than twice a machine-readable measured reference baseline. Machine-readable file-workload references shall be the medians from the latest documented successful release-profile run; every recalibration shall update the complete documented file-workload matrix and the harness references together, and shall not inflate a reference merely to absorb host variance. The harness shall reject a configured release-matrix ceiling above twice the current reference independently of the observed timing, and shall also enforce a 16 MiB peak-RSS guardrail, so material regressions are detected while ordinary host variance remains tolerated.
 
 ## 14. Implementation phases and acceptance gates
 

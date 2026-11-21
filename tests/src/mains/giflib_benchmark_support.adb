@@ -1,8 +1,16 @@
+with Ada.Command_Line;
+with Ada.Directories;
+with Ada.Execution_Time;
+with Ada.Real_Time;
 with Ada.Text_IO;
 with Ada.Unchecked_Deallocation;
 with Giflib_Platform_Services;
+with Project_Tools.Files;
+with Project_Tools.Processes;
 
 package body Giflib_Benchmark_Support is
+   use Ada.Real_Time;
+   use type Ada.Execution_Time.CPU_Time;
    use type Giflib.Destination_Offset;
 
    procedure Free is new Ada.Unchecked_Deallocation
@@ -111,9 +119,96 @@ package body Giflib_Benchmark_Support is
      (Label : String; Observed : Duration; Ceiling : Duration) is
    begin
       if Observed > Ceiling then
-         raise Benchmark_Error with
+         raise Performance_Guardrail_Error with
            Label & " performance guardrail exceeded: observed"
            & Duration'Image (Observed) & " ceiling" & Duration'Image (Ceiling);
       end if;
    end Enforce_Time;
+
+   function Baseline_Sensitive_Ceiling
+     (Label : String;
+      Throughput_Ceiling : Duration;
+      Reference : Duration) return Duration
+   is
+   begin
+      if Reference <= 0.0 then
+         raise Benchmark_Error with
+           Label & " has no positive performance reference";
+      end if;
+      declare
+         Ceiling : constant Duration :=
+           Duration'Max
+             (Throughput_Ceiling, Reference + Reference / 2);
+      begin
+         if Ceiling > 2 * Reference then
+            raise Benchmark_Error with
+              Label & " guardrail ceiling is not within twice its reference:"
+              & " reference" & Duration'Image (Reference)
+              & " ceiling" & Duration'Image (Ceiling);
+         end if;
+         return Ceiling;
+      end;
+   end Baseline_Sensitive_Ceiling;
+
+   function Repository_Root return String is
+      Executable : constant String :=
+        Project_Tools.Processes.Locate_Command (Ada.Command_Line.Command_Name);
+      Start : constant String :=
+        (if Executable = ""
+         then Ada.Directories.Current_Directory
+         else Ada.Directories.Containing_Directory
+           (Ada.Directories.Full_Name (Executable)));
+   begin
+      return Project_Tools.Files.Find_Root_Upward (Start, "giflib.gpr");
+   end Repository_Root;
+
+   function Measure_Batch
+     (Process : not null access procedure;
+      Batch_Iterations : Positive) return Duration
+   is
+      Start, Finish : Ada.Execution_Time.CPU_Time;
+   begin
+      Start := Ada.Execution_Time.Clock;
+      for Iteration in 1 .. Batch_Iterations loop
+         Process.all;
+      end loop;
+      Finish := Ada.Execution_Time.Clock;
+      return To_Duration (Finish - Start);
+   end Measure_Batch;
+
+   function Select_Batch_Iterations
+     (Process : not null access procedure;
+      Label : String) return Positive
+   is
+      Count : Positive := 1;
+      Elapsed : Duration;
+   begin
+      Process.all;
+      loop
+         Elapsed := Measure_Batch (Process, Count);
+         if Elapsed >= Minimum_Timed_Sample then
+            return Count;
+         elsif Count = Maximum_Batch_Iterations then
+            raise Benchmark_Error with
+              Label & " cannot reach the minimum timed sample within"
+              & Positive'Image (Maximum_Batch_Iterations) & " iterations";
+         end if;
+         Count := Positive'Min (Maximum_Batch_Iterations, Count * 2);
+      end loop;
+   end Select_Batch_Iterations;
+
+   function Batched_Throughput_Ceiling
+     (Operations : Long_Float;
+      Operations_Per_Second : Positive;
+      Batch_Iterations : Positive) return Duration
+   is
+      Effective_Operations : constant Long_Float :=
+        Long_Float'Max (Operations, Minimum_Ceiling_Operations);
+   begin
+      return
+        Operation_Allowance
+        + Duration
+          (Effective_Operations / Long_Float (Operations_Per_Second))
+        + Batch_Timing_Allowance / Batch_Iterations;
+   end Batched_Throughput_Ceiling;
 end Giflib_Benchmark_Support;

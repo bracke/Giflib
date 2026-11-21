@@ -50,6 +50,10 @@ procedure Giflib_Generate_Fixtures is
                   if X < 2 then R := 0; G := 0; B := 255;
                   else R := 255; G := 0; B := 0;
                   end if;
+               when 6 | 7 | 8 | 9 =>
+                  R := (X * (Pattern + 3) + Y * 5) mod 256;
+                  G := (Y * (Pattern + 7) + X * 3) mod 256;
+                  B := (X * 17 + Y * 29 + Pattern * 31) mod 256;
                when others =>
                   R := X * 255 / Natural'Max (1, Width - 1);
                   G := Y * 255 / Natural'Max (1, Height - 1);
@@ -67,6 +71,14 @@ procedure Giflib_Generate_Fixtures is
    Frame_0 : constant String := Files.Join (Output_Directory, "frame-0.ppm");
    Frame_1 : constant String := Files.Join (Output_Directory, "frame-1.ppm");
    Frame_2 : constant String := Files.Join (Output_Directory, "frame-2.ppm");
+   Large_Frame_0 : constant String :=
+     Files.Join (Output_Directory, "large-frame-0.ppm");
+   Large_Frame_1 : constant String :=
+     Files.Join (Output_Directory, "large-frame-1.ppm");
+   Large_Frame_2 : constant String :=
+     Files.Join (Output_Directory, "large-frame-2.ppm");
+   Large_Frame_3 : constant String :=
+     Files.Join (Output_Directory, "large-frame-3.ppm");
    Interlace_PPM : constant String := Files.Join (Output_Directory, "interlaced.ppm");
    Benchmark_PPM : constant String := Files.Join (Output_Directory, "benchmark-512.ppm");
 begin
@@ -85,6 +97,10 @@ begin
    Write_PPM (Frame_0, 3, 1, 2);
    Write_PPM (Frame_1, 3, 1, 3);
    Write_PPM (Frame_2, 3, 1, 4);
+   Write_PPM (Large_Frame_0, 256, 256, 6);
+   Write_PPM (Large_Frame_1, 256, 256, 7);
+   Write_PPM (Large_Frame_2, 256, 256, 8);
+   Write_PPM (Large_Frame_3, 256, 256, 9);
    Write_PPM (Interlace_PPM, 9, 9, 5);
    Write_PPM (Benchmark_PPM, 512, 512, 5);
 
@@ -112,6 +128,35 @@ begin
           Processes.Argument ("2"),
           Processes.Argument (Files.Join (Output_Directory, "imagemagick-animation.gif"))]));
    Processes.Run
+     ("independent large animation fixture generation",
+      Root,
+      Convert,
+      Processes.Arguments
+        ([Processes.Argument ("-delay"), Processes.Argument ("1"),
+          Processes.Argument ("-dispose"), Processes.Argument ("none"),
+          Processes.Argument (Large_Frame_0), Processes.Argument ("-delay"),
+          Processes.Argument ("2"), Processes.Argument ("-dispose"),
+          Processes.Argument ("background"), Processes.Argument (Large_Frame_1),
+          Processes.Argument ("-delay"), Processes.Argument ("3"),
+          Processes.Argument ("-dispose"), Processes.Argument ("previous"),
+          Processes.Argument (Large_Frame_2), Processes.Argument ("-delay"),
+          Processes.Argument ("4"), Processes.Argument ("-dispose"),
+          Processes.Argument ("none"), Processes.Argument (Large_Frame_3),
+          Processes.Argument ("-delay"), Processes.Argument ("5"),
+          Processes.Argument ("-dispose"), Processes.Argument ("background"),
+          Processes.Argument (Large_Frame_0), Processes.Argument ("-delay"),
+          Processes.Argument ("6"), Processes.Argument ("-dispose"),
+          Processes.Argument ("previous"), Processes.Argument (Large_Frame_1),
+          Processes.Argument ("-delay"), Processes.Argument ("7"),
+          Processes.Argument ("-dispose"), Processes.Argument ("none"),
+          Processes.Argument (Large_Frame_2), Processes.Argument ("-delay"),
+          Processes.Argument ("8"), Processes.Argument ("-dispose"),
+          Processes.Argument ("background"), Processes.Argument (Large_Frame_3),
+          Processes.Argument ("-loop"), Processes.Argument ("2"),
+          Processes.Argument
+            (Files.Join
+               (Output_Directory, "imagemagick-benchmark-animation-256.gif"))]));
+   Processes.Run
      ("independent interlaced fixture generation",
       Root,
       Convert,
@@ -134,6 +179,10 @@ begin
    Files.Delete_File_If_Present (Frame_0);
    Files.Delete_File_If_Present (Frame_1);
    Files.Delete_File_If_Present (Frame_2);
+   Files.Delete_File_If_Present (Large_Frame_0);
+   Files.Delete_File_If_Present (Large_Frame_1);
+   Files.Delete_File_If_Present (Large_Frame_2);
+   Files.Delete_File_If_Present (Large_Frame_3);
    Files.Delete_File_If_Present (Interlace_PPM);
    Files.Delete_File_If_Present (Benchmark_PPM);
    Ada.Text_IO.Put_Line ("Ada fixture generator completed: " & Output_Directory);
@@ -143,6 +192,10 @@ exception
       Files.Delete_File_If_Present (Frame_0);
       Files.Delete_File_If_Present (Frame_1);
       Files.Delete_File_If_Present (Frame_2);
+      Files.Delete_File_If_Present (Large_Frame_0);
+      Files.Delete_File_If_Present (Large_Frame_1);
+      Files.Delete_File_If_Present (Large_Frame_2);
+      Files.Delete_File_If_Present (Large_Frame_3);
       Files.Delete_File_If_Present (Interlace_PPM);
       Files.Delete_File_If_Present (Benchmark_PPM);
       raise;

@@ -19,6 +19,7 @@ package Giflib.Internal.Quantization_Dithering is
       Current_Group : Buffer_Arithmetic.Group_Index;
       X             : Natural;
       Span          : Buffer_Arithmetic.Error_Span);
+   pragma Inline_Always (Clear_Transparent);
 
    function Adjust
      (Color         : Palettes.RGB_Color;
@@ -26,6 +27,7 @@ package Giflib.Internal.Quantization_Dithering is
       Current_Group : Buffer_Arithmetic.Group_Index;
       X             : Natural;
       Span          : Buffer_Arithmetic.Error_Span) return Palettes.RGB_Color;
+   pragma Inline_Always (Adjust);
 
    procedure Diffuse
      (Errors        : in out Error_Array;
@@ -35,4 +37,5 @@ package Giflib.Internal.Quantization_Dithering is
       Span          : Buffer_Arithmetic.Error_Span;
       Adjusted      : Palettes.RGB_Color;
       Chosen        : Palettes.RGB_Color);
+   pragma Inline_Always (Diffuse);
 end Giflib.Internal.Quantization_Dithering;

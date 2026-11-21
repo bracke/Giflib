@@ -83,7 +83,20 @@ its code-processing child, while the public internal package remains an
 ownership-aware facade. Their work meters and bounded
 arithmetic are proved, while generation/occupancy state, the dictionary probe
 loop, transport callbacks, and writer lifecycle are enforced by contracts and
-adversarial tests rather than by SPARK proof.
+adversarial tests rather than by SPARK proof. Decoder byte/code/traversal/output
+work is accumulated in bounded 4,096-operation batches and checked against the
+remaining meter before a code or decoded sequence is accepted. Code reading,
+code processing, encoder dictionary lookup, byte staging, and encoder
+sub-block transport use fixed-size successful statuses. Decoder sequence bytes
+are validated while its dictionary stack is built and emitted in one reverse
+pass. Sequential output writes directly to its contiguous target; interlaced
+output advances a persistent row/column cursor and resolves the pass row only
+at row boundaries. The bit writer feeds the sole 255-byte sub-block buffer
+directly, and each sub-block length and payload share one destination write.
+Measured arithmetic, bit-buffer, work, dictionary, and input leaf helpers are
+forced inline in optimized builds while retaining their contracts.
+Public callback successes use the canonical no-error value, and structured
+diagnostics are built only on failure.
 The Ada `Giflib_Tooling` validator also enforces the architectural write
 boundary around decoder and encoder session-transition fields; this is a
 token-based structural source check, not a SPARK proof. It derives every field
@@ -92,29 +105,82 @@ uses file-scoped callee identities for reviewed calls. The same gate rejects
 upward dependencies from
 `Giflib.Internal` into public codec facades, unreviewed ownership-container
 instances, misplaced test subunits, and oversized test-case parent bodies.
+Its non-normative implementation design and change policy are documented in
+[TOOLING_ARCHITECTURE.md](TOOLING_ARCHITECTURE.md), keeping validator refactors
+out of the codec contract.
 Decoder, encoder, and quantizer resource representations are consolidated in
 their respective `Internal.*_Storage` packages. The tooling check requires
 those semantic-closure units in `Library_Interface` and rejects direct owned-
 container dependencies from the three public subsystem specifications. Decoder
-disposal/background/snapshot semantics are exercised through
-`Decoding.Frame_Compositing`, while `Decoding.Resource_Management` only checks
-and supplies canvas capacity; setup and disposal resolve the background through
-one policy helper. Allocation outcomes are translated by the shared resource
+rendering delegates canvas/background semantics to `Decoding.Canvas_Policy` and
+disposal/snapshot semantics to `Decoding.Disposal_Policy`, while
+`Decoding.Resource_Management` only checks and supplies storage capacity.
+Allocation outcomes are translated by the shared resource
 diagnostic adapter. Header and image-descriptor parsing are separate container
 subunits. Ordinary and exact extension writes share one discriminated typed
 chunk-plan value across separate validation and emission children behind the
 common transaction facade.
+Image-data decode policy delegates minimum-code-size parsing, sub-block setup,
+consumer execution, and mandatory compressed-byte accounting to the generic
+transaction in `Internal.Image_Data.Transport`.
 Sub-block reader and writer state machines are separate services behind their
 facade; decoder extension transport and retention are separate children; frame
-transaction orchestration delegates indexed/stored inputs to source strategies;
+transaction orchestration separates request preparation and wire/lifecycle
+commit from indexed/stored source strategies; fixed and generated quantization
+palette strategies have separate implementations. Generated-palette discovery
+uses a bounded exact-color hash rather than repeatedly scanning the partial
+palette and writes exact-palette indices directly into the caller buffer, so
+that path does not reread and remap the source. Exact discovery retains bounded
+counts but defers histogram allocation and updates; on overflow those counts
+seed the histogram and collection resumes at the first unaccepted pixel.
+Pixel mapping builds an exact
+balanced color-search index once per palette and retains deterministic
+lowest-index tie behavior; a differential test compares it with exhaustive
+search across all 256 entries. Index construction lexicographically merge-sorts
+the candidate palette entries once, collapses adjacent duplicate RGB entries to
+their lowest non-excluded index, and reuses that ordering as the red-axis list.
+It then merge-sorts only the green- and blue-axis lists and recursively
+partitions them in bounded `O(n log n)` work without clearing capacity-sized
+scratch arrays at each recursive node. A white-box test asserts that a fully
+duplicate 256-entry palette produces one search node and consumes less than
+5,000 units of construction work. After public image validation,
+quantization walks validated rows without repeating invariant and offset checks
+for every pixel. Fixed-palette transparency discovery scans only the alpha
+component and charges a row at a time. Fixed row work and variable
+nearest-search work are charged in batches; each tree walk accumulates its at
+most 256 visited nodes in a narrow local counter before the row total is
+updated. Dithering computes direct
+validated buffer bases once per pixel rather than repeating checked index
+construction. Nearest search returns a compact status, accumulates work for a
+row-level commit, and calculates squared distances directly in the traversal.
+Each search subtree selects its widest color axis and stores exact RGB bounds;
+far branches must pass both split-plane and subtree-bound tests, preserving
+exact lowest-index tie behavior. Cache probes report their exact bounded probe
+length. Mapping-local rolling 4,096-sample windows disable caching below a
+one-quarter hit rate and reconsider it after a bounded cooldown using a short
+256-pixel recovery sample; recovery retains the cache at a one-eighth hit rate.
+Median-cut charges each exact
+bucket-scan total once rather than mutating the shared work meter per bucket.
+Histogram, nearest-cache, and dither storage are each borrowed
+once per frame mapping operation rather than once per pixel; missing storage
+still returns structured invariant status. Quantizer
+workspace reuse clears only occupied histogram bins and invalidates the
+nearest-color cache by generation, with a bounded full clear only when the
+generation wraps. The compositor retains a checked entry path for direct
+internal callers, selects validated-index and transparency-specialized renderers
+once per frame, and uses validated row cursors when rendering decoder output,
+whose palette indices were already bounded by LZW decoding;
 decoder frame lifecycle and payload execution are separate services; and
-optimization scans share one charged rectangle walker.
+optimization separates analysis from extraction over compile-time-specialized
+rectangle walkers with row-batched charging.
 
 The test crate declares only `unit_tests.gpr` and `giflib_tests` as its default
 Alire project and executable inventory. The root test action regenerates its
 development configuration, builds the AUnit runner and repository tools, runs
-the tooling check, which first launches the independent `giflib_tooling_tests`
-suite against mutated repository copies through the full validation probe;
+the fast current-tree structure probe, and runs AUnit. The explicit
+`giflib_check tooling` gate first launches the
+independent `giflib_tooling_tests` suite against mutated repository copies
+through the full validation probe;
 source-level transition and ownership mutations are compiled before rejection,
 including qualified subtype aliases, access-to-session objects, indexed access
 aliases, inherited subtype aliases, address extraction, mutable component
@@ -146,10 +212,13 @@ variants import compiler switches from `giflib_build.gpr`.
 Separate actions ensure that a compilation or test failure makes `alr test`
 fail, and selecting an exact executable prevents stale binaries for other
 profiles from making execution ambiguous. Repository workflow tools are
-isolated in `tools.gpr`; both the normal test action and release gate locate the
+isolated in `tools.gpr`; the explicit tooling gate and release gate locate the
 invoking executable through `PATH`, then execute their profile-local mutation
 suite and validation probe so no development-process checker can validate a
-release-profile binary set. A limited focused source repository inventories Ada
+release-profile binary set. The versioned CI workflow runs the same development
+tooling gate, deterministic 10,000-case fuzz harness, and independent
+ImageMagick/FFmpeg oracle checks on pushes and pull requests. A limited focused
+source repository inventories Ada
 source paths once, diagnoses duplicate basenames, and captures bounded,
 budget-accounted immutable source-text snapshots. Snapshot reservations include
 the transient read, retained text, path/name copies, indexes, directory keys,
@@ -393,8 +462,26 @@ similarly delegates source-body selection, suite registration extraction, and
 test-routine reachability to focused services; registration extraction further
 separates token syntax, allocation discovery, and call traversal. Secure
 repository opening and descriptor-stability reads are separate services behind
-the repository facade. File-transcode and raw-truecolor benchmarks are separate
-workloads sharing only buffer, timing, result, and guardrail support. Transition
+the repository facade. File-transcode, generated/fixed/dithered RGB and RGBA
+quantization,
+independently generated large composited animation, multi-frame reuse, and
+optimizer benchmarks are separate workloads sharing only
+buffer, process-CPU timing, result, and guardrail support. RGBA workloads cover
+exact mixed-alpha, fixed-palette opaque-alpha, and dithered mixed-alpha paths;
+each workload runs an untallied warm-up and then selects, up to a 16,384-iteration
+bound, the first doubled batch measured at 20 ms or longer. Each sample uses one
+process-CPU clock pair around the whole batch and is reported per operation; the
+fixed batch timing allowance is divided by that count. File workloads time a
+complete decode/re-encode transcode rather than subtracting decode time. The
+release harness resolves built-in fixtures from the executable's repository
+root, applies recalibrated workload-specific timing floors, verifies their
+ceilings include at least 50% baseline headroom while remaining no more than
+twice machine-readable reference medians, keeps the complete documented
+file-workload matrix synchronized with those latest measured references, and
+applies a 16 MiB
+peak-RSS ceiling. Timing and peak-RSS guardrail failures have a distinct process
+status; the release harness retries only that workload once in a fresh process,
+while all functional benchmark failures fail immediately. Transition
 indexing delegates
 ancestry resolution and semantic-context construction to private children,
 leaving the parent as the family-scan coordinator.
@@ -443,4 +530,11 @@ retention, allocation-accounting, and traversal-bound transitions are now in
 proved helpers. The remaining safety boundary is explicit checks, fixed limits,
 runtime assertions/overflow checks, adversarial tests, deterministic
 allocation-failure injection, independent codec oracles, and the mutation
-harness. These regions are tested but are not represented as formally proved.
+harness. The fuzz executable delegates fixture-corpus access, independently
+bit-packed LZW stress-seed construction, mutation policy, and bounded decoder
+exercise to separate test services. Its handcrafted dictionary-reset and
+high-expansion seeds are decoded and checked before mutation. External checks
+use a shared process runner
+beneath separate ImageMagick and FFmpeg adapters, reusable byte assertions, and
+fixture-specific expectations, leaving the main as orchestration only. These
+regions are tested but are not represented as formally proved.

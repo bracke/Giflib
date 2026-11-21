@@ -64,9 +64,15 @@ begin
 
    declare
       Object : Giflib.Quantization.Workspace;
+      Options : Giflib.Quantization.Quantize_Options :=
+        Giflib.Quantization.Default_Options;
    begin
+      Options.Palette :=
+        (Strategy => Giflib.Quantization.Use_Fixed_Palette,
+         Fixed_Palette => (Length => 2, others => <>),
+         Fixed_Transparent_Index => 0);
       Outcome := Giflib.Quantization.Quantize
-        (Object, View, Indexed, Quantized);
+        (Object, View, Indexed, Quantized, Options);
       Assert
         (Giflib.Results.Succeeded (Outcome)
          and then Giflib.Quantization.Allocated_Bytes (Object) > 0,

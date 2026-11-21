@@ -1,11 +1,10 @@
 # Release checklist
 
-Baseline verified on 2026-10-24 with Alire-selected GNAT 15.2.1:
+Historical release baseline verified on 2026-10-24 with Alire-selected
+GNAT 15.2.1 and the then-current sibling `project_tools` development pin:
 
 - `alr build`: success.
-- `alr --chdir tests build`: focused AUnit project succeeds (the sandbox
-  required an equivalent writable copy of the existing sibling `project_tools`
-  pin).
+- `alr --chdir tests build`: focused AUnit project succeeds.
 - `alr --chdir tests exec -- gprbuild -P tools.gpr -p -j0`: repository tooling
   project succeeds independently.
 - development- and release-profile AUnit: 137/137 tests, zero failures or
@@ -28,6 +27,39 @@ Baseline verified on 2026-10-24 with Alire-selected GNAT 15.2.1:
   allocation-failure state transitions, optimizer decision/bounds arithmetic,
   palette helpers, pixel/component offsets, quantization color/index and
   error-buffer arithmetic, interlacing, and stream transfer/progress accounting.
+
+Current working-tree checks rerun on 2026-11-15 after the structure, quality,
+and performance reviews:
+
+- root and test Alire builds: success;
+- default `alr test`, including the fast structure probe: success;
+- development- and release-profile AUnit: 137/137 tests in each profile;
+- deterministic `giflib_fuzz 10000 3235823838`: final state `2752455965`;
+- development- and release-profile ImageMagick and FFmpeg external-oracle
+  checks: success;
+- tooling mutation suite and current-tree structure validation: success;
+- targeted release-profile enforced process-CPU benchmarks using one clock pair
+  per whole batch: independently generated eight-frame 256×256 disposal
+  animation decode 0.00643 s and full transcode 0.01739 s; 512×512 raw RGB
+  median-cut encode 0.03115 s; high-cardinality fixed-palette encode 0.03983 s;
+  cache-friendly repeated-color fixed-palette encode 0.00738 s; phase-changing
+  fixed-palette encode 0.00813 s; dithered encode 0.04334 s; near-capacity
+  255-color exact mixed-alpha RGBA encode 0.00409 s; fixed-palette opaque-alpha
+  RGBA encode 0.03945 s; dithered mixed-alpha RGBA encode 0.03992 s; isolated
+  indexed-LZW encode 0.00388 s; independent indexed-LZW decode 0.00180 s;
+  eight-frame 256×256 fixed-palette animation encode 0.08266 s; and 512×512
+  optimizer analysis/extraction 0.00060 s. Every timing ceiling is at most twice
+  its machine-readable reference and the 16 MiB memory guard passed; peak RSS
+  was at most 6,148 KiB;
+- GNATprove level-2/cvc5 proof, including the new work-meter capacity query:
+  all checks and postconditions pass;
+- the immutable `project_tools` Git pin resolves to commit
+  `5ed5f4dcfa10301345933d45e5f78ac0573d8cff`.
+
+The monolithic `giflib_check release` orchestration completed successfully from
+the test crate's pinned Alire environment, including both profile
+test/fuzz/oracle runs, enforced release benchmarks, tooling mutations, full
+proof, and the Alire solution check.
 
 No release tag was created as part of implementation. Tagging should occur only
 after rerunning `giflib_check release`.

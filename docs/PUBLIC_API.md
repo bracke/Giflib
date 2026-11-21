@@ -12,7 +12,8 @@ usual spelling in documentation.
   timing, strictness, block, LZW-context, and resource-limit types.
 - `Giflib.Errors` derives stable `gif.*` identifiers from the error or warning
   code and provides diagnostic context without storing redundant identifier
-  state.
+  state. `No_Error_Value` is the canonical successful callback value and does
+  not invoke diagnostic construction.
   The discriminated `Source_Position` and `Destination_Position` components
   distinguish positions that were not checked, were checked but unavailable,
   or are available. Their numeric value exists only in the available variant,
@@ -22,8 +23,11 @@ usual spelling in documentation.
 - `Giflib.Results` represents expected success/failure without exceptions; its
   status is derived from the single stored error so inconsistent status/error
   combinations are not representable.
-- `Giflib.Limits` provides caller-copyable safe defaults for every required
-  resource category. Warning retention uses `Warning_Record_Limit`, from zero
+- `Giflib.Limits` provides caller-copyable conservative defaults for every
+  required resource category and an explicit `High_Capacity_Limits` profile for
+  trusted batch workloads. The default profile caps owned allocation and output
+  at 64 MiB, canvas and snapshot storage at 16 MiB each, and all work meters at
+  finite operational ceilings. Warning retention uses `Warning_Record_Limit`, from zero
   through the public `Maximum_Warning_Records` bound (256), so an unsupported
   warning capacity cannot be silently reduced.
 - `Giflib.Streams` defines forward-only limited interfaces and memory adapters.
@@ -157,6 +161,9 @@ nonseekable destination. Indexed input is never requantized. Caller source,
 destination, image, and output buffers must outlive the call/session that
 borrows them. Expected invalid data, unsupported state transitions, exhausted
 budgets, and stream failures are returned through `Giflib.Results.Result`.
+A configured budget rejection returns `Limit_Exceeded`; host heap exhaustion
+after an accepted charge returns `Allocation_Failed`, allowing callers to avoid
+retrying an operation merely by raising a limit that was not exhausted.
 A destination `Storage_Error` is reported as `Destination_Write_Failed`, not
 as exhaustion of the library's allocation budget.
 Indexed frame palette choice is a discriminated `Frame_Palette`: the global

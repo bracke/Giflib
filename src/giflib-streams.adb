@@ -4,6 +4,7 @@ with Giflib.Internal.Stream_Transfers;
 
 package body Giflib.Streams is
    package Arithmetic renames Giflib.Internal.Stream_Arithmetic;
+   Bulk_Copy_Threshold : constant := 1_024;
 
    function Position (Object : Source'Class) return Source_Position_Result is
      (Internal.Stream_Dispatch.Position (Object));
@@ -109,14 +110,22 @@ package body Giflib.Streams is
       To_Copy := Plan.Count;
 
       if To_Copy > 0 then
-         for I in 0 .. To_Copy - 1 loop
-            Buffer (Buffer'First + I) := Object.Storage (Object.Storage'First + Object.Position + I);
-         end loop;
+         if To_Copy >= Bulk_Copy_Threshold then
+            Buffer (Buffer'First .. Buffer'First + To_Copy - 1) :=
+              Object.Storage
+                (Object.Storage'First + Object.Position
+                   .. Object.Storage'First + Object.Position + To_Copy - 1);
+         else
+            for I in 0 .. To_Copy - 1 loop
+               Buffer (Buffer'First + I) :=
+                 Object.Storage (Object.Storage'First + Object.Position + I);
+            end loop;
+         end if;
       end if;
 
       Object.Position := Plan.Next_Position;
       return
-        (Error => Errors.Make (Errors.No_Error),
+        (Error => Errors.No_Error_Value,
          Count => Byte_Count (To_Copy),
          End_Of_Input => Object.Position = Object.Storage'Length);
    end Read;
@@ -138,7 +147,7 @@ package body Giflib.Streams is
       To_Skip := Plan.Count;
       Object.Position := Plan.Next_Position;
       return
-        (Error => Errors.Make (Errors.No_Error),
+        (Error => Errors.No_Error_Value,
          Count => Byte_Count (To_Skip),
          End_Of_Input => Object.Position = Object.Storage'Length);
    end Skip;
@@ -163,9 +172,17 @@ package body Giflib.Streams is
       To_Copy := Plan.Count;
 
       if To_Copy > 0 then
-         for I in 0 .. To_Copy - 1 loop
-            Object.Storage (Object.Storage'First + Object.Position + I) := Buffer (Buffer'First + I);
-         end loop;
+         if To_Copy >= Bulk_Copy_Threshold then
+            Object.Storage
+              (Object.Storage'First + Object.Position
+                 .. Object.Storage'First + Object.Position + To_Copy - 1) :=
+                Buffer (Buffer'First .. Buffer'First + To_Copy - 1);
+         else
+            for I in 0 .. To_Copy - 1 loop
+               Object.Storage (Object.Storage'First + Object.Position + I) :=
+                 Buffer (Buffer'First + I);
+            end loop;
+         end if;
       end if;
       Object.Position := Plan.Next_Position;
 
@@ -181,7 +198,7 @@ package body Giflib.Streams is
             Count => Byte_Count (To_Copy));
       end if;
 
-      return (Error => Errors.Make (Errors.No_Error), Count => Byte_Count (To_Copy));
+      return (Error => Errors.No_Error_Value, Count => Byte_Count (To_Copy));
    end Write;
 
    overriding function Offset (Object : Fixed_Buffer_Destination) return Destination_Offset is
@@ -192,6 +209,6 @@ package body Giflib.Streams is
    overriding function Flush (Object : in out Fixed_Buffer_Destination) return Errors.Error is
       pragma Unreferenced (Object);
    begin
-      return Errors.Make (Errors.No_Error);
+      return Errors.No_Error_Value;
    end Flush;
 end Giflib.Streams;

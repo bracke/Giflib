@@ -21,7 +21,7 @@ package body Giflib.Decoding.Session_Transitions is
       Object.Options := Options;
       Object.Constraints := Constraints;
       Reset_Session_Data (Object);
-      Object.Diagnostic := Errors.Make (Errors.No_Error);
+      Object.Diagnostic := Errors.No_Error_Value;
       State_Arithmetic.Initialize (Object.Current_State);
    end Begin_Session;
 
@@ -74,7 +74,7 @@ package body Giflib.Decoding.Session_Transitions is
    procedure Reset_Session (Object : in out Decoder) is
    begin
       State_Arithmetic.Reset (Object.Current_State);
-      Object.Diagnostic := Errors.Make (Errors.No_Error);
+      Object.Diagnostic := Errors.No_Error_Value;
    end Reset_Session;
 
    procedure Discover_Frame (Object : in out Decoder) is

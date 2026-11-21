@@ -39,6 +39,10 @@ begin
    Assert (Giflib.Errors.Identifier_For (Giflib.Errors.Limit_Exceeded) = "gif.limit.exceeded",
            "limit identifier changed");
    Assert
+     (Giflib.Errors.Identifier_For (Giflib.Errors.Allocation_Failed) =
+        "gif.allocation.failed",
+      "allocation identifier changed");
+   Assert
      (Item.Context.Source_Position.Value = 31
       and then Item.Context.Destination_Position.Value = 7,
       "offset context was lost");

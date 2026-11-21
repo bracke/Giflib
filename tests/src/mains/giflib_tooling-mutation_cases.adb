@@ -91,8 +91,8 @@ package body Giflib_Tooling.Mutation_Cases is
             Inventory_Cases.Duplicate_Documented_Executable (Fixture);
          when Types.Invalid_Main_Declaration =>
             Inventory_Cases.Change_Main_Declaration (Fixture);
-         when Types.Wrong_Workspace_Pin =>
-            Configuration_Cases.Change_Workspace_Pin (Fixture);
+         when Types.Wrong_Repository_Pin =>
+            Configuration_Cases.Change_Repository_Pin (Fixture);
          when Types.API_Boundary =>
             Layout_Cases.Add_API_Boundary_Bypass (Fixture);
       end case;

@@ -24,6 +24,28 @@ is
    Color : Dither.Color_Outcome;
    Result : Giflib.Results.Result;
    Palette : Giflib.Palettes.Palette := (others => <>);
+
+   procedure Touch_Histogram
+     (Value : in out Histogram.Histogram_State) is
+      pragma Unreferenced (Value);
+   begin
+      null;
+   end Touch_Histogram;
+
+   procedure Touch_Cache
+     (Value : in out Cache.Cache_State;
+      Current_Epoch : Cache.Epoch)
+   is
+      pragma Unreferenced (Value, Current_Epoch);
+   begin
+      null;
+   end Touch_Cache;
+
+   procedure Touch_Errors (Value : in out Dither.Error_State) is
+      pragma Unreferenced (Value);
+   begin
+      null;
+   end Touch_Errors;
 begin
    Budgeted := Histogram.Reset (Object, Missing_Work);
    Assert
@@ -32,7 +54,9 @@ begin
       "missing quantization storage was reported as work exhaustion");
    Status := Histogram.Add_Sample (Object, 0);
    Assert
-     (Status = Outcomes.Storage_Invariant_Failure,
+     (Status = Outcomes.Storage_Invariant_Failure
+      and then Histogram.Update (Object, Touch_Histogram'Access) =
+        Outcomes.Storage_Invariant_Failure,
       "missing histogram accepted a sample");
    Result := Histogram.Build_Median_Cut
      (Object, 0, 2, Missing_Work, Palette);
@@ -47,6 +71,8 @@ begin
      (Budgeted = Outcomes.Budgeted_Invariant_Failure
       and then Probe.Kind = Cache.Probe_Invariant_Failure
       and then Cache.Store (Object, 0, 0, 0) =
+        Outcomes.Storage_Invariant_Failure
+      and then Cache.Update (Object, Touch_Cache'Access) =
         Outcomes.Storage_Invariant_Failure,
       "missing nearest cache accepted an operation");
    Budgeted := Dither.Reset (Object, 18, Missing_Work);
@@ -60,7 +86,9 @@ begin
       and then Color.Status = Outcomes.Storage_Invariant_Failure
       and then Dither.Diffuse
         (Object, 0, 1, 0, 3, (others => 0), (others => 0)) =
-          Outcomes.Storage_Invariant_Failure,
+          Outcomes.Storage_Invariant_Failure
+      and then Dither.Update (Object, Touch_Errors'Access) =
+        Outcomes.Storage_Invariant_Failure,
       "missing dither storage accepted an operation");
    Outcome := Storage.Ensure_Nearest_Cache
      (Object, Fault, Giflib.Byte_Count'Last);
@@ -86,6 +114,10 @@ begin
    Assert
      (Outcome.Status = Giflib.Internal.Ownership.Allocation_Ready,
       "histogram setup failed");
+   Status := Histogram.Add_Sample (Object, 0);
+   Assert
+     (Status = Outcomes.Storage_Ready,
+      "histogram sample setup failed");
    Budgeted := Histogram.Reset (Object, Histogram_Work);
    Assert
      (Budgeted = Outcomes.Budgeted_Work_Limit

@@ -11,11 +11,19 @@ is
    Indexed : Giflib.Streams.Byte_Array (1 .. 2);
    Quantized : Giflib.Quantization.Quantization_Result;
    Context : Giflib.Quantization.Workspace;
+   Options : Giflib.Quantization.Quantize_Options :=
+     Giflib.Quantization.Default_Options;
    Outcome : Giflib.Results.Result;
    Status : Giflib.Quantization.Cleanup_Status;
 begin
+   Options.Palette :=
+     (Strategy => Giflib.Quantization.Use_Fixed_Palette,
+      Fixed_Palette =>
+        (Length => 2,
+         Colors => [0 => (0, 0, 0), 1 => (255, 255, 255), others => <>]),
+      Fixed_Transparent_Index => 0);
    Outcome := Giflib.Quantization.Quantize
-     (Context, View, Indexed, Quantized);
+     (Context, View, Indexed, Quantized, Options);
    Assert
      (Giflib.Results.Succeeded (Outcome),
       "quantizer cleanup-outcome setup failed");

@@ -3,6 +3,8 @@ with Interfaces;
 package Giflib.Internal.LZW_Bit_Arithmetic
   with Pure, SPARK_Mode
 is
+   pragma Warnings
+     (Off, "aspect * not enforced on inlined subprogram *");
    use type Interfaces.Unsigned_32;
 
    subtype Bit_Count is Natural range 0 .. 19;
@@ -70,4 +72,14 @@ is
           Post =>
             Drop_Byte'Result.Bits = Interfaces.Shift_Right (Bits, 8)
             and then Drop_Byte'Result.Count = Count - 8;
+
+   pragma Inline_Always (Width_Mask);
+   pragma Inline_Always (Append_Byte);
+   pragma Inline_Always (Extract);
+   pragma Inline_Always (Append_Code);
+   pragma Inline_Always (First_Byte);
+   pragma Inline_Always (Drop_Byte);
+   pragma Warnings
+     (On, "aspect * not enforced on inlined subprogram *");
+
 end Giflib.Internal.LZW_Bit_Arithmetic;

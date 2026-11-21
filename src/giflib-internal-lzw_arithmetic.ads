@@ -1,5 +1,10 @@
 package Giflib.Internal.LZW_Arithmetic with SPARK_Mode is
    pragma Pure;
+   --  These proof-oriented leaf helpers are forced inline in the measured
+   --  codec path. GNAT reports that their aspects are not emitted as runtime
+   --  checks after inlining; checked callers establish the same conditions.
+   pragma Warnings
+     (Off, "aspect * not enforced on inlined subprogram *");
 
    subtype Minimum_Code_Size is Natural range 2 .. 8;
    subtype Active_Code_Width is Natural range 3 .. 12;
@@ -88,4 +93,17 @@ package Giflib.Internal.LZW_Arithmetic with SPARK_Mode is
    function After_Insert (Next_Free : Next_Code_Value) return Next_Code_Value
      with Pre => Can_Insert (Next_Free),
           Post => After_Insert'Result = Next_Free + 1;
+
+   pragma Inline_Always (Decoder_Width_After_Insert);
+   pragma Inline_Always (Encoder_Width_After_Insert);
+   pragma Inline_Always (Hash_Start);
+   pragma Inline_Always (Next_Hash_Slot);
+   pragma Inline_Always (Can_Push);
+   pragma Inline_Always (Push_Count);
+   pragma Inline_Always (Can_Follow);
+   pragma Inline_Always (Can_Insert);
+   pragma Inline_Always (After_Insert);
+   pragma Warnings
+     (On, "aspect * not enforced on inlined subprogram *");
+
 end Giflib.Internal.LZW_Arithmetic;

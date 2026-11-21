@@ -8,6 +8,12 @@ is
    View : constant Giflib.Images.Image_View :=
      (Format => Giflib.RGB_24, Width => 2, Height => 1, Stride => 6,
       Accessible_Bytes => 6, Data => Data'Access);
+   Complex_Data : aliased Giflib.Streams.Byte_Array :=
+     [for I in 1 .. 257 * 3 => 0];
+   Complex_View : constant Giflib.Images.Image_View :=
+     (Format => Giflib.RGB_24, Width => 257, Height => 1, Stride => 257 * 3,
+      Accessible_Bytes => Complex_Data'Length, Data => Complex_Data'Access);
+   Complex_Indexed : Giflib.Streams.Byte_Array (1 .. 257);
    Indexed : Giflib.Streams.Byte_Array (1 .. 2);
    Quantized : Giflib.Quantization.Quantization_Result;
    Options : Giflib.Quantization.Quantize_Options :=
@@ -15,16 +21,21 @@ is
    Context : Giflib.Quantization.Workspace;
    Outcome : Giflib.Results.Result;
 begin
+   for I in 0 .. 256 loop
+      Complex_Data (I * 3 + 1) := Giflib.Byte (I mod 256);
+      Complex_Data (I * 3 + 2) := Giflib.Byte (I / 256);
+   end loop;
+
    Giflib.Quantization.Testing.Inject_Storage_Error_After (Context);
    Outcome := Giflib.Quantization.Quantize
-     (Context, View, Indexed, Quantized);
-   Require_Allocation_Failure (Outcome, "nearest-cache Storage_Error escaped");
+     (Context, Complex_View, Complex_Indexed, Quantized);
+   Require_Allocation_Failure (Outcome, "histogram Storage_Error escaped");
    Giflib.Quantization.Finalize (Context);
 
    Giflib.Quantization.Testing.Inject_Storage_Error_After (Context, 1);
    Outcome := Giflib.Quantization.Quantize
-     (Context, View, Indexed, Quantized, Options);
-   Require_Allocation_Failure (Outcome, "histogram Storage_Error escaped");
+     (Context, Complex_View, Complex_Indexed, Quantized, Options);
+   Require_Allocation_Failure (Outcome, "nearest-cache Storage_Error escaped");
    Giflib.Quantization.Finalize (Context);
 
    Options.Palette :=
@@ -45,11 +56,11 @@ begin
    Options.Dither := Giflib.Quantization.Floyd_Steinberg;
    Giflib.Quantization.Testing.Inject_Storage_Error_After (Context, 2);
    Outcome := Giflib.Quantization.Quantize
-     (Context, View, Indexed, Quantized, Options);
+     (Context, Complex_View, Complex_Indexed, Quantized, Options);
    Require_Allocation_Failure (Outcome, "dither-buffer Storage_Error escaped");
 
    Outcome := Giflib.Quantization.Quantize
-     (Context, View, Indexed, Quantized, Options);
+     (Context, Complex_View, Complex_Indexed, Quantized, Options);
    Assert (Giflib.Results.Succeeded (Outcome),
            "quantizer did not recover after injected allocation failures");
    Giflib.Quantization.Finalize (Context);

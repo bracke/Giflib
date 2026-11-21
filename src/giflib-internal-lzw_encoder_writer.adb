@@ -1,11 +1,14 @@
-with Giflib.Errors;
 with Giflib.Internal.Diagnostics;
 with Giflib.Internal.LZW_Bit_Arithmetic;
 with Giflib.Internal.LZW_Work;
 
 package body Giflib.Internal.LZW_Encoder_Writer is
+   use type Blocks.Write_Status;
    function State (Object : Code_Writer) return Writer_State is
      (Object.Current_State);
+
+   function Failure_Error (Object : Code_Writer) return Errors.Error is
+     (Object.Last_Error);
 
    function Invalid_State
      (Destination : Streams.Destination'Class) return Results.Result is
@@ -14,37 +17,22 @@ package body Giflib.Internal.LZW_Encoder_Writer is
            (Errors.Invalid_State,
             Diagnostics.At_Destination (Destination))));
 
-   function Flush
-     (Object : in out Code_Writer;
-      Writer : in out Blocks.Sub_Block_Writer;
-      Destination : in out Streams.Destination'Class) return Results.Result
-   is
-      Outcome : Results.Result;
-   begin
-      if Object.Pending_Count = 0 then
-         return Results.Success;
-      end if;
-      Outcome := Blocks.Write_Data
-        (Writer, Destination, Object.Pending (1 .. Object.Pending_Count));
-      if Results.Succeeded (Outcome) then
-         Object.Pending_Count := 0;
-      end if;
-      return Outcome;
-   end Flush;
-
    function Put_Byte
      (Object : in out Code_Writer;
       Writer : in out Blocks.Sub_Block_Writer;
       Destination : in out Streams.Destination'Class;
-      Value : Byte) return Results.Result is
+      Value : Byte) return Boolean
+   is
    begin
-      Object.Pending_Count := Object.Pending_Count + 1;
-      Object.Pending (Object.Pending_Count) := Value;
-      return
-        (if Object.Pending_Count = Object.Pending'Length
-         then Flush (Object, Writer, Destination)
-         else Results.Success);
+      if Blocks.Put_Byte_Validated (Writer, Destination, Value)
+        /= Blocks.Write_Ready
+      then
+         Object.Last_Error := Blocks.Failure_Error (Writer);
+         return False;
+      end if;
+      return True;
    end Put_Byte;
+   pragma Inline_Always (Put_Byte);
 
    function Put
      (Object : in out Code_Writer;
@@ -54,17 +42,40 @@ package body Giflib.Internal.LZW_Encoder_Writer is
       Code : LZW_Arithmetic.Code_Value;
       Width : LZW_Arithmetic.Active_Code_Width) return Results.Result
    is
-      Outcome : Results.Result;
-      State : LZW_Bit_Arithmetic.Bit_State;
    begin
       if Object.Current_State /= Open then
          return Invalid_State (Destination);
       end if;
-      Outcome := LZW_Work.Charge (Destination, Work, 1);
-      if not Results.Succeeded (Outcome) then
+      if not LZW_Work.Try_Charge (Work, 1) then
          Object.Current_State := Failed;
-         return Outcome;
+         declare
+            Outcome : constant Results.Result :=
+              LZW_Work.Failure (Destination, Work);
+         begin
+            Object.Last_Error := Outcome.First_Error;
+            return Outcome;
+         end;
       end if;
+      declare
+         Succeeded : constant Boolean := Put_Validated
+           (Object, Writer, Destination, Code, Width);
+      begin
+         return
+           (if Succeeded
+            then Results.Success
+            else Results.Failure (Object.Last_Error));
+      end;
+   end Put;
+
+   function Put_Validated
+     (Object : in out Code_Writer;
+      Writer : in out Blocks.Sub_Block_Writer;
+      Destination : in out Streams.Destination'Class;
+      Code : LZW_Arithmetic.Code_Value;
+      Width : LZW_Arithmetic.Active_Code_Width) return Boolean
+   is
+      State : LZW_Bit_Arithmetic.Bit_State;
+   begin
       State := LZW_Bit_Arithmetic.Append_Code
         (Object.Bits,
          LZW_Bit_Arithmetic.Encoder_Append_Count (Object.Bit_Count),
@@ -72,46 +83,58 @@ package body Giflib.Internal.LZW_Encoder_Writer is
          LZW_Bit_Arithmetic.Code_Width (Width));
       Object.Bits := State.Bits;
       Object.Bit_Count := State.Count;
-      while Object.Bit_Count >= 8 loop
-         Outcome := Put_Byte
-           (Object, Writer, Destination,
-            LZW_Bit_Arithmetic.First_Byte (Object.Bits));
-         if not Results.Succeeded (Outcome) then
+      if Object.Bit_Count >= 16 then
+         if Blocks.Put_Two_Bytes_Validated
+           (Writer, Destination,
+            LZW_Bit_Arithmetic.First_Byte (Object.Bits),
+            LZW_Bit_Arithmetic.First_Byte
+              (Interfaces.Shift_Right (Object.Bits, 8)))
+           /= Blocks.Write_Ready
+         then
+            Object.Last_Error := Blocks.Failure_Error (Writer);
             Object.Current_State := Failed;
-            return Outcome;
+            return False;
+         end if;
+         Object.Bits := Interfaces.Shift_Right (Object.Bits, 16);
+         Object.Bit_Count := Object.Bit_Count - 16;
+      end if;
+      while Object.Bit_Count >= 8 loop
+         if not Put_Byte
+           (Object, Writer, Destination,
+            LZW_Bit_Arithmetic.First_Byte (Object.Bits))
+         then
+            Object.Current_State := Failed;
+            return False;
          end if;
          State := LZW_Bit_Arithmetic.Drop_Byte
            (Object.Bits, LZW_Bit_Arithmetic.Bit_Count (Object.Bit_Count));
          Object.Bits := State.Bits;
          Object.Bit_Count := State.Count;
       end loop;
-      return Results.Success;
-   end Put;
+      return True;
+   end Put_Validated;
 
    function Finish
      (Object : in out Code_Writer;
       Writer : in out Blocks.Sub_Block_Writer;
       Destination : in out Streams.Destination'Class) return Results.Result
    is
-      Outcome : Results.Result;
    begin
       if Object.Current_State /= Open then
          return Invalid_State (Destination);
       end if;
       if Object.Bit_Count > 0 then
-         Outcome := Put_Byte
+         if not Put_Byte
            (Object, Writer, Destination,
-            LZW_Bit_Arithmetic.First_Byte (Object.Bits));
-         if not Results.Succeeded (Outcome) then
+            LZW_Bit_Arithmetic.First_Byte (Object.Bits))
+         then
             Object.Current_State := Failed;
-            return Outcome;
+            return Results.Failure (Object.Last_Error);
          end if;
          Object.Bits := 0;
          Object.Bit_Count := 0;
       end if;
-      Outcome := Flush (Object, Writer, Destination);
-      Object.Current_State :=
-        (if Results.Succeeded (Outcome) then Finished else Failed);
-      return Outcome;
+      Object.Current_State := Finished;
+      return Results.Success;
    end Finish;
 end Giflib.Internal.LZW_Encoder_Writer;

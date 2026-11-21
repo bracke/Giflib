@@ -13,7 +13,7 @@ package body Giflib.Encoding.Session_Transitions is
       Object.Extensions_Written := 0;
       Object.Bytes_Written := 0;
       Object.Compressed_Bytes_Written := 0;
-      Object.Diagnostic := Errors.Make (Errors.No_Error);
+      Object.Diagnostic := Errors.No_Error_Value;
       State_Arithmetic.Initialize (Object.Current_State);
    end Begin_Session;
 

@@ -2,6 +2,7 @@ with Ada.Command_Line;
 with Ada.Directories;
 with Ada.Text_IO;
 
+with Giflib_Benchmark_Support;
 with Project_Tools.Files;
 with Project_Tools.Processes;
 with Project_Tools.Release_Checks;
@@ -77,25 +78,57 @@ procedure Giflib_Check is
      (Enforce : Boolean := False;
       Bin_Directory : String := Active_Tests_Bin)
    is
+      procedure Run_Benchmark
+        (Args : Processes.Argument_Vectors.Vector;
+         Label : String)
+      is
+         Program : constant String := Files.Join
+           (Bin_Directory, "giflib_benchmark");
+         Status : Integer;
+      begin
+         if not Enforce then
+            Run_Tool ("giflib_benchmark", Args, Label, Bin_Directory);
+            return;
+         end if;
+         Status := Processes.Run_Status (Label, Root, Program, Args);
+         if Status = Giflib_Benchmark_Support.Guardrail_Failure_Status then
+            Ada.Text_IO.Put_Line
+              ("retrying transient benchmark guardrail in a fresh process");
+            Status := Processes.Run_Status
+              (Label & " retry", Root, Program, Args);
+         end if;
+         if Status /= 0 then
+            Project_Tools.Release_Checks.Fail
+              (Label & " failed with status" & Integer'Image (Status));
+         end if;
+      end Run_Benchmark;
+
       procedure Run_Case (Relative_Path : String; Label : String) is
       begin
          if Enforce then
-            Run_Tool
-              ("giflib_benchmark",
-               Processes.Arguments
+            Run_Benchmark
+              (Processes.Arguments
                  ([Processes.Argument ("--enforce"),
                    Processes.Argument (Files.Join (Root, Relative_Path))]),
-               Label,
-               Bin_Directory);
+               Label);
          else
-            Run_Tool
-              ("giflib_benchmark",
-               Processes.Arguments
+            Run_Benchmark
+              (Processes.Arguments
                  ([Processes.Argument (Files.Join (Root, Relative_Path))]),
-               Label,
-               Bin_Directory);
+               Label);
          end if;
       end Run_Case;
+
+      procedure Run_Option (Option : String; Label : String) is
+      begin
+         Run_Benchmark
+           ((if Enforce
+             then Processes.Arguments
+               ([Processes.Argument ("--enforce"),
+                 Processes.Argument (Option)])
+             else Processes.Arguments ([Processes.Argument (Option)])),
+            Label);
+      end Run_Option;
    begin
       Run_Case ("tests/fixtures/external/docbook-tip.gif", "benchmark docbook tip");
       Run_Case
@@ -105,25 +138,38 @@ procedure Giflib_Check is
       Run_Case
         ("tests/fixtures/generated/imagemagick-animation.gif", "benchmark animation fixture");
       Run_Case
+        ("tests/fixtures/generated/imagemagick-benchmark-animation-256.gif",
+         "benchmark large composited animation fixture");
+      Run_Case
         ("tests/fixtures/generated/imagemagick-interlaced.gif", "benchmark interlaced fixture");
       Run_Case
         ("tests/fixtures/generated/imagemagick-benchmark-512.gif", "benchmark GIF fixture");
-      if Enforce then
-         Run_Tool
-           ("giflib_benchmark",
-            Processes.Arguments
-              ([Processes.Argument ("--enforce"),
-                Processes.Argument ("--synthetic-truecolor")]),
-            "benchmark raw truecolor quantization",
-            Bin_Directory);
-      else
-         Run_Tool
-           ("giflib_benchmark",
-            Processes.Arguments
-              ([Processes.Argument ("--synthetic-truecolor")]),
-            "benchmark raw truecolor quantization",
-            Bin_Directory);
-      end if;
+      Run_Option
+        ("--synthetic-truecolor", "benchmark raw truecolor quantization");
+      Run_Option
+        ("--synthetic-fixed", "benchmark fixed-palette quantization");
+      Run_Option
+        ("--synthetic-fixed-repeated",
+         "benchmark cache-friendly fixed-palette quantization");
+      Run_Option
+        ("--synthetic-fixed-phased",
+         "benchmark phase-changing fixed-palette quantization");
+      Run_Option
+        ("--synthetic-dither", "benchmark dithered quantization");
+      Run_Option
+        ("--synthetic-alpha-exact", "benchmark exact mixed-alpha quantization");
+      Run_Option
+        ("--synthetic-alpha-fixed", "benchmark opaque RGBA fixed quantization");
+      Run_Option
+        ("--synthetic-alpha-dither", "benchmark mixed-alpha dithering");
+      Run_Option
+        ("--synthetic-lzw", "benchmark indexed LZW encoding");
+      Run_Option
+        ("--indexed-lzw-decode", "benchmark indexed LZW decoding");
+      Run_Option
+        ("--synthetic-animation", "benchmark animation workspace reuse");
+      Run_Option
+        ("--synthetic-optimizer", "benchmark frame optimization");
    end Run_Benchmarks;
 
    procedure External

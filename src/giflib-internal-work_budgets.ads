@@ -7,6 +7,11 @@ is
    function Attempted (Object : Meter) return Byte_Count;
    function Maximum (Object : Meter) return Byte_Count;
    function Failed (Object : Meter) return Boolean;
+   function Can_Charge
+     (Object : Meter;
+      Amount : Byte_Count) return Boolean;
+
+   pragma Inline_Always (Can_Charge);
 
    procedure Try_Charge
      (Object   : in out Meter;

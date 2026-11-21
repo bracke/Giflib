@@ -12,5 +12,6 @@ package Giflib.Internal.Compositing is
       Rectangle    : Frames.Rectangle;
       Indices      : Streams.Byte_Array;
       Palette      : Palettes.Palette;
-      Control      : Frames.Graphic_Control) return Results.Result;
+      Control      : Frames.Graphic_Control;
+      Indices_Validated : Boolean := False) return Results.Result;
 end Giflib.Internal.Compositing;

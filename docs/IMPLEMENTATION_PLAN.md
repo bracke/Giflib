@@ -95,7 +95,7 @@ global palette in an explicit analysis pass. The opt-in conservative optimizer
 trims retained opaque canvases, makes unchanged rectangle interiors transparent,
 and merges safe redundant delays while refusing unsafe disposal/control cases.
 Independent ImageMagick/FFmpeg checks include lossy true-color output. The
-native benchmark harness reports five-sample median per-file decode/encode time
+native benchmark harness reports five-sample median per-file decode/full-transcode time
 and process peak RSS for generated and caller-supplied real-world corpora. The
 release gate uses optimized builds, encodes every animation frame, runs cases
 in separate processes, enforces conservative timing/RSS ceilings, and includes
@@ -160,11 +160,11 @@ programs are `giflib_check`, `giflib_generate_samples`,
 `giflib_generate_fixtures`, `giflib_external_checks`, `giflib_benchmark`, and
 `giflib_fuzz`; `giflib_tooling_tests` independently exercises validator mutation
 cases through the internal `giflib_tooling_probe`. `unit_tests.gpr` builds the
-AUnit runner, while the normal test
-action also builds `tools.gpr` and runs `giflib_check tooling`; the release gate
-invokes the same Ada validation package directly. Every entry point uses
-`project_tools`; the tooling validator checks
-both the workspace pin and both GPR/source inventories.
+AUnit runner, while the normal test action builds `tools.gpr`, runs the fast
+current-tree probe, and leaves the slower `giflib_check tooling` mutation gate
+explicit. Versioned CI and the release gate run that full gate. Every entry
+point uses `project_tools`; the tooling validator checks the immutable
+repository pin and both GPR/source inventories.
 Internal tests alone import the dedicated `giflib_whitebox.gpr`; workflow tools
 import the production `giflib.gpr`, use separate artifacts, and remain limited
 to the supported units exported by it.

@@ -1,4 +1,5 @@
 with Giflib.Internal.Quantization_Arithmetic;
+with Giflib.Internal.Quantization_Histograms;
 with Giflib.Internal.Quantization_Storage.Outcomes;
 with Giflib.Internal.Work_Budgets;
 with Giflib.Palettes;
@@ -8,6 +9,12 @@ package Giflib.Internal.Quantization_Storage.Histogram_Operations is
    pragma Preelaborate;
    use type Outcomes.Budgeted_Status;
    subtype Histogram_Index is Quantization_Arithmetic.Histogram_Index;
+   subtype Histogram_State is Quantization_Histograms.Histogram_State;
+
+   function Update
+     (Object : in out Resources;
+      Process : not null access procedure
+        (Value : in out Histogram_State)) return Outcomes.Storage_Status;
 
    function Reset
      (Object : in out Resources;

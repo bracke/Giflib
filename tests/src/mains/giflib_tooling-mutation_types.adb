@@ -134,9 +134,9 @@ package body Giflib_Tooling.Mutation_Types is
             return Create (Id, "invalid-main-declaration",
                            "main entry does not declare its procedure",
                            "tests/mutation_main.gpr");
-         when Wrong_Workspace_Pin =>
-            return Create (Id, "wrong-workspace-pin",
-                           "missing the project_tools workspace pin", False);
+         when Wrong_Repository_Pin =>
+            return Create (Id, "wrong-repository-pin",
+                           "missing the immutable project_tools pin", False);
          when API_Boundary =>
             return Create (Id, "api-boundary",
                            "private API probe unexpectedly compiled", False);

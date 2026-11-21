@@ -49,7 +49,8 @@ begin
       "truecolor destination Storage_Error was misclassified");
    Giflib.Encoding.Finalize (Encoder);
 
-   Delayed.Raise_On_Write := 7;
+   --  The LZW sub-block length and payload share one destination write.
+   Delayed.Raise_On_Write := 6;
    Outcome := Giflib.Encoding.Initialize
      (Delayed_Encoder);
    Giflib.Testing.Assertions.Require_Success (Outcome);

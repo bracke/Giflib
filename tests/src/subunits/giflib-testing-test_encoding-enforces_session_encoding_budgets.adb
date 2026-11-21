@@ -204,8 +204,10 @@ begin
 
    Giflib.Encoding.Finalize (Encoder);
    Constraints := Giflib.Limits.Default_Limits;
+   --  Admit the compact LZW workspace, then fail when the truecolor
+   --  quantization workspace joins the same session allocation budget.
    Constraints.Max_Allocation_Bytes :=
-     Giflib.Byte_Count (32_768 * (Natural'Size / 8));
+     Giflib.Byte_Count (16_384 * (Natural'Size / 8));
    Start;
    declare
       RGB : aliased constant Giflib.Streams.Byte_Array := [0, 0, 0];

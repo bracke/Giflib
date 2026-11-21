@@ -28,7 +28,8 @@ project_tools = "*"
 gnat_native = "^15"
 
 [[pins]]
-project_tools = { path = "../../project_tools" }
+#  Development-only shared tooling, frozen for reproducible test builds.
+project_tools = { url = "git+https://github.com/bracke/project_tools.git", commit = "5ed5f4dcfa10301345933d45e5f78ac0573d8cff" }
 
 [build-profiles]
 "*" = "development"

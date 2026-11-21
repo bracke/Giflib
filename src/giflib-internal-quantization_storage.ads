@@ -10,6 +10,17 @@ package Giflib.Internal.Quantization_Storage is
    pragma Preelaborate;
    use type Ownership.Allocation_Status;
 
+   Cache_Capacity : constant Positive := 4_096;
+   type Cache_Epoch is mod 2 ** 32;
+   type Cache_Item is record
+      Epoch : Cache_Epoch := 0;
+      Key : Natural range 0 .. 16#FF_FF_FF# := 0;
+      Value : Palette_Index := 0;
+   end record;
+   type Cache_Array is
+     array (Natural range 0 .. Cache_Capacity - 1) of Cache_Item
+       with No_Controlled_Parts => True;
+
    type Resources is new Ada.Finalization.Limited_Controlled with private;
 
    function Histogram_Allocated (Object : Resources) return Boolean;
@@ -52,16 +63,6 @@ package Giflib.Internal.Quantization_Storage is
    overriding procedure Finalize (Object : in out Resources);
 
 private
-   Cache_Capacity : constant Positive := 4_096;
-   type Cache_Item is record
-      Used : Boolean := False;
-      Key : Natural range 0 .. 16#FF_FF_FF# := 0;
-      Value : Palette_Index := 0;
-   end record;
-   type Cache_Array is
-     array (Natural range 0 .. Cache_Capacity - 1) of Cache_Item
-       with No_Controlled_Parts => True;
-
    package Histogram_Ownership is new Giflib.Internal.Owned_Objects
      (Quantization_Histograms.Histogram_State);
    package Nearest_Cache_Ownership is new Giflib.Internal.Owned_Objects
@@ -72,6 +73,7 @@ private
    type Resources is new Ada.Finalization.Limited_Controlled with record
       Histogram_Data : Histogram_Ownership.Handle;
       Nearest_Cache_Data : Nearest_Cache_Ownership.Handle;
+      Current_Cache_Epoch : Cache_Epoch := 1;
       Error_Data : Error_Ownership.Handle;
       Allocation_Budget : aliased Ownership.Byte_Budget;
       Cleanup_State : aliased Cleanup.Cleanup_Status :=

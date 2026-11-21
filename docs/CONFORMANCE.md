@@ -11,17 +11,17 @@ giflib-generated artifacts.
 | Global/local palettes and indices | `descriptor.*`, `image_data.*`, independent ImageMagick/DocBook corpus |
 | Geometry boundaries | `container.geometry_255_256_257`, `descriptor.geometry_and_limit` |
 | Interlace | `interlace.*`, ImageMagick 9×9 interlaced fixture |
-| LZW sizes/transitions/full dictionary | `lzw.minimum_code_sizes_2_to_8`, `lzw.kwkwk_and_width_transition`, `lzw.dictionary_full`, `lzw.buffered_input`, mandatory-initial-Clear rejection, buffered encoder round-trip/fragmentation |
+| LZW sizes/transitions/full dictionary | `lzw.minimum_code_sizes_2_to_8`, `lzw.kwkwk_and_width_transition`, `lzw.dictionary_full`, `lzw.buffered_input`, mandatory-initial-Clear rejection, buffered encoder round-trip/fragmentation, isolated 512×512 indexed-LZW encoding, and isolated decoding of an independent ImageMagick 512×512 GIF |
 | Malformed LZW/blocks/extensions | `lzw.malformed_and_output_count`, `blocks.*`, `extensions.malformed_and_budgets` |
-| Animation/loop/delay/disposal | `encoding.gif89a.animation`, `encoding.options_and_lifecycle`, `extensions.animexts_loop`, `compositing.*`, three-frame ImageMagick fixture, generated delay/iteration external-oracle checks |
+| Animation/loop/delay/disposal | `encoding.gif89a.animation`, `encoding.options_and_lifecycle`, `extensions.animexts_loop`, `compositing.*`, three-frame correctness fixture, independent eight-frame 256×256 disposal benchmark, generated delay/iteration external-oracle checks |
 | Metadata ordering/exact chunks | `extensions.retention_order_and_loop`, `extensions.retention_policies_and_bounds`, `encoding.extension_exact_placement` |
 | Encoder lifecycle/options | `encoding.options_and_lifecycle`, `encoding.truecolor.local_and_global` |
 | Strict/compatible/safe recovery | `policy.*`, including reserved image-descriptor bits |
-| Quantization/alpha/dither/channel order | `quantization.*`, including RGB/BGR/RGBA/BGRA and workspace reuse, plus external true-color quality oracle and raw-RGB median-cut benchmark |
+| Quantization/alpha/dither/channel order | `quantization.*`, including RGB/BGR/RGBA/BGRA and workspace reuse, plus external true-color quality oracle and generated, high-cardinality fixed, cache-friendly repeated-color fixed, phase-changing fixed, dithered, multi-frame, near-capacity 255-color exact mixed-alpha, fixed opaque-alpha, and dithered mixed-alpha benchmarks |
 | Frame optimization | `optimization.*` |
 | Short I/O and zero progress | `streams.*` plus fragmented container/codec tests |
-| Resource limits | width/height, canvas, frame/total pixels, frames, compressed bytes, extensions, metadata, allocation, output, work, warning/diagnostic, and snapshot tests |
-| Heap exhaustion | `allocation_failures.*` uses test-only child packages to inject object-local `Storage_Error` at every allocation site and checks isolation, non-raising cleanup, and frame/snapshot/workspace reuse |
+| Resource limits | width/height, canvas, frame/total pixels, frames, compressed bytes, extensions, metadata, allocation, output, work, warning retention, and snapshot tests |
+| Heap exhaustion | `allocation_failures.*` uses test-only child packages to inject object-local `Storage_Error` at every allocation site, requires the distinct `gif.allocation.failed` diagnostic, and checks isolation, non-raising cleanup, and frame/snapshot/workspace reuse |
 | Independent session objects | `decoder.independent_objects_interleave`, `encoding.independent_objects_interleave` |
 | Robustness | deterministic 10,000-case mutation harness, seed `3235823838` |
 | Independent decoder corpus | `decoder.independent_file_corpus` compares every composited RGBA frame from ImageMagick fixtures to fixed expected pixels |
@@ -31,7 +31,7 @@ The Ada executable `giflib_check release` is the release gate. It builds the
 library, test crate, and example; then runs AUnit, the deterministic fuzzer,
 independent fixture generation, and both external oracles against both the
 development and optimized release binaries. It subsequently enforces
-separate-process timing/peak-RSS guardrails with the release binaries and runs
+separate-process timing and 16 MiB peak-RSS guardrails with the release binaries and runs
 full SPARK proof over the checked-arithmetic,
 budget-arithmetic, sub-block-state, descriptor-packed-field, encoder-sizing,
 extension-field, geometry, image-extent, LZW dictionary/bit arithmetic,

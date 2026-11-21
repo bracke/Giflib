@@ -18,6 +18,7 @@ Floyd–Steinberg dithering, and conservative animation rectangle optimization.
 - [Conformance matrix](docs/CONFORMANCE.md)
 - [Security and fuzzing](docs/SECURITY.md)
 - [SPARK boundary](docs/VERIFICATION.md)
+- [Repository tooling architecture](docs/TOOLING_ARCHITECTURE.md)
 - [Benchmarks](docs/BENCHMARKS.md)
 - [Agent instructions](AGENTS.md)
 
@@ -25,6 +26,10 @@ The reference architecture is [bracke/jpeglib](https://github.com/bracke/jpeglib
 not a runtime dependency. No C GIF codec is used by the production crate.
 
 ## Build and test
+
+The production crate builds from a standalone checkout. The test/tooling crate
+uses the shared `project_tools` development crate through an immutable Git
+commit pin, so no sibling checkout or mutable branch is required.
 
 All commands use Alire so the declared GNAT 15 toolchain is selected:
 
@@ -34,6 +39,18 @@ alr --chdir tests build
 alr --chdir tests exec -- ./bin/giflib_tests
 alr --chdir tests exec -- gprbuild -P tools.gpr -p -j0
 ```
+
+The default `alr test` path builds the focused AUnit and tooling projects, runs
+the fast current-tree structural probe, and runs AUnit. The slower repository
+mutation gate remains explicit and is also enforced by GitHub Actions. Focused
+CI additionally runs the deterministic 10,000-case fuzz harness:
+
+```sh
+alr --chdir tests exec -- ./bin/giflib_fuzz 10000 3235823838
+```
+
+CI also generates fresh independent fixtures and checks encoder output with
+ImageMagick and FFmpeg.
 
 All repository-owned tooling is Ada and uses the shared `project_tools` crate
 for process, filesystem, temporary-fixture, deterministic-seed, and release

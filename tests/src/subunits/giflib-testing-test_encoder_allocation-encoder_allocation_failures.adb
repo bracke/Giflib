@@ -8,6 +8,8 @@ is
    View : constant Giflib.Images.Image_View :=
      (Format => Giflib.RGB_24, Width => 2, Height => 1, Stride => 6,
       Accessible_Bytes => 6, Data => Data'Access);
+   Truecolor_Pixel_Charge : constant Giflib.Byte_Count :=
+     Giflib.Byte_Count (View.Width) * Giflib.Byte_Count (View.Height);
    Storage : aliased Giflib.Streams.Byte_Array := [for I in 1 .. 512 => 0];
    Destination : aliased Giflib.Streams.Fixed_Buffer_Destination (Storage'Access);
    Encoder : Giflib.Encoding.Encoder (Destination'Access);
@@ -27,6 +29,10 @@ is
    Outcome : Giflib.Results.Result;
    Quantize_Options : Giflib.Quantization.Quantize_Options :=
      Giflib.Quantization.Default_Options;
+   Quantizer : Giflib.Quantization.Workspace;
+   Quantized_Pixels : Giflib.Streams.Byte_Array (1 .. 2);
+   Quantized : Giflib.Quantization.Quantization_Result;
+   Quantizer_Failure : Giflib.Results.Result;
 
    procedure Start is
    begin
@@ -70,6 +76,10 @@ begin
    Assert (Giflib.Results.Succeeded (Outcome),
            "cleanup encoder setup failed");
    Quantize_Options.Dither := Giflib.Quantization.Floyd_Steinberg;
+   Quantize_Options.Palette :=
+     (Strategy => Giflib.Quantization.Use_Fixed_Palette,
+      Fixed_Palette => Palette,
+      Fixed_Transparent_Index => 0);
    Outcome := Giflib.Encoding.Add_Truecolor_Frame
      (Cleanup_Encoder, (Width => 2, Height => 1, others => <>), View,
       Quantize_Options);
@@ -136,12 +146,24 @@ begin
            "pixel allocation failure did not fail the encoder");
    Giflib.Encoding.Finalize (Encoder);
 
+   Giflib.Quantization.Testing.Inject_Storage_Error_After (Quantizer);
+   Quantizer_Failure := Giflib.Quantization.Quantize
+     (Quantizer, View, Quantized_Pixels, Quantized, Quantize_Options);
+   Require_Allocation_Failure
+     (Quantizer_Failure, "standalone quantizer Storage_Error escaped");
+   Giflib.Quantization.Finalize (Quantizer);
+
    Start;
    Giflib.Encoding.Testing.Inject_Quantizer_Storage_Error_After (Encoder);
    Outcome := Giflib.Encoding.Add_Truecolor_Frame
-     (Encoder, (Width => 2, Height => 1, others => <>), View);
+     (Encoder, (Width => 2, Height => 1, others => <>), View,
+      Quantize_Options);
    Require_Allocation_Failure
      (Outcome, "nested quantizer Storage_Error escaped truecolor encoding");
+   Assert
+     (Outcome.First_Error.Context.Actual =
+        Quantizer_Failure.First_Error.Context.Actual + Truecolor_Pixel_Charge,
+      "nested host allocation failure did not report the session total");
    Giflib.Encoding.Finalize (Encoder);
 
    Start;
@@ -159,6 +181,7 @@ begin
 exception
    when others =>
       Giflib.Encoding.Testing.Disable_Failure_Injection (Encoder);
+      Giflib.Quantization.Testing.Disable_Failure_Injection (Quantizer);
       raise;
 end Encoder_Allocation_Failures;
 

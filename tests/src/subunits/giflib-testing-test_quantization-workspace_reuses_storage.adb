@@ -11,17 +11,25 @@ is
    Context : Giflib.Quantization.Workspace;
    Indexed : Giflib.Streams.Byte_Array (1 .. 2);
    Quantized : Giflib.Quantization.Quantization_Result;
+   Options : Giflib.Quantization.Quantize_Options :=
+     Giflib.Quantization.Default_Options;
    Outcome : Giflib.Results.Result;
 begin
+   Options.Palette :=
+     (Strategy => Giflib.Quantization.Use_Fixed_Palette,
+      Fixed_Palette =>
+        (Length => 2,
+         Colors => [0 => (0, 0, 0), 1 => (255, 255, 255), others => <>]),
+      Fixed_Transparent_Index => 0);
    Giflib.Quantization.Testing.Disable_Failure_Injection (Context);
    Outcome := Giflib.Quantization.Quantize
-     (Context, View, Indexed, Quantized);
+     (Context, View, Indexed, Quantized, Options);
    Assert (Giflib.Results.Succeeded (Outcome)
            and then Giflib.Quantization.Allocated_Bytes (Context) > 0,
            "quantization workspace was not populated");
    Giflib.Quantization.Testing.Inject_Storage_Error_After (Context);
    Outcome := Giflib.Quantization.Quantize
-     (Context, View, Indexed, Quantized);
+     (Context, View, Indexed, Quantized, Options);
    Assert (Giflib.Results.Succeeded (Outcome),
            "reused quantization workspace allocated again");
    Giflib.Quantization.Testing.Disable_Failure_Injection (Context);

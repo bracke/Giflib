@@ -14,24 +14,27 @@ package body Giflib.Internal.LZW_Decoder_Dictionary is
       Index : Code_Index) return Boolean is
      (Object.Initialized and then Natural (Index) = Object.Next_Undefined);
 
+   function Suffix_Is_Valid
+     (Object : Dictionary;
+      Suffix : Byte) return Boolean is
+     (Object.Initialized and then Suffix <= Object.Maximum_Index);
+
    procedure Reset
      (Object : in out Dictionary;
-      First_Dynamic_Code : Code_Index) is
+      First_Dynamic_Code : Code_Index;
+      Maximum_Index : Byte := Byte'Last) is
    begin
       Object.First_Dynamic := First_Dynamic_Code;
       Object.Next_Undefined := Natural (First_Dynamic_Code);
+      Object.Maximum_Index := Maximum_Index;
       Object.Initialized := True;
    end Reset;
 
-   function Prefix_At
+   function Entry_At
      (Object : Dictionary;
-      Index : Code_Index) return Code_Index is
-     (Object.Prefixes (Index));
-
-   function Suffix_At
-     (Object : Dictionary;
-      Index : Code_Index) return Byte is
-     (Object.Suffixes (Index));
+      Index : Code_Index) return Dictionary_Entry is
+     (Prefix => Object.Prefixes (Index),
+      Suffix => Object.Suffixes (Index));
 
    procedure Set_Entry
      (Object : in out Dictionary;

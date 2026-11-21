@@ -6,6 +6,7 @@ with Project_Tools.Processes;
 with Project_Tools.Text;
 
 with Giflib_Tooling.Configuration_Source;
+with Giflib_Tooling.Dependency_Policy;
 with Giflib_Tooling.GPR_Analysis;
 with Giflib_Tooling.Source_Model;
 with Giflib_Tooling.Token_Patterns;
@@ -165,8 +166,11 @@ package body Giflib_Tooling.Boundaries is
       procedure Inspect_Pin (Text : String) is
       begin
          Giflib_Tooling.Work_Budgets.Charge_Scan (Budget, Text'Length);
-         Pin := Config.Find_Workspace_Pin
-           (Text, "project_tools", "../../project_tools");
+         Pin := Config.Find_Repository_Pin
+           (Text,
+            "project_tools",
+            Dependency_Policy.Project_Tools_URL,
+            Dependency_Policy.Project_Tools_Commit);
       end Inspect_Pin;
    begin
       Require_Config
@@ -199,7 +203,7 @@ package body Giflib_Tooling.Boundaries is
             null;
          when Config.Assignment_Absent =>
             Fail
-              ("tests/alire.toml is missing the project_tools workspace pin");
+              ("tests/alire.toml is missing the immutable project_tools pin");
          when Config.Malformed_Input =>
             Fail ("tests/alire.toml contains malformed configuration syntax");
       end case;

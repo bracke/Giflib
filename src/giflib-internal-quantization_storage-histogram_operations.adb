@@ -2,6 +2,19 @@ with Giflib.Errors;
 with Giflib.Internal.Quantization_Palette;
 
 package body Giflib.Internal.Quantization_Storage.Histogram_Operations is
+   function Update
+     (Object : in out Resources;
+      Process : not null access procedure
+        (Value : in out Histogram_State)) return Outcomes.Storage_Status
+   is
+   begin
+      if not Histogram_Allocated (Object) then
+         return Outcomes.Storage_Invariant_Failure;
+      end if;
+      Histogram_Ownership.Update (Object.Histogram_Data, Process);
+      return Outcomes.Storage_Ready;
+   end Update;
+
    function Charge
      (Work : in out Work_Budgets.Meter;
       Amount : Byte_Count) return Boolean
@@ -16,19 +29,26 @@ package body Giflib.Internal.Quantization_Storage.Histogram_Operations is
      (Object : in out Resources;
       Work : in out Work_Budgets.Meter) return Outcomes.Budgeted_Status
    is
+      Active_Count : Natural := 0;
+      procedure Read_Count
+        (Histogram : Quantization_Histograms.Histogram_State) is
+      begin
+         Active_Count := Histogram.Occupied_Count;
+      end Read_Count;
       procedure Clear
         (Histogram : in out Quantization_Histograms.Histogram_State) is
       begin
-         Histogram.Counts := [others => 0];
+         for Position in 1 .. Histogram.Occupied_Count loop
+            Histogram.Counts (Histogram.Occupied (Position)) := 0;
+         end loop;
          Histogram.Occupied_Count := 0;
       end Clear;
    begin
       if not Histogram_Allocated (Object) then
          return Outcomes.Budgeted_Invariant_Failure;
       end if;
-      if not Charge
-        (Work, Byte_Count (Quantization_Histograms.Histogram_Array'Length))
-      then
+      Histogram_Ownership.Query (Object.Histogram_Data, Read_Count'Access);
+      if not Charge (Work, Byte_Count (Active_Count)) then
          return Outcomes.Budgeted_Work_Limit;
       end if;
       Histogram_Ownership.Update (Object.Histogram_Data, Clear'Access);
@@ -46,19 +66,11 @@ package body Giflib.Internal.Quantization_Storage.Histogram_Operations is
       procedure Add
         (Histogram : in out Quantization_Histograms.Histogram_State) is
       begin
-         if Histogram.Counts (Palette_Bucket) = 0 then
-            if Histogram.Occupied_Count = Histogram.Occupied'Length then
-               return;
-            end if;
-            Histogram.Occupied_Count := Histogram.Occupied_Count + 1;
-            Histogram.Occupied (Histogram.Occupied_Count) := Palette_Bucket;
+         if Quantization_Histograms.Add_Sample
+           (Histogram, Palette_Bucket)
+         then
+            Result := Outcomes.Storage_Ready;
          end if;
-         if Histogram.Counts (Palette_Bucket) = Natural'Last then
-            return;
-         end if;
-         Histogram.Counts (Palette_Bucket) :=
-           Histogram.Counts (Palette_Bucket) + 1;
-         Result := Outcomes.Storage_Ready;
       end Add;
    begin
       if not Histogram_Allocated (Object) then

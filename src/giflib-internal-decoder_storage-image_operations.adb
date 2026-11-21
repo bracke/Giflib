@@ -184,7 +184,8 @@ package body Giflib.Internal.Decoder_Storage.Image_Operations is
             Rectangle,
             Indices (1 .. Natural (Pixel_Bytes)),
             Palette,
-            Control);
+            Control,
+            Indices_Validated => True);
       end Overlay;
    begin
       if not Canvas_Allocated (Object)

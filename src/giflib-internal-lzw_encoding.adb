@@ -5,6 +5,7 @@ with Giflib.Internal.Diagnostics;
 with Giflib.Internal.LZW_Arithmetic;
 with Giflib.Internal.LZW_Encoder_Input;
 with Giflib.Internal.LZW_Encoder_Writer;
+with Giflib.Internal.LZW_Work;
 
 package body Giflib.Internal.LZW_Encoding is
    package Workspace_Results is new Workspace_Ownership.Result_Operations
@@ -52,6 +53,22 @@ package body Giflib.Internal.LZW_Encoding is
       End_Code : LZW_Arithmetic.Code_Value;
       Next_Free : LZW_Arithmetic.Next_Code_Value;
       Work : Work_Budgets.Meter (Max_Work);
+      Pending_Work : Byte_Count := 0;
+      Work_Batch_Size : constant Byte_Count := 4_096;
+
+      type Code_Put_Status is
+        (Code_Put_Succeeded, Code_Put_Work_Failed, Code_Put_Writer_Failed);
+
+      function Commit_Pending_Work return Boolean is
+      begin
+         if Pending_Work = 0 then
+            return True;
+         elsif not LZW_Work.Try_Charge (Work, Pending_Work) then
+            return False;
+         end if;
+         Pending_Work := 0;
+         return True;
+      end Commit_Pending_Work;
 
       function Clear_Dictionary return Results.Result is
          Outcome : constant Results.Result :=
@@ -85,9 +102,35 @@ package body Giflib.Internal.LZW_Encoding is
          return Outcome;
       end Accounted;
 
+      function Put_Code
+        (Code : LZW_Arithmetic.Code_Value) return Code_Put_Status is
+      begin
+         Pending_Work := Pending_Work + 1;
+         if (Pending_Work >= Work_Batch_Size
+             or else not Work_Budgets.Can_Charge (Work, Pending_Work))
+           and then not Commit_Pending_Work
+         then
+            return Code_Put_Work_Failed;
+         end if;
+         return
+           (if LZW_Encoder_Writer.Put_Validated
+              (Codes, Writer, Object, Code, Width)
+            then Code_Put_Succeeded
+            else Code_Put_Writer_Failed);
+      end Put_Code;
+
       Prefix : LZW_Arithmetic.Code_Value;
       Suffix : Byte;
       Outcome : Results.Result;
+
+      function Failed_Result
+        (Status : Code_Put_Status) return Results.Result is
+        (case Status is
+           when Code_Put_Work_Failed => LZW_Work.Failure (Object, Work),
+           when Code_Put_Writer_Failed =>
+             Results.Failure (LZW_Encoder_Writer.Failure_Error (Codes)),
+           when Code_Put_Succeeded => raise Program_Error)
+        with Pre => Status /= Code_Put_Succeeded;
    begin
       Compressed_Bytes := 0;
       Wire_Bytes := 0;
@@ -117,11 +160,14 @@ package body Giflib.Internal.LZW_Encoding is
       if Byte (Prefix) > Maximum_Index then
          return Accounted (Invalid_Index (Byte (Prefix)));
       end if;
-      Outcome := LZW_Encoder_Writer.Put
-        (Codes, Writer, Object, Work, Clear_Code, Width);
-      if not Results.Succeeded (Outcome) then
-         return Accounted (Outcome);
-      end if;
+      declare
+         Status : constant Code_Put_Status :=
+           Put_Code (Clear_Code);
+      begin
+         if Status /= Code_Put_Succeeded then
+            return Accounted (Failed_Result (Status));
+         end if;
+      end;
       for I in 1 .. Input'Length - 1 loop
          Suffix := LZW_Encoder_Input.Element
            (Input, I, Layout);
@@ -129,35 +175,51 @@ package body Giflib.Internal.LZW_Encoding is
             return Accounted (Invalid_Index (Suffix));
          end if;
          declare
-            Lookup : constant LZW_Encoder_Dictionary.Lookup_Result :=
-              LZW_Encoder_Dictionary.Find
-                (Context.Dictionary, Prefix, Suffix, Work, Object);
+            Probe_Work : Byte_Count;
+            Slot : LZW_Encoder_Dictionary.Slot_Index;
+            Lookup : constant LZW_Encoder_Dictionary.Validated_Lookup_Kind :=
+              LZW_Encoder_Dictionary.Find_Validated
+                (Context.Dictionary, Prefix, Suffix, Slot, Probe_Work);
          begin
-            case Lookup.Kind is
-               when LZW_Encoder_Dictionary.Lookup_Failure =>
-                  return Accounted (Results.Failure (Lookup.Error));
-               when LZW_Encoder_Dictionary.Lookup_Hit =>
+            Pending_Work := Pending_Work + Probe_Work;
+            if (Pending_Work >= Work_Batch_Size
+                or else not Work_Budgets.Can_Charge (Work, Pending_Work))
+              and then not Commit_Pending_Work
+            then
+               return Accounted (LZW_Work.Failure (Object, Work));
+            end if;
+            case Lookup is
+               when LZW_Encoder_Dictionary.Validated_Failure =>
+                  return Accounted
+                    (Results.Failure (Errors.Internal_Invariant_Failed));
+               when LZW_Encoder_Dictionary.Validated_Hit =>
                   Prefix := LZW_Encoder_Dictionary.Code_At
-                    (Context.Dictionary, Lookup.Slot);
-               when LZW_Encoder_Dictionary.Lookup_Miss =>
-                  Outcome := LZW_Encoder_Writer.Put
-                    (Codes, Writer, Object, Work, Prefix, Width);
-                  if not Results.Succeeded (Outcome) then
-                     return Accounted (Outcome);
-                  end if;
+                    (Context.Dictionary, Slot);
+               when LZW_Encoder_Dictionary.Validated_Miss =>
+                  declare
+                     Status : constant Code_Put_Status :=
+                       Put_Code (Prefix);
+                  begin
+                     if Status /= Code_Put_Succeeded then
+                        return Accounted (Failed_Result (Status));
+                     end if;
+                  end;
                   if LZW_Arithmetic.Can_Insert (Next_Free) then
                      LZW_Encoder_Dictionary.Insert
-                       (Context.Dictionary, Lookup.Slot, Prefix, Suffix,
+                       (Context.Dictionary, Slot, Prefix, Suffix,
                         LZW_Arithmetic.Code_Value (Next_Free));
                      Next_Free := LZW_Arithmetic.After_Insert (Next_Free);
                      Width := LZW_Arithmetic.Encoder_Width_After_Insert
                        (Next_Free, Width);
                   else
-                     Outcome := LZW_Encoder_Writer.Put
-                       (Codes, Writer, Object, Work, Clear_Code, Width);
-                     if not Results.Succeeded (Outcome) then
-                        return Accounted (Outcome);
-                     end if;
+                     declare
+                        Status : constant Code_Put_Status :=
+                          Put_Code (Clear_Code);
+                     begin
+                        if Status /= Code_Put_Succeeded then
+                           return Accounted (Failed_Result (Status));
+                        end if;
+                     end;
                      Outcome := Clear_Dictionary;
                      if not Results.Succeeded (Outcome) then
                         return Accounted (Outcome);
@@ -167,14 +229,24 @@ package body Giflib.Internal.LZW_Encoding is
             end case;
          end;
       end loop;
-      Outcome := LZW_Encoder_Writer.Put
-        (Codes, Writer, Object, Work, Prefix, Width);
-      if Results.Succeeded (Outcome) then
-         Outcome := LZW_Encoder_Writer.Put
-           (Codes, Writer, Object, Work, End_Code, Width);
-      end if;
-      if not Results.Succeeded (Outcome) then
-         return Accounted (Outcome);
+      declare
+         Status : constant Code_Put_Status :=
+           Put_Code (Prefix);
+      begin
+         if Status /= Code_Put_Succeeded then
+            return Accounted (Failed_Result (Status));
+         end if;
+      end;
+      declare
+         Status : constant Code_Put_Status :=
+           Put_Code (End_Code);
+      begin
+         if Status /= Code_Put_Succeeded then
+            return Accounted (Failed_Result (Status));
+         end if;
+      end;
+      if not Commit_Pending_Work then
+         return Accounted (LZW_Work.Failure (Object, Work));
       end if;
       Outcome := LZW_Encoder_Writer.Finish
         (Codes, Writer, Object);

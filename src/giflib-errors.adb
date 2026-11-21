@@ -31,6 +31,7 @@ package body Giflib.Errors is
          when Invalid_State                 => return "gif.state.invalid";
          when Integer_Overflow              => return "gif.security.integer_overflow";
          when Limit_Exceeded                => return "gif.limit.exceeded";
+         when Allocation_Failed             => return "gif.allocation.failed";
          when Operation_Cancelled           => return "gif.operation.cancelled";
          when Internal_Invariant_Failed     => return "gif.internal.invariant_failed";
       end case;

@@ -48,6 +48,28 @@ package body Giflib.Internal.Blocks is
       Data : Streams.Byte_Array) return Results.Result is
      (Writers.Write_Data (Writer, Object, Data));
 
+   function Write_Data_Validated
+     (Writer : in out Sub_Block_Writer;
+      Object : in out Streams.Destination'Class;
+      Data : Streams.Byte_Array) return Write_Status is
+     (Writers.Write_Data_Validated (Writer, Object, Data));
+
+   function Put_Byte_Validated
+     (Writer : in out Sub_Block_Writer;
+      Object : in out Streams.Destination'Class;
+      Value : Byte) return Write_Status is
+     (Writers.Put_Byte_Validated (Writer, Object, Value));
+
+   function Put_Two_Bytes_Validated
+     (Writer : in out Sub_Block_Writer;
+      Object : in out Streams.Destination'Class;
+      First, Second : Byte) return Write_Status is
+     (Writers.Put_Two_Bytes_Validated
+        (Writer, Object, First, Second));
+
+   function Failure_Error (Writer : Sub_Block_Writer) return Errors.Error is
+     (Writer.Last_Error);
+
    function Finish
      (Writer : in out Sub_Block_Writer;
       Object : in out Streams.Destination'Class) return Results.Result is

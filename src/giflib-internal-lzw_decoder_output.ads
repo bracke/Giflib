@@ -16,6 +16,15 @@ is
       Frame : Frame_Ordinal := 0;
    end record;
 
+   procedure Emit_Validated
+     (Output : in out Streams.Byte_Array;
+      Output_Position : in out Natural;
+      Value : Byte;
+      Layout : Interlacing.Traversal_Layout)
+     with Pre => Output_Position < Output'Length
+                 and then Interlacing.Is_Valid (Layout, Output'Length),
+          Post => Output_Position = Output_Position'Old + 1;
+
    function Emit
      (Source : Streams.Source'Class;
       Output : in out Streams.Byte_Array;

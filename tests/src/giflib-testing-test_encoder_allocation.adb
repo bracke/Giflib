@@ -6,6 +6,7 @@ with Giflib.Errors;
 with Giflib.Images;
 with Giflib.Palettes;
 with Giflib.Quantization;
+with Giflib.Quantization.Testing;
 with Giflib.Results;
 with Giflib.Streams;
 
@@ -42,9 +43,9 @@ package body Giflib.Testing.Test_Encoder_Allocation is
       Message : String) is
    begin
       Assert
-        (Outcome.First_Error.Code = Giflib.Errors.Limit_Exceeded
-         and then Outcome.First_Error.Context.Limit =
-           Giflib.Allocation_Byte_Limit,
+        (Outcome.First_Error.Code = Giflib.Errors.Allocation_Failed
+         and then Outcome.First_Error.Context.Limit = Giflib.No_Limit
+         and then Outcome.First_Error.Context.Actual > 0,
          Message);
    end Require_Allocation_Failure;
 end Giflib.Testing.Test_Encoder_Allocation;

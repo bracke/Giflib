@@ -123,6 +123,10 @@ package body Giflib.Encoding.Resource_Management is
          Result.Context.Actual := Combined_Amount
            (Internal.Encoder_Storage.Allocated_Bytes (Object.Resources),
             Result.Context.Actual);
+      elsif Result.Code = Errors.Allocation_Failed then
+         Result.Context.Actual := Combined_Amount
+           (Internal.Encoder_Storage.Allocated_Bytes (Object.Resources),
+            Result.Context.Actual);
       end if;
       return Result;
    end Normalize_Quantization_Error;

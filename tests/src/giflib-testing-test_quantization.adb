@@ -5,6 +5,7 @@ with Giflib.Images;
 with Giflib.Internal.Quantization_Arithmetic;
 with Giflib.Internal.Quantization_Buffer_Arithmetic;
 with Giflib.Internal.Quantization_Histograms;
+with Giflib.Internal.Quantization_Mapping;
 with Giflib.Internal.Quantization_Palette;
 with Giflib.Internal.Quantization_Pixels;
 with Giflib.Internal.Work_Budgets;

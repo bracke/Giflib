@@ -12,6 +12,7 @@ tests/alire/alr_test*.log
 tests/alire/alr_test*.xml
 alire/settings.toml
 tests/alire/settings.toml
+tests/alire/cache/
 tests/alire/build_hash_inputs
 tests/alire/flags/
 alire/build_hash_inputs

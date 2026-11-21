@@ -34,7 +34,7 @@ command = ["alr", "--chdir", "tests", "exec", "--", "gprbuild", "-q", "-p", "-P"
 
 [[actions]]
 type = "test"
-command = ["alr", "--chdir", "tests", "exec", "--", "./bin/giflib_check", "tooling"]
+command = ["alr", "--chdir", "tests", "exec", "--", "./bin/giflib_tooling_probe", ".."]
 
 [[actions]]
 type = "test"

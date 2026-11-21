@@ -16,7 +16,7 @@ private package Giflib_Tooling.Mutation_Types is
       Unknown_Suite_Registration, Unlisted_Main,
       Duplicate_Main, Stale_Documented_Executable,
       Duplicate_Documented_Executable, Invalid_Main_Declaration,
-      Wrong_Workspace_Pin, API_Boundary);
+      Wrong_Repository_Pin, API_Boundary);
    type Mutation_Case is record
       Id : Mutation_Id;
       Name : Ada.Strings.Unbounded.Unbounded_String;

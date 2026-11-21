@@ -6,11 +6,11 @@ package Giflib.Results is
    type Status is (Ok, Failed);
 
    type Result is record
-      First_Error : Errors.Error := Errors.Make (Errors.No_Error);
+      First_Error : Errors.Error := Errors.No_Error_Value;
    end record;
 
    function Success return Result is
-     ((First_Error => Errors.Make (Errors.No_Error)));
+     ((First_Error => Errors.No_Error_Value));
    function Failure (Code : Errors.Error_Code) return Result is
      ((First_Error => Errors.Make (Code)));
    function Failure (Item : Errors.Error) return Result is

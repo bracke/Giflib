@@ -30,4 +30,10 @@ is
    function Maximum (Object : Meter) return Byte_Count is (Object.Maximum);
 
    function Failed (Object : Meter) return Boolean is (Object.Exhausted);
+
+   function Can_Charge
+     (Object : Meter;
+      Amount : Byte_Count) return Boolean is
+     (not Object.Exhausted
+      and then Amount <= Object.Maximum - Object.Current);
 end Giflib.Internal.Work_Budgets;

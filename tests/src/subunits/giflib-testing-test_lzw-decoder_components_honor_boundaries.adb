@@ -3,44 +3,47 @@ procedure Decoder_Components_Honor_Boundaries
   (T : in out AUnit.Test_Cases.Test_Case'Class)
 is
    pragma Unreferenced (T);
+   use type Giflib.Internal.LZW_Decoder_Reader.Read_Status;
    --  One sub-block containing the clear code (4) in a three-bit stream.
    Input : aliased constant Giflib.Streams.Byte_Array := [1, 4, 0];
    Source : Giflib.Streams.Memory_Source (Input'Access);
    Blocks_Reader : Giflib.Internal.Blocks.Sub_Block_Reader;
    Reader : Giflib.Internal.LZW_Decoder_Reader.Code_Reader;
    Work : Giflib.Internal.Work_Budgets.Meter (100);
+   Pending_Work : Giflib.Byte_Count := 0;
    Output : Giflib.Streams.Byte_Array (1 .. 1) := [0];
    Position : Natural := 0;
    Code : Giflib.Internal.LZW_Arithmetic.Code_Value;
    Outcome : Giflib.Results.Result;
+   Read_Status : Giflib.Internal.LZW_Decoder_Reader.Read_Status;
    Dictionary : Giflib.Internal.LZW_Decoder_Dictionary.Dictionary;
+   Definition : Giflib.Internal.LZW_Decoder_Dictionary.Dictionary_Entry;
 begin
    Assert
      (not Giflib.Internal.LZW_Decoder_Dictionary.Is_Initialized
         (Dictionary),
       "decoder dictionary unexpectedly started initialized");
-   Giflib.Internal.LZW_Decoder_Dictionary.Reset (Dictionary, 6);
+   Giflib.Internal.LZW_Decoder_Dictionary.Reset (Dictionary, 6, 1);
    Giflib.Internal.LZW_Decoder_Dictionary.Set_Entry
      (Dictionary, 6, 0, 1);
+   Definition := Giflib.Internal.LZW_Decoder_Dictionary.Entry_At (Dictionary, 6);
    Assert
      (Giflib.Internal.LZW_Decoder_Dictionary.Is_Defined (Dictionary, 6)
-      and then Giflib.Internal.LZW_Decoder_Dictionary.Prefix_At
-        (Dictionary, 6) = 0
-      and then Giflib.Internal.LZW_Decoder_Dictionary.Suffix_At
-        (Dictionary, 6) = 1,
+      and then Definition.Prefix = 0
+      and then Definition.Suffix = 1,
       "decoder dictionary did not own its definition boundary");
    Giflib.Streams.Open (Source);
    Giflib.Internal.Blocks.Initialize
      (Blocks_Reader, 100, Giflib.Compressed_Byte_Limit,
       Giflib.Image_Data_Block);
-   Outcome := Giflib.Internal.LZW_Decoder_Reader.Next_Code
-     (Reader, Source, Blocks_Reader, Work,
+   Read_Status := Giflib.Internal.LZW_Decoder_Reader.Next_Code
+     (Reader, Source, Blocks_Reader, Work, Pending_Work,
       (Code_Width => 3, Frame => 2,
        Output_Length => Output'Length,
        Output_Position => Position),
       Code);
    Assert
-     (Giflib.Results.Succeeded (Outcome)
+     (Read_Status = Giflib.Internal.LZW_Decoder_Reader.Read_Ready
       and then Code = 4
       and then Giflib.Internal.LZW_Decoder_Reader.Ordinal (Reader) = 1,
       "decoder reader lost its code or ordinal boundary");

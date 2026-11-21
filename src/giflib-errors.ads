@@ -31,6 +31,7 @@ package Giflib.Errors is
       Invalid_State,
       Integer_Overflow,
       Limit_Exceeded,
+      Allocation_Failed,
       Operation_Cancelled,
       Internal_Invariant_Failed);
 
@@ -151,6 +152,9 @@ package Giflib.Errors is
       Code : Error_Code := No_Error;
       Context : Diagnostic_Context;
    end record;
+
+   No_Error_Value : constant Error :=
+     (Code => No_Error, Context => (others => <>));
 
    type Warning is record
       Code : Warning_Code := Generic_Warning;

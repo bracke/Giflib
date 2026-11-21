@@ -28,12 +28,14 @@ package body Giflib.Internal.Resource_Diagnostics is
             return Errors.Make (Errors.Internal_Invariant_Failed, Context);
          when Ownership.Allocation_Size_Error =>
             return Errors.Make (Errors.Integer_Overflow, Context);
-         when Ownership.Allocation_Limit |
-              Ownership.Allocation_Storage_Error =>
+         when Ownership.Allocation_Limit =>
             Context.Expected := Maximum;
             Context.Actual := Attempted;
             Context.Limit := Allocation_Byte_Limit;
             return Errors.Make (Errors.Limit_Exceeded, Context);
+         when Ownership.Allocation_Storage_Error =>
+            Context.Actual := Attempted;
+            return Errors.Make (Errors.Allocation_Failed, Context);
          when Ownership.Allocation_Ready =>
             return Errors.Make (Errors.Internal_Invariant_Failed, Context);
       end case;

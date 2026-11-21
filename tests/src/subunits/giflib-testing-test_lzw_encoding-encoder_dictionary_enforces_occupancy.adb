@@ -58,4 +58,24 @@ begin
          and then Lookup.Error.Code = Giflib.Errors.Internal_Invariant_Failed,
          "full encoder dictionary did not stop after one probe cycle");
    end;
+
+   declare
+      Wrap_Work : Giflib.Internal.Work_Budgets.Meter
+        (Giflib.Byte_Count (Dictionary.Hash_Size + 300));
+   begin
+      --  The compact generation stored with each key deliberately wraps after
+      --  255 dictionary clears.  Exercise the bounded full-table reset rather
+      --  than relying on ordinary fixtures to happen to reach it.
+      for I in 1 .. 253 loop
+         Outcome := Dictionary.Clear (Object, Wrap_Work, Destination);
+         Assert (Giflib.Results.Succeeded (Outcome),
+                 "encoder dictionary generation advance failed");
+      end loop;
+      Dictionary.Insert (Object, 0, 2, 3, 7);
+      Outcome := Dictionary.Clear (Object, Wrap_Work, Destination);
+      Assert
+        (Giflib.Results.Succeeded (Outcome)
+         and then not Dictionary.Is_Occupied (Object, 0),
+         "encoder dictionary generation wrap retained a stale entry");
+   end;
 end Encoder_Dictionary_Enforces_Occupancy;

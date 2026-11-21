@@ -220,7 +220,7 @@ private
       Previous_Frame : Previous_Frame_State;
       Warnings : Warning_Array;
       Stored_Warnings : Limits.Warning_Record_Limit := 0;
-      Diagnostic : Errors.Error := Errors.Make (Errors.No_Error);
+      Diagnostic : Errors.Error := Errors.No_Error_Value;
       Resources : Decoder_Resources;
       Allocation_Fault : Internal.Ownership.Fault_State;
    end record;

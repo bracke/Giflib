@@ -25,21 +25,23 @@ begin
    end if;
 
    Outcome := Palette_Phase.Build
-     (Context, Source, Options, Constraints, Work, Prepared);
+     (Context, Source, Indexed_Pixels, Options, Constraints, Work, Prepared);
    if not Results.Succeeded (Outcome) then
       return Outcome;
    end if;
 
-   Outcome := Mapping_Phase.Map
-     (Context,
-      Source,
-      Indexed_Pixels,
-      Prepared,
-      Options,
-      Constraints,
-      Work);
-   if not Results.Succeeded (Outcome) then
-      return Outcome;
+   if not Prepared.Pixels_Are_Mapped then
+      Outcome := Mapping_Phase.Map
+        (Context,
+         Source,
+         Indexed_Pixels,
+         Prepared,
+         Options,
+         Constraints,
+         Work);
+      if not Results.Succeeded (Outcome) then
+         return Outcome;
+      end if;
    end if;
 
    Output :=

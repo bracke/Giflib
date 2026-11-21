@@ -8,7 +8,7 @@ crate = "aunit"
 fulfilment = "solved"
 pinned = false
 transitivity = "direct"
-versions = "=26.0.0"
+versions = "^26.0.0"
 [solution.state.release]
 authors = [
 "AdaCore",
@@ -59,20 +59,11 @@ hashes = [
 ]
 url = "https://github.com/AdaCore/aunit/archive/refs/tags/v26.0.0.zip"
 [[solution.state]]
-crate = "giflib"
-fulfilment = "linked"
-pinned = false
-transitivity = "direct"
-versions = "*"
-[solution.state.link]
-lockfiled = true
-path = ".."
-[[solution.state]]
 crate = "gnat_native"
 fulfilment = "solved"
 pinned = false
 transitivity = "direct"
-versions = "=15.2.1"
+versions = "^15"
 [solution.state.release]
 auto-gpr-with = false
 description = "The GNAT Ada compiler - Native"
@@ -120,6 +111,8 @@ pinned = false
 transitivity = "direct"
 versions = "*"
 [solution.state.link]
+commit = "5ed5f4dcfa10301345933d45e5f78ac0573d8cff"
 lockfiled = true
-path = "../../project_tools"
+path = "alire/cache/pins/project_tools_5ed5f4dc"
+url = "git+https://github.com/bracke/project_tools.git"
 

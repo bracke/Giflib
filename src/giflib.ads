@@ -61,6 +61,5 @@ package Giflib is
       Quantization_Work_Limit,
       Optimization_Work_Limit,
       Warning_Record_Limit,
-      Diagnostic_Event_Limit,
       Snapshot_Byte_Limit);
 end Giflib;

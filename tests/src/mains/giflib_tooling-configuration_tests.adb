@@ -4,6 +4,7 @@ with Giflib_Tooling.Configuration_Entries;
 with Giflib_Tooling.Configuration_Source;
 with Giflib_Tooling.Configuration_Quotes;
 with Giflib_Tooling.Configuration_Testing;
+with Giflib_Tooling.Dependency_Policy;
 with Giflib_Tooling.Self_Test_Support;
 
 package body Giflib_Tooling.Configuration_Tests is
@@ -25,10 +26,13 @@ package body Giflib_Tooling.Configuration_Tests is
      (Config.Find_Config_Assignment
         (Text, Key, Value, Section, Array_Section) = Config.Assignment_Found);
 
-   function Has_Workspace_Pin
-     (Text : String; Crate : String; Relative_Path : String) return Boolean is
-     (Config.Find_Workspace_Pin
-        (Text, Crate, Relative_Path) = Config.Assignment_Found);
+   function Has_Repository_Pin
+     (Text : String;
+      Crate : String;
+      URL : String;
+      Commit : String) return Boolean is
+     (Config.Find_Repository_Pin
+        (Text, Crate, URL, Commit) = Config.Assignment_Found);
 
    procedure Run is
       function Unterminated_Assignment_Is_Reported return Boolean is
@@ -69,6 +73,10 @@ package body Giflib_Tooling.Configuration_Tests is
       Six_Quotes : constant String (1 .. 6) := [others => '"'];
       Extreme_Quote : constant String
         (Integer'Last .. Integer'Last) := [others => '"'];
+      Project_Tools_URL : String renames
+        Dependency_Policy.Project_Tools_URL;
+      Project_Tools_Commit : String renames
+        Dependency_Policy.Project_Tools_Commit;
       Multiline_Decoy : constant String :=
         "description = " & Triple & ASCII.LF &
         "[[depends-on]]" & ASCII.LF &
@@ -186,52 +194,57 @@ package body Giflib_Tooling.Configuration_Tests is
          and then not Quotes.Triple_At ("""value""", Integer'Last, '"'),
          "quote helpers reject positions outside their input bounds");
       Check.Check
-        (Has_Workspace_Pin
+        (Has_Repository_Pin
            ("[[pins]]" & ASCII.LF &
-            "project_tools={ optional=true, path='../../project_tools' }",
-            "project_tools", "../../project_tools")
-         and then not Has_Workspace_Pin
+            "project_tools={ optional=true, url='" & Project_Tools_URL &
+            "', commit='" & Project_Tools_Commit & "' }",
+            "project_tools", Project_Tools_URL, Project_Tools_Commit)
+         and then not Has_Repository_Pin
            ("# [[pins]]" & ASCII.LF &
-            "# project_tools = { path = ""../../project_tools"" }",
-            "project_tools", "../../project_tools"),
-         "workspace pins require an active pins assignment");
+            "# project_tools = { url = '" & Project_Tools_URL &
+            "', commit = '" & Project_Tools_Commit & "' }",
+            "project_tools", Project_Tools_URL, Project_Tools_Commit),
+         "repository pins require an active pins assignment");
       Check.Check
-        (not Has_Workspace_Pin
+        (not Has_Repository_Pin
            ("[[pins]]" & ASCII.LF &
-            "project_tools = { meta = { x = 1, " &
-            "path = ""../../project_tools"", y = 2 } }",
-            "project_tools", "../../project_tools"),
-         "workspace pins require path at the outer inline-table level");
+            "project_tools = { url = '" & Project_Tools_URL &
+            "', meta = { commit = '" & Project_Tools_Commit & "' } }",
+            "project_tools", Project_Tools_URL, Project_Tools_Commit),
+         "repository pins require commit at the outer inline-table level");
       Check.Check
-        (Has_Workspace_Pin
+        (Has_Repository_Pin
            ("[[pins]]" & ASCII.LF &
-            "project_tools = { meta = { x = 1, path = ""decoy"" }, " &
-            "path = ""../../project_tools"" }",
-            "project_tools", "../../project_tools"),
-         "workspace pins allow nested values beside an outer path");
+            "project_tools = { meta = { url = ""decoy"" }, url = '" &
+            Project_Tools_URL & "', commit = '" & Project_Tools_Commit & "' }",
+            "project_tools", Project_Tools_URL, Project_Tools_Commit),
+         "repository pins allow nested values beside outer pin fields");
       Check.Check
-        (not Has_Workspace_Pin
+        (not Has_Repository_Pin
            ("[[pins]]" & ASCII.LF &
             "project_tools = { meta = [ x = 1 }, " &
-            "path = ""../../project_tools"" }",
-            "project_tools", "../../project_tools"),
-         "workspace pins reject mismatched inline delimiters");
+            "url = '" & Project_Tools_URL & "', commit = '" &
+            Project_Tools_Commit & "' }",
+            "project_tools", Project_Tools_URL, Project_Tools_Commit),
+         "repository pins reject mismatched inline delimiters");
       Check.Check
-        (Has_Workspace_Pin
+        (Has_Repository_Pin
            ("[[pins]]" & ASCII.LF &
             "project_tools = { meta = " &
             Nested_Table
               (Config_Testing.Maximum_Delimiter_Depth - 1) &
-            ", path = ""../../project_tools"" }",
-            "project_tools", "../../project_tools"),
-         "workspace pins accept delimiter nesting at the fixed limit");
+            ", url = '" & Project_Tools_URL & "', commit = '" &
+            Project_Tools_Commit & "' }",
+            "project_tools", Project_Tools_URL, Project_Tools_Commit),
+         "repository pins accept delimiter nesting at the fixed limit");
       Check.Check
-        (not Has_Workspace_Pin
+        (not Has_Repository_Pin
            ("[[pins]]" & ASCII.LF &
             "project_tools = { meta = " &
             Nested_Table (Config_Testing.Maximum_Delimiter_Depth) &
-            ", path = ""../../project_tools"" }",
-            "project_tools", "../../project_tools"),
-         "workspace pins reject delimiter nesting above the fixed limit");
+            ", url = '" & Project_Tools_URL & "', commit = '" &
+            Project_Tools_Commit & "' }",
+            "project_tools", Project_Tools_URL, Project_Tools_Commit),
+         "repository pins reject delimiter nesting above the fixed limit");
    end Run;
 end Giflib_Tooling.Configuration_Tests;

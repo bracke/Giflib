@@ -12,4 +12,13 @@ package Giflib.Internal.Quantization_Histograms is
       Occupied_Count : Natural range 0 .. Occupied_Position'Last := 0;
    end record
      with No_Controlled_Parts => True;
+
+   function Add_Sample
+     (Object : in out Histogram_State;
+      Bucket : Histogram_Index) return Boolean;
+   pragma Inline_Always (Add_Sample);
+   function Add_Count
+     (Object : in out Histogram_State;
+      Bucket : Histogram_Index;
+      Amount : Natural) return Boolean;
 end Giflib.Internal.Quantization_Histograms;

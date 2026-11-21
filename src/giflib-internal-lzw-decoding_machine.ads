@@ -1,3 +1,4 @@
+with Giflib.Errors;
 with Giflib.Internal.LZW_Arithmetic;
 with Giflib.Internal.LZW_Decoder_Reader;
 with Giflib.Internal.Work_Budgets;
@@ -17,7 +18,12 @@ is
       Initial_Clear_Seen : Boolean := False;
       First_Character : Byte := 0;
       Output_Position : Natural := 0;
+      Output_Target_Position : Natural := 0;
+      Output_Column : Natural := 0;
+      Output_Stream_Row : Natural := 0;
       Work : Work_Budgets.Meter (Maximum_Work);
+      Pending_Work : Byte_Count := 0;
+      Last_Error : Errors.Error := Errors.No_Error_Value;
       Reader : LZW_Decoder_Reader.Code_Reader;
    end record;
 

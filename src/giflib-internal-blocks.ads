@@ -1,3 +1,4 @@
+with Giflib.Errors;
 with Giflib.Results;
 with Giflib.Streams;
 
@@ -35,6 +36,22 @@ package Giflib.Internal.Blocks is
      (Writer : in out Sub_Block_Writer;
       Object : in out Streams.Destination'Class;
       Data : Streams.Byte_Array) return Results.Result;
+   type Write_Status is (Write_Ready, Write_Failed);
+   function Write_Data_Validated
+     (Writer : in out Sub_Block_Writer;
+      Object : in out Streams.Destination'Class;
+      Data : Streams.Byte_Array) return Write_Status;
+   function Put_Byte_Validated
+     (Writer : in out Sub_Block_Writer;
+      Object : in out Streams.Destination'Class;
+      Value : Byte) return Write_Status;
+   pragma Inline_Always (Put_Byte_Validated);
+   function Put_Two_Bytes_Validated
+     (Writer : in out Sub_Block_Writer;
+      Object : in out Streams.Destination'Class;
+      First, Second : Byte) return Write_Status;
+   pragma Inline_Always (Put_Two_Bytes_Validated);
+   function Failure_Error (Writer : Sub_Block_Writer) return Errors.Error;
    function Finish
      (Writer : in out Sub_Block_Writer;
       Object : in out Streams.Destination'Class) return Results.Result;
@@ -63,5 +80,6 @@ private
       Maximum_Payload : Byte_Count := 0;
       Maximum_Wire : Byte_Count := 0;
       State : Writer_State := Writing;
+      Last_Error : Errors.Error := Errors.No_Error_Value;
    end record;
 end Giflib.Internal.Blocks;

@@ -1,5 +1,6 @@
 with Project_Tools.Files;
 with Project_Tools.Test_Fixtures;
+with Giflib_Tooling.Dependency_Policy;
 with Giflib_Tooling.Mutation_Sources;
 
 package body Giflib_Tooling.Mutation_Configuration_Cases is
@@ -19,11 +20,11 @@ package body Giflib_Tooling.Mutation_Configuration_Cases is
          & "end Mutation;" & LF);
    end Add_Interface_Decoy;
 
-   procedure Change_Workspace_Pin (Fixture : String) is
+   procedure Change_Repository_Pin (Fixture : String) is
    begin
       Sources.Replace_Text
         (Files.Join (Fixture, "tests/alire.toml"),
-         "project_tools = { path = ""../../project_tools"" }",
-         "project_tools = { path = ""../wrong"" }");
-   end Change_Workspace_Pin;
+         "commit = """ & Dependency_Policy.Project_Tools_Commit & """",
+         "commit = ""0000000000000000000000000000000000000000""");
+   end Change_Repository_Pin;
 end Giflib_Tooling.Mutation_Configuration_Cases;

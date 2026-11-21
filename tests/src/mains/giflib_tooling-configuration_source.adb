@@ -80,8 +80,11 @@ package body Giflib_Tooling.Configuration_Source is
       return Contains_Assignment (Text, Matches'Access);
    end Has_Config_Assignment_Rebased;
 
-   function Has_Workspace_Pin_Rebased
-     (Text : String; Crate : String; Relative_Path : String) return Query_Result
+   function Has_Repository_Pin_Rebased
+     (Text : String;
+      Crate : String;
+      URL : String;
+      Commit : String) return Query_Result
    is
       function Matches
         (Section : String;
@@ -92,10 +95,12 @@ package body Giflib_Tooling.Configuration_Source is
          and then Is_Array
          and then Key = Crate
          and then Values.Inline_String_Value_Matches
-           (Value, "path", Relative_Path));
+           (Value, "url", URL)
+         and then Values.Inline_String_Value_Matches
+           (Value, "commit", Commit));
    begin
       return Contains_Assignment (Text, Matches'Access);
-   end Has_Workspace_Pin_Rebased;
+   end Has_Repository_Pin_Rebased;
 
    function Find_Config_Assignment
      (Text : String;
@@ -119,17 +124,19 @@ package body Giflib_Tooling.Configuration_Source is
       end;
    end Find_Config_Assignment;
 
-   function Find_Workspace_Pin
-     (Text : String; Crate : String; Relative_Path : String)
-      return Query_Result is
+   function Find_Repository_Pin
+     (Text : String;
+      Crate : String;
+      URL : String;
+      Commit : String) return Query_Result is
    begin
       if Text'Last <= Integer'Last - 3 then
-         return Has_Workspace_Pin_Rebased (Text, Crate, Relative_Path);
+         return Has_Repository_Pin_Rebased (Text, Crate, URL, Commit);
       end if;
       declare
          Rebased : constant String (1 .. Text'Length) := Text;
       begin
-         return Has_Workspace_Pin_Rebased (Rebased, Crate, Relative_Path);
+         return Has_Repository_Pin_Rebased (Rebased, Crate, URL, Commit);
       end;
-   end Find_Workspace_Pin;
+   end Find_Repository_Pin;
 end Giflib_Tooling.Configuration_Source;

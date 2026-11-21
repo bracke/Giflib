@@ -8,7 +8,6 @@ package body Giflib.Internal.Quantization_Pixels is
       Column_Offset : Byte_Count;
       Offset : Byte_Count;
       Position : Positive;
-      Value : Source_Pixel := (Color => (others => 0), Alpha => 255);
    begin
       if X >= Natural (Source.Width)
         or else Y >= Natural (Source.Height)
@@ -32,30 +31,73 @@ package body Giflib.Internal.Quantization_Pixels is
          return (Valid => False);
       end if;
       Position := Source.Data'First + Natural (Offset);
-      case Source.Format is
-         when RGB_24 =>
-            Value.Color :=
-              (Source.Data (Position), Source.Data (Position + 1),
-               Source.Data (Position + 2));
-         when BGR_24 =>
-            Value.Color :=
-              (Source.Data (Position + 2), Source.Data (Position + 1),
-               Source.Data (Position));
-         when RGBA_32 =>
-            Value.Color :=
-              (Source.Data (Position), Source.Data (Position + 1),
-               Source.Data (Position + 2));
-            Value.Alpha := Source.Data (Position + 3);
-         when BGRA_32 =>
-            Value.Color :=
-              (Source.Data (Position + 2), Source.Data (Position + 1),
-               Source.Data (Position));
-            Value.Alpha := Source.Data (Position + 3);
-         when Indexed_8 =>
-            null;
-      end case;
-      return (Valid => True, Value => Value);
+      return (Valid => True, Value => Read_Validated (Source, Position));
    end Read_Pixel;
+
+   function Row_Start
+     (Source : Images.Image_View;
+      Y : Natural) return Positive
+   is
+      Offset : constant Byte_Count :=
+        Byte_Count (Y) * Byte_Count (Source.Stride);
+   begin
+      return Source.Data'First + Natural (Offset);
+   end Row_Start;
+
+   function Read_Validated
+     (Source : Images.Image_View;
+      Position : Positive) return Source_Pixel
+   is
+   begin
+      return
+        (case Source.Format is
+           when Indexed_8 => Read_Indexed_8_Validated (Source, Position),
+           when RGB_24 => Read_RGB_24_Validated (Source, Position),
+           when BGR_24 => Read_BGR_24_Validated (Source, Position),
+           when RGBA_32 => Read_RGBA_32_Validated (Source, Position),
+           when BGRA_32 => Read_BGRA_32_Validated (Source, Position));
+   end Read_Validated;
+
+   function Read_Indexed_8_Validated
+     (Source : Images.Image_View;
+      Position : Positive) return Source_Pixel
+   is
+      pragma Unreferenced (Source, Position);
+   begin
+      return (Color => (others => 0), Alpha => 255);
+   end Read_Indexed_8_Validated;
+
+   function Read_RGB_24_Validated
+     (Source : Images.Image_View;
+      Position : Positive) return Source_Pixel is
+     ((Color =>
+         (Source.Data (Position), Source.Data (Position + 1),
+          Source.Data (Position + 2)),
+       Alpha => 255));
+
+   function Read_BGR_24_Validated
+     (Source : Images.Image_View;
+      Position : Positive) return Source_Pixel is
+     ((Color =>
+         (Source.Data (Position + 2), Source.Data (Position + 1),
+          Source.Data (Position)),
+       Alpha => 255));
+
+   function Read_RGBA_32_Validated
+     (Source : Images.Image_View;
+      Position : Positive) return Source_Pixel is
+     ((Color =>
+         (Source.Data (Position), Source.Data (Position + 1),
+          Source.Data (Position + 2)),
+       Alpha => Source.Data (Position + 3)));
+
+   function Read_BGRA_32_Validated
+     (Source : Images.Image_View;
+      Position : Positive) return Source_Pixel is
+     ((Color =>
+         (Source.Data (Position + 2), Source.Data (Position + 1),
+          Source.Data (Position)),
+       Alpha => Source.Data (Position + 3)));
 
    function Is_Transparent
      (Pixel            : Source_Pixel;

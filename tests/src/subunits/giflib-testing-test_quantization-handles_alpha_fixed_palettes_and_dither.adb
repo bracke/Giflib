@@ -44,6 +44,83 @@ begin
       and then Indexed = [0, 1],
       "disabled transparency policy retained an alpha threshold or index");
 
+   declare
+      Width : constant := 17;
+      Height : constant := 17;
+      Data : aliased Giflib.Streams.Byte_Array :=
+        [for I in 1 .. Width * Height * 3 => 0];
+      View : constant Giflib.Images.Image_View :=
+        (Data => Data'Access, Format => Giflib.RGB_24,
+         Width => Width, Height => Height, Stride => Width * 3,
+         Accessible_Bytes => Data'Length);
+      Mapped : Giflib.Streams.Byte_Array (1 .. Width * Height);
+      Fixed : Giflib.Palettes.Palette;
+      Best : Natural;
+      Best_Distance : Natural;
+      Distance : Natural;
+      Position : Natural;
+      Color : Giflib.Palettes.RGB_Color;
+   begin
+      Fixed.Length := 256;
+      for I in Giflib.Palette_Index loop
+         Fixed.Colors (I) :=
+           (Giflib.Byte (I), Giflib.Byte (Natural (I) * 37 mod 256),
+            Giflib.Byte (Natural (I) * 73 mod 256));
+      end loop;
+      for Y in 0 .. Height - 1 loop
+         for X in 0 .. Width - 1 loop
+            Position := (Y * Width + X) * 3 + 1;
+            Data (Position) := Giflib.Byte (X * 15);
+            Data (Position + 1) := Giflib.Byte (Y * 15);
+            Data (Position + 2) := Giflib.Byte ((X * 19 + Y * 23) mod 256);
+         end loop;
+      end loop;
+      Options := Giflib.Quantization.Default_Options;
+      Options.Transparency := (Enabled => False);
+      Options.Palette :=
+        (Strategy => Giflib.Quantization.Use_Fixed_Palette,
+         Fixed_Palette => Fixed, Fixed_Transparent_Index => 0);
+      Outcome := Giflib.Quantization.Quantize
+        (View, Mapped, Quantized, Options);
+      Assert
+        (Giflib.Results.Succeeded (Outcome),
+         "fixed-palette nearest-color search failed");
+      for Pixel in Mapped'Range loop
+         Position := (Pixel - Mapped'First) * 3 + 1;
+         Color := (Data (Position), Data (Position + 1), Data (Position + 2));
+         Best := 0;
+         Best_Distance := Natural'Last;
+         for I in 0 .. Fixed.Length - 1 loop
+            Distance := Natural
+              (Giflib.Internal.Quantization_Arithmetic.Squared_Distance
+                 (Color, Fixed.Colors (Giflib.Palette_Index (I))));
+            if Distance < Best_Distance then
+               Best := I;
+               Best_Distance := Distance;
+            end if;
+         end loop;
+         Assert
+           (Mapped (Pixel) = Giflib.Byte (Best),
+            "nearest-color search differs from exhaustive mapping");
+      end loop;
+   end;
+
+   declare
+      Duplicate_Palette : constant Giflib.Palettes.Palette :=
+        (Length => 256, Colors => [others => (17, 29, 43)]);
+      Search : Giflib.Internal.Quantization_Mapping.Search_Index;
+      Work : Giflib.Internal.Work_Budgets.Meter (100_000);
+   begin
+      Outcome := Giflib.Internal.Quantization_Mapping.Build
+        (Duplicate_Palette, First => 0, Exclude_Index => False,
+         Excluded_Index => 0, Work => Work, Object => Search);
+      Assert
+        (Giflib.Results.Succeeded (Outcome)
+         and then Giflib.Internal.Quantization_Mapping.Node_Count (Search) = 1
+         and then Giflib.Internal.Work_Budgets.Used (Work) < 5_000,
+         "duplicate fixed-palette colors were not canonicalized in bounded sorted work");
+   end;
+
    for I in 0 .. 15 loop
       Gradient (I * 3 + 1) := Giflib.Byte (I * 17);
       Gradient (I * 3 + 2) := Giflib.Byte (I * 17);

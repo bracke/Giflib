@@ -37,10 +37,12 @@ package body Giflib.Internal.Quantization_Box_Operations is
       R_Min, R_Max, G_Min, G_Max, B_Min, B_Max : Natural := 0;
       Population : Natural := 0;
    begin
+      if not Charge
+        (Work, Byte_Count (Natural (Last) - Natural (First) + 1))
+      then
+         return (Kind => Box_Work_Limit);
+      end if;
       for Position in First .. Last loop
-         if not Charge (Work) then
-            return (Kind => Box_Work_Limit);
-         end if;
          declare
             Bucket : constant Histogram_Data.Histogram_Index :=
               Histogram.Occupied (Position);
@@ -99,6 +101,7 @@ package body Giflib.Internal.Quantization_Box_Operations is
       Split_At : Natural;
       Left_Position : Integer;
       Right_Position : Integer;
+      Partition_Work : Byte_Count := 0;
    begin
       if Spread (Item) = 0 then
          return (Kind => Split_Unavailable);
@@ -112,10 +115,13 @@ package body Giflib.Internal.Quantization_Box_Operations is
          Axis := Blue_Axis;
       end if;
 
+      if not Charge
+        (Work,
+         Byte_Count (Natural (Item.Last) - Natural (Item.First) + 1))
+      then
+         return (Kind => Split_Work_Limit);
+      end if;
       for Position in Item.First .. Item.Last loop
-         if not Charge (Work) then
-            return (Kind => Split_Work_Limit);
-         end if;
          declare
             Bucket : constant Histogram_Data.Histogram_Index :=
               Histogram.Occupied (Position);
@@ -149,9 +155,7 @@ package body Giflib.Internal.Quantization_Box_Operations is
       Right_Position := Integer (Item.Last);
       loop
          while Left_Position <= Integer (Item.Last) loop
-            if not Charge (Work) then
-               return (Kind => Split_Work_Limit);
-            end if;
+            Partition_Work := Partition_Work + 1;
             exit when Axis_Value
               (Histogram.Occupied
                  (Histogram_Data.Occupied_Position (Left_Position)), Axis)
@@ -159,9 +163,7 @@ package body Giflib.Internal.Quantization_Box_Operations is
             Left_Position := Left_Position + 1;
          end loop;
          while Right_Position >= Integer (Item.First) loop
-            if not Charge (Work) then
-               return (Kind => Split_Work_Limit);
-            end if;
+            Partition_Work := Partition_Work + 1;
             exit when Axis_Value
               (Histogram.Occupied
                  (Histogram_Data.Occupied_Position (Right_Position)), Axis)
@@ -184,6 +186,10 @@ package body Giflib.Internal.Quantization_Box_Operations is
          Left_Position := Left_Position + 1;
          Right_Position := Right_Position - 1;
       end loop;
+
+      if not Charge (Work, Partition_Work) then
+         return (Kind => Split_Work_Limit);
+      end if;
 
       if Right_Position < Integer (Item.First)
         or else Left_Position > Integer (Item.Last)
@@ -217,10 +223,13 @@ package body Giflib.Internal.Quantization_Box_Operations is
    is
       R_Sum, G_Sum, B_Sum, Total : Byte_Count := 0;
    begin
+      if not Charge
+        (Work,
+         Byte_Count (Natural (Item.Last) - Natural (Item.First) + 1))
+      then
+         return (Kind => Representative_Work_Limit);
+      end if;
       for Position in Item.First .. Item.Last loop
-         if not Charge (Work) then
-            return (Kind => Representative_Work_Limit);
-         end if;
          declare
             Bucket : constant Histogram_Data.Histogram_Index :=
               Histogram.Occupied (Position);

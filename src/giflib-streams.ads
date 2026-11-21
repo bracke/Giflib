@@ -7,13 +7,13 @@ package Giflib.Streams is
    type Byte_Array is array (Positive range <>) of Byte;
 
    type Source_Result is record
-      Error : Errors.Error := Errors.Make (Errors.No_Error);
+      Error : Errors.Error := Errors.No_Error_Value;
       Count : Byte_Count := 0;
       End_Of_Input : Boolean := False;
    end record;
 
    type Destination_Result is record
-      Error : Errors.Error := Errors.Make (Errors.No_Error);
+      Error : Errors.Error := Errors.No_Error_Value;
       Count : Byte_Count := 0;
    end record;
 

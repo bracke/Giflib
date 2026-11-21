@@ -43,5 +43,27 @@ begin
          and then Maximum_Bound_Output (Positive'Last) = 0,
          "quantization rejected a valid maximum-bound output array");
    end;
+
+   declare
+      Transparent : aliased constant Giflib.Streams.Byte_Array :=
+        [12, 34, 56, 0, 78, 90, 123, 0];
+      Transparent_View : constant Giflib.Images.Image_View :=
+        (Format => Giflib.RGBA_32,
+         Width => 2,
+         Height => 1,
+         Stride => 8,
+         Accessible_Bytes => 8,
+         Data => Transparent'Access);
+      Transparent_Indexed : Giflib.Streams.Byte_Array (1 .. 2);
+   begin
+      Outcome := Giflib.Quantization.Quantize
+        (Transparent_View, Transparent_Indexed, Quantized);
+      Assert
+        (Giflib.Results.Succeeded (Outcome)
+         and then Quantized.Transparency.Present
+         and then Quantized.Transparency.Index = 0
+         and then Transparent_Indexed = [0, 0],
+         "all-transparent exact quantization failed");
+   end;
 end Preserves_Exact_Colors;
 

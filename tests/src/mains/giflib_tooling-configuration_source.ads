@@ -7,7 +7,9 @@ private package Giflib_Tooling.Configuration_Source is
       Value : String;
       Section : String := "";
       Array_Section : Boolean := False) return Query_Result;
-   function Find_Workspace_Pin
-     (Text : String; Crate : String; Relative_Path : String)
-      return Query_Result;
+   function Find_Repository_Pin
+     (Text : String;
+      Crate : String;
+      URL : String;
+      Commit : String) return Query_Result;
 end Giflib_Tooling.Configuration_Source;
